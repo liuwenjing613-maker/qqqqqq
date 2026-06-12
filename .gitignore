@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Logs and runtime artifacts
+logs/
+*.log
+
+# Editor swap files
+*.swp
+*.swo
+*~
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Environment
+.env
+.env.*
+*.pem
+*.key
+
+# Large binary assets (download separately)
+*.bin
+*.mp4
+*.avi
+*.mkv
+yolo_world/config/offline_vocabulary_embeddings.json
+
+# Debug / runtime media (regenerated locally)
+data/images/
+capture_video/
+check_bbox/
+perception/check_image_raw.jpg
+yolo_world/render_feedback_0_0.jpeg

@@ -1,0 +1,32 @@
+robot:
+  compressed_image_topic: "/image"
+  raw_image_topic: "/image_raw"
+  cmd_topic: "/cmd_vel"
+  detection_topic: "/hobot_yolo_world"
+  target_words_topic: "/target_words"
+  target_words: "red backpack,backpack,bag"
+
+camera:
+  device: "/dev/video0"
+  width: 640
+  height: 480
+  compressed_for_web: true
+  raw_for_algorithm: true
+
+chassis:
+  port: "/dev/ttyUSB0"
+  use_lateral: false
+  max_vx: 0.04
+  max_wz: 0.22
+  watchdog_timeout: 0.5
+
+servo:
+  kp_turn: 0.1
+  center_threshold: 0.18
+  arrive_area_ratio: 0.12
+  min_area_ratio: 0.002
+  lost_timeout: 0.6
+
+mvp:
+  default_instruction: "find the red backpack"
+  default_backend: "red"

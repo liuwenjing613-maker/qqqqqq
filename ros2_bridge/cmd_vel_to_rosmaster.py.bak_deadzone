@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+import time
+import argparse
+import threading
+
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+
+from Rosmaster_Lib import Rosmaster
+
+
+def clamp(value, min_value, max_value):
+    return max(min_value, min(max_value, value))
+
+
+class CmdVelToRosmaster(Node):
+    """
+    ROS2 /cmd_vel -> Yahboom Rosmaster_Lib -> M1 chassis
+
+    当前阶段禁用横移：
+    - 只使用 msg.linear.x 控制前进/后退
+    - 忽略 msg.linear.y
+    - 只使用 msg.angular.z 控制左转/右转
+
+    坐标约定：
+    linear.x > 0 : 前进
+    linear.x < 0 : 后退
+    angular.z > 0 : 左转
+    angular.z < 0 : 右转
+    """
+
+    def __init__(
+        self,
+        port="/dev/myserial",
+        max_vx=0.10,
+        max_wz=0.50,
+        watchdog_timeout=0.5,
+        debug=False,
+    ):
+        super().__init__("cmd_vel_to_rosmaster")
+
+        self.port = port
+        self.max_vx = float(max_vx)
+        self.max_wz = float(max_wz)
+        self.watchdog_timeout = float(watchdog_timeout)
+        self.debug = debug
+
+        self.lock = threading.Lock()
+        self.last_cmd_time = time.time()
+        self.last_vx = 0.0
+        self.last_wz = 0.0
+
+        self.get_logger().info("Initializing Rosmaster...")
+        self.get_logger().info(f"Serial port: {self.port}")
+
+        self.bot = Rosmaster(com=self.port)
+        self.bot.create_receive_threading()
+        time.sleep(0.5)
+
+        self.safe_stop()
+
+        self.cmd_sub = self.create_subscription(
+            Twist,
+            "/cmd_vel",
+            self.cmd_vel_callback,
+            10
+        )
+
+        self.watchdog_timer = self.create_timer(
+            0.05,
+            self.watchdog_callback
+        )
+
+        self.status_timer = self.create_timer(
+            2.0,
+            self.status_callback
+        )
+
+        self.get_logger().info("cmd_vel_to_rosmaster started.")
+        self.get_logger().info("Subscribed topic: /cmd_vel")
+        self.get_logger().info("linear.y is ignored in this stage.")
+        self.get_logger().info(
+            f"Safety limits: max_vx={self.max_vx:.3f} m/s, max_wz={self.max_wz:.3f} rad/s"
+        )
+
+    def cmd_vel_callback(self, msg: Twist):
+        raw_vx = float(msg.linear.x)
+        raw_vy = float(msg.linear.y)
+        raw_wz = float(msg.angular.z)
+
+        # 阶段 5：禁用横移，强制 vy = 0
+        vx = clamp(raw_vx, -self.max_vx, self.max_vx)
+        vy = 0.0
+        wz = clamp(raw_wz, -self.max_wz, self.max_wz)
+
+        with self.lock:
+            self.bot.set_car_motion(vx, vy, wz)
+            self.last_cmd_time = time.time()
+            self.last_vx = vx
+            self.last_wz = wz
+
+        if self.debug:
+            self.get_logger().info(
+                f"raw cmd: linear.x={raw_vx:.3f}, linear.y={raw_vy:.3f}, angular.z={raw_wz:.3f} "
+                f"=> send: vx={vx:.3f}, vy=0.000, wz={wz:.3f}"
+            )
+
+    def watchdog_callback(self):
+        """
+        如果超过 watchdog_timeout 没有收到新的 /cmd_vel，自动停车。
+        防止上层程序卡死后小车继续跑。
+        """
+        now = time.time()
+        if now - self.last_cmd_time > self.watchdog_timeout:
+            with self.lock:
+                if abs(self.last_vx) > 1e-6 or abs(self.last_wz) > 1e-6:
+                    self.bot.set_car_motion(0.0, 0.0, 0.0)
+                    self.last_vx = 0.0
+                    self.last_wz = 0.0
+                    self.last_cmd_time = now
+                    self.get_logger().warn("Watchdog timeout, auto stop.")
+
+    def status_callback(self):
+        """
+        定期打印状态，方便确认底盘仍在线。
+        """
+        try:
+            battery = self.bot.get_battery_voltage()
+        except Exception:
+            battery = None
+
+        try:
+            motion = self.bot.get_motion_data()
+        except Exception:
+            motion = None
+
+        self.get_logger().info(
+            f"status: battery={battery}, motion={motion}, last_cmd=(vx={self.last_vx:.3f}, wz={self.last_wz:.3f})"
+        )
+
+    def safe_stop(self):
+        try:
+            self.bot.set_car_motion(0.0, 0.0, 0.0)
+        except Exception as e:
+            self.get_logger().error(f"safe_stop failed: {repr(e)}")
+
+    def destroy_node(self):
+        self.get_logger().info("Stopping car before node shutdown...")
+        self.safe_stop()
+        time.sleep(0.2)
+        super().destroy_node()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", default="/dev/myserial")
+    parser.add_argument("--max-vx", type=float, default=0.10)
+    parser.add_argument("--max-wz", type=float, default=0.50)
+    parser.add_argument("--watchdog-timeout", type=float, default=0.5)
+    parser.add_argument("--debug", action="store_true")
+    args, _ = parser.parse_known_args()
+
+    rclpy.init()
+
+    node = CmdVelToRosmaster(
+        port=args.port,
+        max_vx=args.max_vx,
+        max_wz=args.max_wz,
+        watchdog_timeout=args.watchdog_timeout,
+        debug=args.debug,
+    )
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("KeyboardInterrupt received.")
+    finally:
+        node.safe_stop()
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
