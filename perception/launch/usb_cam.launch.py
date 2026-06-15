@@ -35,7 +35,7 @@ def generate_launch_description():
                 "usb_camera_calibration_file_path": calibration_file,
                 "usb_image_width": "1280",
                 "usb_image_height": "720",
-                "usb_framerate": "60",
+                "usb_framerate": "20",
                 "usb_pixel_format": "mjpeg",
             }.items(),
         ),

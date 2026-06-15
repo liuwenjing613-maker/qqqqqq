@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 import argparse
+import os
+import sys
 import time
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from geometry_msgs.msg import Twist
 from ai_msgs.msg import PerceptionTargets
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+
+PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
+sys.path.append(PROJECT_ROOT)
+
+from src.perception.target_backend_yolo import extract_yolo_target, parse_target_classes
 
 
 def clamp(value, min_value, max_value):
@@ -14,7 +24,9 @@ def clamp(value, min_value, max_value):
 
 class YoloWorldServo(Node):
     """
-    YOLO-World 检测框视觉伺服节点。
+    YOLO-World 检测框视觉伺服节点（后处理，非推理）。
+
+    必须先启动 hobot_yolo_world 推理节点；详见 yolo_world/README.md
 
     输入:
       /hobot_yolo_world: ai_msgs/msg/PerceptionTargets
@@ -34,10 +46,14 @@ class YoloWorldServo(Node):
         self,
         det_topic="/hobot_yolo_world",
         cmd_topic="/cmd_vel",
-        target_classes="cup,bottle,book,chair,person,bag,box",
-        image_width=640,
-        image_height=480,
-        min_score=0.10,
+        image_topic="/image_raw",
+        target_classes="backpack,handbag,suitcase",
+        image_width=1280,
+        image_height=720,
+        min_score=0.002,
+        min_red_ratio=0.06,
+        max_area_ratio=0.20,
+        require_red_verify=True,
         kp_turn=1.0,
         max_vx=0.05,
         max_wz=0.28,
@@ -49,10 +65,22 @@ class YoloWorldServo(Node):
 
         self.det_topic = det_topic
         self.cmd_topic = cmd_topic
-        self.target_classes = [x.strip() for x in target_classes.split(",") if x.strip()]
+        self.image_topic = image_topic
+        self.target_classes = parse_target_classes(target_classes)
         self.image_width = int(image_width)
         self.image_height = int(image_height)
         self.min_score = float(min_score)
+        self.min_red_ratio = float(min_red_ratio)
+        self.max_area_ratio = float(max_area_ratio)
+        self.require_red_verify = bool(require_red_verify)
+
+        self.bridge = CvBridge()
+        self.latest_frame = None
+        self.sensor_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=5,
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+        )
 
         self.kp_turn = float(kp_turn)
         self.max_vx = float(max_vx)
@@ -70,7 +98,13 @@ class YoloWorldServo(Node):
             PerceptionTargets,
             self.det_topic,
             self.det_callback,
-            10
+            self.sensor_qos,
+        )
+        self.image_sub = self.create_subscription(
+            Image,
+            self.image_topic,
+            self.image_callback,
+            self.sensor_qos,
         )
 
         self.watchdog_timer = self.create_timer(0.1, self.watchdog_callback)
@@ -79,8 +113,11 @@ class YoloWorldServo(Node):
         self.get_logger().info(f"det_topic: {self.det_topic}")
         self.get_logger().info(f"cmd_topic: {self.cmd_topic}")
         self.get_logger().info(f"target_classes: {self.target_classes}")
+        self.get_logger().info(f"image_topic: {self.image_topic}")
         self.get_logger().info(
-            f"params: min_score={self.min_score}, kp_turn={self.kp_turn}, "
+            f"params: min_score={self.min_score}, min_red_ratio={self.min_red_ratio}, "
+            f"max_area_ratio={self.max_area_ratio}, require_red_verify={self.require_red_verify}, "
+            f"kp_turn={self.kp_turn}, "
             f"max_vx={self.max_vx}, max_wz={self.max_wz}, "
             f"center_threshold={self.center_threshold}, arrive_area_ratio={self.arrive_area_ratio}"
         )
@@ -101,56 +138,40 @@ class YoloWorldServo(Node):
     def stop(self):
         self.publish_cmd(0.0, 0.0)
 
+    def image_callback(self, msg: Image):
+        try:
+            self.latest_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        except Exception as e:
+            self.get_logger().error(f"cv_bridge failed: {repr(e)}")
+
     def extract_best_target(self, msg: PerceptionTargets):
-        candidates = []
-
-        for target in msg.targets:
-            target_type = str(target.type)
-
-            if self.target_classes and target_type not in self.target_classes:
-                continue
-
-            for roi in target.rois:
-                score = float(roi.confidence)
-
-                if score < self.min_score:
-                    continue
-
-                rect = roi.rect
-                x = int(rect.x_offset)
-                y = int(rect.y_offset)
-                w = int(rect.width)
-                h = int(rect.height)
-
-                if w <= 0 or h <= 0:
-                    continue
-
-                cx = x + w / 2.0
-                cy = y + h / 2.0
-                area = w * h
-                area_ratio = area / float(self.image_width * self.image_height)
-                ex = (cx - self.image_width / 2.0) / self.image_width
-
-                candidates.append({
-                    "type": target_type,
-                    "score": score,
-                    "bbox": [x, y, w, h],
-                    "cx": cx,
-                    "cy": cy,
-                    "area": area,
-                    "area_ratio": area_ratio,
-                    "ex": ex,
-                })
-
-        if not candidates:
+        target = extract_yolo_target(
+            msg,
+            target_classes=self.target_classes,
+            image_width=self.image_width,
+            image_height=self.image_height,
+            min_score=self.min_score,
+            max_area_ratio=self.max_area_ratio,
+            frame=self.latest_frame,
+            min_red_ratio=self.min_red_ratio,
+            require_red_verify=self.require_red_verify,
+        )
+        if not target.get("visible", False):
             return None
 
-        candidates.sort(
-            key=lambda item: (item["score"], item["area_ratio"]),
-            reverse=True
-        )
+        cx = target["cx"]
+        ex = (cx - self.image_width / 2.0) / self.image_width
 
-        return candidates[0]
+        return {
+            "type": target["class_name"],
+            "score": target["score"],
+            "bbox": target["bbox"],
+            "cx": cx,
+            "cy": target["cy"],
+            "area": target["bbox"][2] * target["bbox"][3],
+            "area_ratio": target["area_ratio"],
+            "ex": ex,
+        }
 
     def det_callback(self, msg: PerceptionTargets):
         best = self.extract_best_target(msg)
@@ -214,10 +235,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--det-topic", default="/hobot_yolo_world")
     parser.add_argument("--cmd-topic", default="/cmd_vel")
-    parser.add_argument("--target-classes", default="cup,bottle,book,chair,person,bag,box")
-    parser.add_argument("--image-width", type=int, default=640)
-    parser.add_argument("--image-height", type=int, default=480)
-    parser.add_argument("--min-score", type=float, default=0.10)
+    parser.add_argument(
+        "--target-classes",
+        default="backpack,handbag,suitcase",
+        help="Post-process filter only; empty = no filter. Model texts set via hobot_yolo_world.",
+    )
+    parser.add_argument("--image-width", type=int, default=1280)
+    parser.add_argument("--image-height", type=int, default=720)
+    parser.add_argument("--image-topic", default="/image_raw")
+    parser.add_argument("--min-score", type=float, default=0.002)
+    parser.add_argument("--min-red-ratio", type=float, default=0.06)
+    parser.add_argument("--max-area-ratio", type=float, default=0.20)
+    parser.add_argument("--no-red-verify", action="store_true")
     parser.add_argument("--kp-turn", type=float, default=1.0)
     parser.add_argument("--max-vx", type=float, default=0.05)
     parser.add_argument("--max-wz", type=float, default=0.28)
@@ -231,10 +260,14 @@ def main():
     node = YoloWorldServo(
         det_topic=args.det_topic,
         cmd_topic=args.cmd_topic,
+        image_topic=args.image_topic,
         target_classes=args.target_classes,
         image_width=args.image_width,
         image_height=args.image_height,
         min_score=args.min_score,
+        min_red_ratio=args.min_red_ratio,
+        max_area_ratio=args.max_area_ratio,
+        require_red_verify=not args.no_red_verify,
         kp_turn=args.kp_turn,
         max_vx=args.max_vx,
         max_wz=args.max_wz,

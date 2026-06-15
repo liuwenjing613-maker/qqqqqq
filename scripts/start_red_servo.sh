@@ -21,7 +21,7 @@ set -e
 
 PROJECT_DIR="${PROJECT_DIR:-$HOME/rdk_x5_vln_robot}"
 CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
-CHASSIS_PORT="${CHASSIS_PORT:-/dev/ttyUSB0}"
+CHASSIS_PORT="${CHASSIS_PORT:-/dev/ttyUSB1}"
 IMAGE_TOPIC="${IMAGE_TOPIC:-/image}"
 
 BRIDGE_MAX_VX="${BRIDGE_MAX_VX:-0.06}"

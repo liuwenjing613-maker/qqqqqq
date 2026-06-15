@@ -4,17 +4,24 @@ robot:
   cmd_topic: "/cmd_vel"
   detection_topic: "/hobot_yolo_world"
   target_words_topic: "/target_words"
-  target_words: "red backpack,backpack,bag"
+  target_words: "backpack,handbag,suitcase"
 
 camera:
   device: "/dev/video0"
-  width: 640
-  height: 480
+  width: 1280
+  height: 720
   compressed_for_web: true
   raw_for_algorithm: true
 
+lidar:
+  device: "/dev/ydlidar"
+  scan_topic: "/scan"
+  frame_id: "laser"
+  baudrate: 230400
+  params_file: "lidar/config/tmini_plus.yaml"
+
 chassis:
-  port: "/dev/ttyUSB0"
+  port: "/dev/rosmaster"
   use_lateral: false
   max_vx: 0.04
   max_wz: 0.22
@@ -29,4 +36,4 @@ servo:
 
 mvp:
   default_instruction: "find the red backpack"
-  default_backend: "red"
+  default_backend: "yolo_world"

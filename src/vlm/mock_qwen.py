@@ -14,38 +14,45 @@ def mock_qwen_parse(instruction: str):
     text = instruction.lower().strip()
 
     if "red backpack" in text or "红色背包" in text:
-        prompts = ["red backpack", "backpack", "bag", "school bag"]
-        target_classes = ["red backpack", "backpack", "bag", "school bag"]
+        # YOLO 节点 texts 只用 offline_vocabulary 内词，避免 embedding 异常。
+        prompts = ["backpack", "handbag", "suitcase"]
+        target_classes = ["backpack", "handbag", "suitcase"]
         target_category = "backpack"
         target_description = "red backpack"
 
     elif "backpack" in text or "背包" in text:
-        prompts = ["backpack", "bag", "school bag"]
-        target_classes = ["backpack", "bag", "school bag"]
+        prompts = ["backpack", "handbag", "suitcase"]
+        target_classes = ["backpack", "handbag", "suitcase"]
         target_category = "backpack"
         target_description = "backpack"
 
     elif "bag" in text or "包" in text:
-        prompts = ["bag", "backpack", "school bag"]
-        target_classes = ["bag", "backpack", "school bag"]
+        prompts = ["handbag", "backpack", "suitcase"]
+        target_classes = ["handbag", "backpack", "suitcase"]
         target_category = "bag"
         target_description = "bag"
 
+    elif "green cup" in text or "绿色水杯" in text or "绿色杯子" in text:
+        prompts = ["bottle", "cup", "wine glass"]
+        target_classes = ["bottle", "cup", "wine glass"]
+        target_category = "cup"
+        target_description = "green cup"
+
     elif "red cup" in text or "红色杯子" in text:
-        prompts = ["red cup", "cup", "mug", "bottle"]
-        target_classes = ["red cup", "cup", "mug", "bottle"]
+        prompts = ["cup", "bottle", "wine glass"]
+        target_classes = ["cup", "bottle", "wine glass"]
         target_category = "cup"
         target_description = "red cup"
 
-    elif "cup" in text or "杯子" in text:
-        prompts = ["cup", "mug", "bottle"]
-        target_classes = ["cup", "mug", "bottle"]
+    elif "cup" in text or "杯子" in text or "水杯" in text:
+        prompts = ["cup", "bottle", "wine glass"]
+        target_classes = ["cup", "bottle", "wine glass"]
         target_category = "cup"
         target_description = "cup"
 
     elif "bottle" in text or "瓶" in text:
-        prompts = ["bottle", "water bottle"]
-        target_classes = ["bottle", "water bottle"]
+        prompts = ["bottle", "cup", "wine glass"]
+        target_classes = ["bottle", "cup", "wine glass"]
         target_category = "bottle"
         target_description = "bottle"
 
@@ -62,8 +69,8 @@ def mock_qwen_parse(instruction: str):
         target_description = "box"
 
     else:
-        prompts = ["red backpack", "backpack", "bag", "school bag"]
-        target_classes = ["red backpack", "backpack", "bag", "school bag"]
+        prompts = ["backpack", "handbag", "suitcase"]
+        target_classes = ["backpack", "handbag", "suitcase"]
         target_category = "backpack"
         target_description = "red backpack"
 

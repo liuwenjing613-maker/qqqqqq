@@ -6,7 +6,9 @@ import cv2
 import numpy as np
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import CompressedImage, Image
 from cv_bridge import CvBridge
 
@@ -28,12 +30,18 @@ class CompressedToRawImage(Node):
         self.frame_id = frame_id
         self.bridge = CvBridge()
 
-        self.pub = self.create_publisher(Image, self.out_topic, 10)
+        self.sensor_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=5,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
+
+        self.pub = self.create_publisher(Image, self.out_topic, self.sensor_qos)
         self.sub = self.create_subscription(
             CompressedImage,
             self.in_topic,
             self.callback,
-            10
+            self.sensor_qos,
         )
 
         self.count = 0
@@ -87,11 +95,12 @@ def main():
 
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

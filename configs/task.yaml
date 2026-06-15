@@ -2,34 +2,32 @@ default_task:
   instruction: "find the red backpack"
   target_name: "red backpack"
   yolo_prompts:
-    - "red backpack"
     - "backpack"
-    - "bag"
-    - "school bag"
-  backend: "red"
+    - "handbag"
+    - "suitcase"
+  backend: "yolo_world"
 
 demo_tasks:
   - name: "red_backpack_red_backend"
     instruction: "find the red backpack"
     backend: "red"
     target_classes:
-      - "red backpack"
       - "backpack"
-      - "bag"
+      - "handbag"
+      - "suitcase"
 
   - name: "red_backpack_yolo_world"
     instruction: "find the red backpack"
     backend: "yolo_world"
     target_classes:
-      - "red backpack"
       - "backpack"
-      - "bag"
-      - "school bag"
+      - "handbag"
+      - "suitcase"
 
   - name: "bag_yolo_world"
     instruction: "find a bag"
     backend: "yolo_world"
     target_classes:
-      - "bag"
+      - "handbag"
       - "backpack"
-      - "school bag"
+      - "suitcase"
