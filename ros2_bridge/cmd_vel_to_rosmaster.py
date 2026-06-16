@@ -9,6 +9,14 @@ from geometry_msgs.msg import Twist
 
 from Rosmaster_Lib import Rosmaster
 
+import os
+import sys
+
+PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
+sys.path.append(PROJECT_ROOT)
+
+from src.control.cmd_smoother import CmdSmoother
+
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(max_value, value))
@@ -18,16 +26,9 @@ class CmdVelToRosmaster(Node):
     """
     ROS2 /cmd_vel -> Yahboom Rosmaster_Lib -> M1 chassis
 
-    当前阶段禁用横移：
-    - 只使用 msg.linear.x 控制前进/后退
-    - 忽略 msg.linear.y
-    - 只使用 msg.angular.z 控制左转/右转
-
-    坐标约定：
-    linear.x > 0 : 前进
-    linear.x < 0 : 后退
-    angular.z > 0 : 左转
-    angular.z < 0 : 右转
+    简单两段式启动：
+      1. 从停止收到任何非零底盘动作时，先输出短启动脉冲。
+      2. 脉冲结束后，严格回到 /cmd_vel 给的实际 vx/wz。
     """
 
     def __init__(
@@ -38,10 +39,14 @@ class CmdVelToRosmaster(Node):
         watchdog_timeout=0.5,
         enable_kick_start=True,
         kick_vx=0.09,
+        kick_wz=0.24,
         kick_duration=0.18,
-        min_drive_vx=0.045,
-        kick_max_wz=0.08,
         kick_cooldown=1.0,
+        cmd_wz_deadzone=0.01,
+        cmd_smooth_alpha=0.4,
+        max_vx_delta=0.015,
+        max_wz_delta=0.02,
+        control_rate_hz=20.0,
         debug=False,
     ):
         super().__init__("cmd_vel_to_rosmaster")
@@ -57,14 +62,24 @@ class CmdVelToRosmaster(Node):
         self.last_vx = 0.0
         self.last_wz = 0.0
 
-        # 启动死区补偿：M1 落地低速启动困难时使用
         self.enable_kick_start = bool(enable_kick_start)
         self.kick_vx = float(kick_vx)
+        self.kick_wz = float(kick_wz)
         self.kick_duration = float(kick_duration)
-        self.min_drive_vx = float(min_drive_vx)
-        self.kick_max_wz = float(kick_max_wz)
         self.kick_cooldown = float(kick_cooldown)
+        self.cmd_wz_deadzone = float(cmd_wz_deadzone)
         self.last_kick_time = 0.0
+        self.kick_active_until = 0.0
+        self.kick_vx_target = 0.0
+        self.kick_wz_target = 0.0
+
+        self.target_vx = 0.0
+        self.target_wz = 0.0
+        self.smoother = CmdSmoother(
+            alpha=cmd_smooth_alpha,
+            max_vx_delta=max_vx_delta,
+            max_wz_delta=max_wz_delta,
+        )
 
         self.get_logger().info("Initializing Rosmaster...")
         self.get_logger().info(f"Serial port: {self.port}")
@@ -79,91 +94,117 @@ class CmdVelToRosmaster(Node):
             Twist,
             "/cmd_vel",
             self.cmd_vel_callback,
-            10
+            10,
         )
 
-        self.watchdog_timer = self.create_timer(
-            0.05,
-            self.watchdog_callback
-        )
+        period = 1.0 / max(5.0, float(control_rate_hz))
+        self.control_timer = self.create_timer(period, self.control_timer_callback)
 
-        self.status_timer = self.create_timer(
-            2.0,
-            self.status_callback
-        )
+        self.watchdog_timer = self.create_timer(0.05, self.watchdog_callback)
+        self.status_timer = self.create_timer(2.0, self.status_callback)
 
         self.get_logger().info("cmd_vel_to_rosmaster started.")
         self.get_logger().info("Subscribed topic: /cmd_vel")
-        self.get_logger().info("linear.y is ignored in this stage.")
         self.get_logger().info(
             f"Safety limits: max_vx={self.max_vx:.3f} m/s, max_wz={self.max_wz:.3f} rad/s"
         )
         self.get_logger().info(
+            f"Smooth: alpha={cmd_smooth_alpha:.2f} dvx={max_vx_delta:.3f} dwz={max_wz_delta:.3f} "
+            f"rate={control_rate_hz:.1f}Hz"
+        )
+        self.get_logger().info(
             "Kick start: "
             f"enable={self.enable_kick_start}, kick_vx={self.kick_vx:.3f}, "
-            f"kick_duration={self.kick_duration:.3f}s, min_drive_vx={self.min_drive_vx:.3f}, "
-            f"kick_max_wz={self.kick_max_wz:.3f}, kick_cooldown={self.kick_cooldown:.3f}s"
+            f"kick_wz={self.kick_wz:.3f}, duration={self.kick_duration:.3f}s, "
+            f"cooldown={self.kick_cooldown:.3f}s, cmd_wz_deadzone={self.cmd_wz_deadzone:.3f}"
         )
+
+    def _is_stopped(self):
+        return abs(self.last_vx) < 1e-4 and abs(self.last_wz) < 1e-4
 
     def cmd_vel_callback(self, msg: Twist):
         raw_vx = float(msg.linear.x)
-        raw_vy = float(msg.linear.y)
         raw_wz = float(msg.angular.z)
 
-        # 阶段内仍禁用横移
         vx = clamp(raw_vx, -self.max_vx, self.max_vx)
-        vy = 0.0
         wz = clamp(raw_wz, -self.max_wz, self.max_wz)
+        if abs(wz) < self.cmd_wz_deadzone:
+            wz = 0.0
+        send_vx = vx
+        send_wz = wz
 
         now = time.time()
-
-        # 如果上层给了一个很小但非零的前进速度，可能低于静摩擦死区
-        # 处理策略：
-        # 1. abs(vx) 太小则直接归零，防止电机嗡嗡响
-        # 2. 从停止状态开始前进时，给一个很短的启动脉冲
-        send_vx = vx
-
-        if abs(vx) < 1e-4:
-            send_vx = 0.0
-        elif abs(vx) < self.min_drive_vx:
-            send_vx = self.min_drive_vx if vx > 0 else -self.min_drive_vx
-
+        nonzero_cmd = abs(send_vx) > 1e-4 or abs(send_wz) > 1e-4
         need_kick = (
             self.enable_kick_start
-            and abs(self.last_vx) < 1e-4
-            and abs(vx) > 1e-4
-            and abs(wz) < self.kick_max_wz
+            and nonzero_cmd
+            and self._is_stopped()
             and now - self.last_kick_time > self.kick_cooldown
         )
 
         with self.lock:
-            if need_kick:
-                kick = self.kick_vx if vx > 0 else -self.kick_vx
-                kick = clamp(kick, -self.max_vx, self.max_vx)
-
-                self.bot.set_car_motion(kick, 0.0, wz)
-                time.sleep(self.kick_duration)
-                self.last_kick_time = time.time()
-
-            self.bot.set_car_motion(send_vx, vy, wz)
-            self.last_cmd_time = time.time()
-            self.last_vx = send_vx
-            self.last_wz = wz
+            self.target_vx = send_vx
+            self.target_wz = send_wz
+            self.last_cmd_time = now
+            if not nonzero_cmd:
+                self.kick_active_until = 0.0
+                self.kick_vx_target = 0.0
+                self.kick_wz_target = 0.0
+                self.smoother.reset()
+            elif need_kick:
+                self.kick_active_until = now + self.kick_duration
+                self.kick_vx_target = (
+                    (1.0 if send_vx > 0 else -1.0) * abs(self.kick_vx)
+                    if abs(send_vx) > 1e-4
+                    else 0.0
+                )
+                self.kick_wz_target = (
+                    (1.0 if send_wz > 0 else -1.0) * abs(self.kick_wz)
+                    if abs(send_wz) > 1e-4
+                    else 0.0
+                )
+                self.last_kick_time = now
 
         if self.debug:
             self.get_logger().info(
-                f"raw cmd: linear.x={raw_vx:.3f}, linear.y={raw_vy:.3f}, angular.z={raw_wz:.3f} "
-                f"=> send: vx={send_vx:.3f}, vy=0.000, wz={wz:.3f}, kick={need_kick}"
+                f"raw cmd: linear.x={raw_vx:.3f}, angular.z={raw_wz:.3f} "
+                f"=> target: vx={send_vx:.3f}, wz={send_wz:.3f}, "
+                f"kick={need_kick}"
             )
+
+    def control_timer_callback(self):
+        now = time.time()
+        with self.lock:
+            raw_vx = self.target_vx
+            raw_wz = self.target_wz
+            in_kick = now < self.kick_active_until
+            if in_kick:
+                raw_vx = self.kick_vx_target
+                raw_wz = self.kick_wz_target
+
+        if in_kick:
+            # 启动脉冲必须直达底盘，不能被平滑器削弱到死区以下。
+            out_vx, out_wz = raw_vx, raw_wz
+        else:
+            # 脉冲后严格执行 /cmd_vel 的实际设定值，不再做最小速度或巡航改写。
+            out_vx, out_wz = raw_vx, raw_wz
+        out_vx = clamp(out_vx, -self.max_vx, self.max_vx)
+        out_wz = clamp(out_wz, -self.max_wz, self.max_wz)
+
+        with self.lock:
+            self.bot.set_car_motion(out_vx, 0.0, out_wz)
+            self.last_vx = out_vx
+            self.last_wz = out_wz
+
     def watchdog_callback(self):
-        """
-        如果超过 watchdog_timeout 没有收到新的 /cmd_vel，自动停车。
-        防止上层程序卡死后小车继续跑。
-        """
         now = time.time()
         if now - self.last_cmd_time > self.watchdog_timeout:
             with self.lock:
                 if abs(self.last_vx) > 1e-6 or abs(self.last_wz) > 1e-6:
+                    self.target_vx = 0.0
+                    self.target_wz = 0.0
+                    self.kick_active_until = 0.0
+                    self.smoother.reset()
                     self.bot.set_car_motion(0.0, 0.0, 0.0)
                     self.last_vx = 0.0
                     self.last_wz = 0.0
@@ -171,9 +212,6 @@ class CmdVelToRosmaster(Node):
                     self.get_logger().warn("Watchdog timeout, auto stop.")
 
     def status_callback(self):
-        """
-        定期打印状态，方便确认底盘仍在线。
-        """
         try:
             battery = self.bot.get_battery_voltage()
         except Exception:
@@ -208,16 +246,15 @@ def main():
     parser.add_argument("--max-wz", type=float, default=0.50)
     parser.add_argument("--watchdog-timeout", type=float, default=0.5)
     parser.add_argument("--enable-kick-start", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--kick-vx", type=float, default=0.09,
-                        help="startup pulse linear speed (m/s)")
-    parser.add_argument("--kick-duration", type=float, default=0.18,
-                        help="startup pulse duration (s)")
-    parser.add_argument("--min-drive-vx", type=float, default=0.045,
-                        help="minimum sustained drive speed to overcome deadzone")
-    parser.add_argument("--kick-max-wz", type=float, default=0.08,
-                        help="allow kick only when |wz| is below this value")
-    parser.add_argument("--kick-cooldown", type=float, default=1.0,
-                        help="minimum interval between kick pulses (s)")
+    parser.add_argument("--kick-vx", type=float, default=0.09)
+    parser.add_argument("--kick-wz", type=float, default=0.24)
+    parser.add_argument("--kick-duration", type=float, default=0.18)
+    parser.add_argument("--kick-cooldown", type=float, default=1.0)
+    parser.add_argument("--cmd-wz-deadzone", type=float, default=0.01)
+    parser.add_argument("--cmd-smooth-alpha", type=float, default=0.4)
+    parser.add_argument("--max-vx-delta", type=float, default=0.015)
+    parser.add_argument("--max-wz-delta", type=float, default=0.02)
+    parser.add_argument("--control-rate-hz", type=float, default=20.0)
     parser.add_argument("--debug", action="store_true")
     args, _ = parser.parse_known_args()
 
@@ -230,10 +267,14 @@ def main():
         watchdog_timeout=args.watchdog_timeout,
         enable_kick_start=args.enable_kick_start,
         kick_vx=args.kick_vx,
+        kick_wz=args.kick_wz,
         kick_duration=args.kick_duration,
-        min_drive_vx=args.min_drive_vx,
-        kick_max_wz=args.kick_max_wz,
         kick_cooldown=args.kick_cooldown,
+        cmd_wz_deadzone=args.cmd_wz_deadzone,
+        cmd_smooth_alpha=args.cmd_smooth_alpha,
+        max_vx_delta=args.max_vx_delta,
+        max_wz_delta=args.max_wz_delta,
+        control_rate_hz=args.control_rate_hz,
         debug=args.debug,
     )
 

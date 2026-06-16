@@ -15,6 +15,7 @@ from cv_bridge import CvBridge
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
 sys.path.append(PROJECT_ROOT)
 
+from src.config.mvp_tune import DEFAULT_TUNE_PATH, load_mvp_tune
 from src.perception.target_backend_yolo import extract_yolo_target, parse_target_classes
 
 
@@ -232,7 +233,13 @@ class YoloWorldServo(Node):
 
 
 def main():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--mvp-tune-config", default=DEFAULT_TUNE_PATH)
+    pre_args, _ = pre_parser.parse_known_args()
+    tune = load_mvp_tune(pre_args.mvp_tune_config)
+
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mvp-tune-config", default=pre_args.mvp_tune_config)
     parser.add_argument("--det-topic", default="/hobot_yolo_world")
     parser.add_argument("--cmd-topic", default="/cmd_vel")
     parser.add_argument(
@@ -243,15 +250,15 @@ def main():
     parser.add_argument("--image-width", type=int, default=1280)
     parser.add_argument("--image-height", type=int, default=720)
     parser.add_argument("--image-topic", default="/image_raw")
-    parser.add_argument("--min-score", type=float, default=0.002)
-    parser.add_argument("--min-red-ratio", type=float, default=0.06)
-    parser.add_argument("--max-area-ratio", type=float, default=0.20)
+    parser.add_argument("--min-score", type=float, default=tune["min_score"])
+    parser.add_argument("--min-red-ratio", type=float, default=tune["min_red_ratio"])
+    parser.add_argument("--max-area-ratio", type=float, default=tune["max_area_ratio"])
     parser.add_argument("--no-red-verify", action="store_true")
-    parser.add_argument("--kp-turn", type=float, default=1.0)
-    parser.add_argument("--max-vx", type=float, default=0.05)
-    parser.add_argument("--max-wz", type=float, default=0.28)
-    parser.add_argument("--center-threshold", type=float, default=0.18)
-    parser.add_argument("--arrive-area-ratio", type=float, default=0.12)
+    parser.add_argument("--kp-turn", type=float, default=tune["kp_turn"])
+    parser.add_argument("--max-vx", type=float, default=tune["max_vx"])
+    parser.add_argument("--max-wz", type=float, default=tune["max_wz"])
+    parser.add_argument("--center-threshold", type=float, default=tune["center_threshold"])
+    parser.add_argument("--arrive-area-ratio", type=float, default=tune["arrive_area_ratio"])
     parser.add_argument("--lost-timeout", type=float, default=0.5)
     args, _ = parser.parse_known_args()
 

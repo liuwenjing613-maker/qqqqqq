@@ -3,7 +3,9 @@ set -e
 
 PROJECT_DIR=~/rdk_x5_vln_robot
 CAMERA_DEV=/dev/video0
-CHASSIS_PORT=/dev/ttyUSB1
+
+# 统一调参：改 configs/mvp_tune.yaml 即可
+source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
 
 COMPRESSED_IMAGE_TOPIC=/image
 RAW_IMAGE_TOPIC=/image_raw
@@ -15,22 +17,10 @@ TARGET_WORDS_TOPIC=/target_words
 DET_TOPIC=/hobot_yolo_world
 
 INSTRUCTION="find the green cup"
-# offline_vocabulary 合法类：bottle / cup / wine glass
 TARGET_WORDS="${TARGET_WORDS:-bottle,cup,wine glass}"
-SCORE_THRESHOLD="${SCORE_THRESHOLD:-0.01}"
-MIN_SCORE="${MIN_SCORE:-0.01}"
-MAX_AREA_RATIO="${MAX_AREA_RATIO:-0.15}"
-DET_STALE_SEC="${DET_STALE_SEC:-1.0}"
-SAVE_BBOX_DIR="${SAVE_BBOX_DIR:-$PROJECT_DIR/check_bbox_green_cup}"
-SAVE_BBOX_INTERVAL="${SAVE_BBOX_INTERVAL:-15}"
-
-KICK_VX="${KICK_VX:-0.11}"
-KICK_DURATION="${KICK_DURATION:-0.22}"
-MIN_DRIVE_VX="${MIN_DRIVE_VX:-0.01}"
-KICK_MAX_WZ="${KICK_MAX_WZ:-0.12}"
-
 echo "============================================================"
 echo " RDK X5 VLN Robot MVP - YOLO-World Green Cup"
+echo " Tune file: $MVP_TUNE_FILE"
 echo "============================================================"
 echo "PROJECT_DIR              = $PROJECT_DIR"
 echo "CAMERA_DEV               = $CAMERA_DEV"
@@ -43,20 +33,23 @@ echo "TARGET_WORDS_TOPIC       = $TARGET_WORDS_TOPIC"
 echo "DET_TOPIC                = $DET_TOPIC"
 echo "INSTRUCTION              = $INSTRUCTION"
 echo "TARGET_WORDS             = $TARGET_WORDS"
-echo "SCORE_THRESHOLD          = $SCORE_THRESHOLD"
-echo "MIN_SCORE                = $MIN_SCORE"
+echo "yolo_min_score           = $MIN_SCORE"
+echo "max_vx                   = $MAX_VX"
+echo "lost_frames_limit        = $LOST_FRAMES_LIMIT"
 echo "MAX_AREA_RATIO           = $MAX_AREA_RATIO"
-echo "DET_STALE_SEC            = $DET_STALE_SEC"
-echo "SAVE_BBOX_DIR            = $SAVE_BBOX_DIR"
-echo "SAVE_BBOX_INTERVAL       = $SAVE_BBOX_INTERVAL"
 echo "KICK_VX                  = $KICK_VX"
+echo "KICK_WZ                  = $KICK_WZ"
 echo "KICK_DURATION            = $KICK_DURATION"
 echo "MIN_DRIVE_VX             = $MIN_DRIVE_VX"
-echo "KICK_MAX_WZ              = $KICK_MAX_WZ"
+echo "ENABLE_KICK_START        = $ENABLE_KICK_START"
+echo "CMD_SMOOTH_ALPHA         = $CMD_SMOOTH_ALPHA"
+echo "RECOVERY_SCAN_WZ         = $RECOVERY_SCAN_WZ"
+echo "TURN_THRESHOLD           = $TURN_THRESHOLD"
+echo "FORWARD_THRESHOLD        = $FORWARD_THRESHOLD"
 echo "============================================================"
 
 cd $PROJECT_DIR
-mkdir -p logs data/images/mvp_debug "$SAVE_BBOX_DIR"
+mkdir -p logs data/images/mvp_debug
 
 echo "[0/6] stop old processes..."
 bash scripts/stop_all_safe.sh || true
@@ -106,18 +99,8 @@ ros2 run hobot_yolo_world hobot_yolo_world \
 sleep 4
 
 echo "[5/6] start chassis bridge: $CMD_TOPIC -> M1"
-cd $PROJECT_DIR/ros2_bridge
-source /opt/tros/humble/setup.bash
-python3 cmd_vel_to_rosmaster.py \
-  --port $CHASSIS_PORT \
-  --max-vx 0.10 \
-  --max-wz 0.20 \
-  --kick-vx $KICK_VX \
-  --kick-duration $KICK_DURATION \
-  --min-drive-vx $MIN_DRIVE_VX \
-  --kick-max-wz $KICK_MAX_WZ \
-  --debug \
-  > $PROJECT_DIR/logs/yolo_green_cup_chassis_bridge.log 2>&1 &
+source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
+run_chassis_bridge "$PROJECT_DIR/logs/yolo_green_cup_chassis_bridge.log"
 sleep 2
 
 echo "[5.5/6] check topics..."
@@ -141,19 +124,12 @@ if [ -f "$PROJECT_DIR/source_stage10.sh" ]; then
 fi
 
 python3 src/apps/run_mvp_task.py \
+  --mvp-tune-config "$MVP_TUNE_FILE" \
   --instruction "$INSTRUCTION" \
   --backend yolo_world \
   --image-topic $RAW_IMAGE_TOPIC \
   --det-topic $DET_TOPIC \
   --cmd-topic $CMD_TOPIC \
   --target-words-topic $TARGET_WORDS_TOPIC \
-  --min-score $MIN_SCORE \
-  --max-area-ratio $MAX_AREA_RATIO \
   --no-red-verify \
-  --det-stale-sec $DET_STALE_SEC \
-  --image-width 1280 \
-  --image-height 720 \
-  --save-bbox-dir "$SAVE_BBOX_DIR" \
-  --save-bbox-interval "$SAVE_BBOX_INTERVAL" \
-  --save-debug \
   2>&1 | tee $PROJECT_DIR/logs/yolo_green_cup_mvp_task.log

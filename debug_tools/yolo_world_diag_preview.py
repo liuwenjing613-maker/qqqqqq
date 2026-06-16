@@ -25,6 +25,7 @@ from sensor_msgs.msg import Image
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
 sys.path.append(PROJECT_ROOT)
 
+from src.config.mvp_tune import DEFAULT_TUNE_PATH, load_mvp_tune
 from src.perception.target_backend_yolo import (
     extract_yolo_target,
     list_yolo_candidates,
@@ -343,17 +344,23 @@ class YoloWorldDiagPreview(Node):
 
 
 def main():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--mvp-tune-config", default=DEFAULT_TUNE_PATH)
+    pre_args, _ = pre_parser.parse_known_args()
+    tune = load_mvp_tune(pre_args.mvp_tune_config)
+
     parser = argparse.ArgumentParser(description="YOLO-World diagnostic preview (no chassis).")
+    parser.add_argument("--mvp-tune-config", default=pre_args.mvp_tune_config)
     parser.add_argument("--image-topic", default="/image_raw")
     parser.add_argument("--det-topic", default="/hobot_yolo_world")
     parser.add_argument("--save-dir", default=None)
     parser.add_argument("--target-classes", default="backpack,handbag,suitcase")
     parser.add_argument("--image-width", type=int, default=1280)
     parser.add_argument("--image-height", type=int, default=720)
-    parser.add_argument("--min-score", type=float, default=0.002, help="MVP filter threshold")
+    parser.add_argument("--min-score", type=float, default=tune["min_score"], help="MVP filter threshold")
     parser.add_argument("--raw-min-score", type=float, default=0.0, help="Draw all boxes above this")
-    parser.add_argument("--min-red-ratio", type=float, default=0.06, help="HSV red ratio in bbox")
-    parser.add_argument("--max-area-ratio", type=float, default=0.15, help="Reject oversized boxes")
+    parser.add_argument("--min-red-ratio", type=float, default=tune["min_red_ratio"], help="HSV red ratio in bbox")
+    parser.add_argument("--max-area-ratio", type=float, default=tune["max_area_ratio"], help="Reject oversized boxes")
     parser.add_argument("--no-red-verify", action="store_true")
     parser.add_argument("--show-all-boxes", action="store_true", help="Draw every raw/filtered box")
     parser.add_argument("--save-interval", type=int, default=15)

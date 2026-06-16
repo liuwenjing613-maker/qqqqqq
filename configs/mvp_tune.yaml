@@ -1,0 +1,50 @@
+# =============================================================================
+# MVP 统一调参入口 — 日常只改这个文件即可
+# 启动脚本与 run_mvp_task.py 会自动读取，无需多处同步修改
+# =============================================================================
+
+# YOLO 检测置信度（同时用于 hobot_yolo_world score_threshold 与 MVP min_score）
+yolo_min_score: 0.003
+
+# 导航前进速度：先慢，标准化后再逐步加
+max_vx: 0.03
+
+# 转向：小偏差不转；中等偏差边走边慢修正；明显偏差才原地慢转
+max_wz: 0.08
+kp_turn: 0.1
+wz_deadzone: 0.2
+# 最终 cmd_wz 小于该值时直接置 0，避免 0.003/0.004 这种微小角速度触发底盘 kick
+cmd_wz_deadzone: 0.01
+forward_turn_scale: 0.25
+turn_threshold: 0.25
+
+# 到达判定：目标框面积占比超过此值视为到达（越小停得越早）
+arrive_area_ratio: 0.16
+# 开始减速的面积阈值（介于 0 与 arrive_area_ratio 之间）
+slowdown_area_ratio: 0.07
+
+# 状态机：连续看到/丢失多少帧后切换状态（丢 1 帧就停车会导致车不动）
+stable_frames_required: 2
+lost_frames_limit: 12
+
+# 检测过滤
+max_area_ratio: 0.15
+det_stale_sec: 1.0
+min_red_ratio: 0.06
+
+# 丢失后原地扫描角速度（巡航值，底盘桥会先 kick 再降到此速度）
+recovery_scan_wz: 0.06
+
+# 底盘串口与运动平滑
+chassis_port: /dev/ttyUSB1
+chassis_max_vx: 0.06
+chassis_max_wz: 0.25
+# 底盘启动脉冲：从停止进入任何非零动作前，先打一小段脉冲
+enable_kick_start: true
+kick_vx: 0.06
+kick_wz: 0.24
+kick_duration: 0.12
+kick_cooldown: 2.0
+
+# 底盘输出频率
+control_rate_hz: 20

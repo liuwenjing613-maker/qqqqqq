@@ -3,20 +3,16 @@ set -e
 
 PROJECT_DIR=~/rdk_x5_vln_robot
 CAMERA_DEV=/dev/video0
-CHASSIS_PORT=/dev/ttyUSB1
+
+source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
 
 COMPRESSED_IMAGE_TOPIC=/image
 RAW_IMAGE_TOPIC=/image_raw
 CMD_TOPIC=/cmd_vel
 
-# 启动死区补偿（落地启动困难时调大 kick-vx / kick-duration / min-drive-vx）
-KICK_VX="${KICK_VX:-0.11}"
-KICK_DURATION="${KICK_DURATION:-0.22}"
-MIN_DRIVE_VX="${MIN_DRIVE_VX:-0.01}"
-KICK_MAX_WZ="${KICK_MAX_WZ:-0.12}"
-
 echo "============================================================"
 echo " RDK X5 VLN Robot MVP - Red Target with Raw Image Bridge"
+echo " Tune file: $MVP_TUNE_FILE"
 echo "============================================================"
 echo "PROJECT_DIR              = $PROJECT_DIR"
 echo "CAMERA_DEV               = $CAMERA_DEV"
@@ -55,24 +51,15 @@ ros2 topic info $COMPRESSED_IMAGE_TOPIC || true
 ros2 topic info $RAW_IMAGE_TOPIC || true
 
 echo "[4/5] start chassis bridge: $CMD_TOPIC -> M1"
-cd $PROJECT_DIR/ros2_bridge
-source /opt/tros/humble/setup.bash
-python3 cmd_vel_to_rosmaster.py \
-  --port $CHASSIS_PORT \
-  --max-vx 0.10 \
-  --max-wz 0.20 \
-  --kick-vx $KICK_VX \
-  --kick-duration $KICK_DURATION \
-  --min-drive-vx $MIN_DRIVE_VX \
-  --kick-max-wz $KICK_MAX_WZ \
-  --debug \
-  > $PROJECT_DIR/logs/mvp_chassis_bridge.log 2>&1 &
+source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
+run_chassis_bridge "$PROJECT_DIR/logs/mvp_chassis_bridge.log"
 sleep 2
 
 echo "[5/5] start MVP task: subscribe $RAW_IMAGE_TOPIC, publish $CMD_TOPIC"
 cd $PROJECT_DIR
 source /opt/tros/humble/setup.bash
 python3 src/apps/run_mvp_task.py \
+  --mvp-tune-config "$MVP_TUNE_FILE" \
   --instruction "find the red backpack" \
   --backend red \
   --image-topic $RAW_IMAGE_TOPIC \

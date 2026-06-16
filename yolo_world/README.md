@@ -101,9 +101,9 @@ ros2 run hobot_yolo_world hobot_yolo_world --ros-args \
 
 ```bash
 # 打印所有 target.type / confidence / bbox，不过滤类别
+# min-score 默认读取 configs/mvp_tune.yaml 的 yolo_min_score
 python3 ~/rdk_x5_vln_robot/yolo_world/yolo_world_bbox_preview.py \
-  --target-classes "" \
-  --min-score 0.002
+  --target-classes ""
 
 # 仅后处理过滤书包相关类（不改变模型词表）
 python3 ~/rdk_x5_vln_robot/yolo_world/yolo_world_bbox_preview.py \
@@ -115,6 +115,21 @@ python3 ~/rdk_x5_vln_robot/yolo_world/yolo_world_bbox_preview.py \
 ```bash
 cd ~/rdk_x5_vln_robot
 SHOW_ALL_BOXES=1 bash scripts/start_yolo_diag_raw.sh
+```
+
+## 统一调参（推荐）
+
+日常只改 **`configs/mvp_tune.yaml`**，以下会自动同步：
+
+| 配置项 | 同步到 |
+|--------|--------|
+| `yolo_min_score` | `hobot_yolo_world` 的 `score_threshold`、MVP `--min-score`、YOLO 工具默认阈值 |
+| `max_vx` / `max_wz` / FSM 参数 | `run_mvp_task.py`、底盘 `min_drive_vx` |
+| `chassis_port` | 各 `start_*_mvp_raw.sh` |
+
+```bash
+python3 ~/rdk_x5_vln_robot/src/config/mvp_tune.py   # 查看当前生效值
+python3 -m unittest discover -s tests -v            # 跑 YOLO + tune 单元测试
 ```
 
 ## 离线词表限制
@@ -135,10 +150,11 @@ SHOW_ALL_BOXES=1 bash scripts/start_yolo_diag_raw.sh
 
 | 参数 | 作用 | 影响推理？ |
 |------|------|-----------|
+| `configs/mvp_tune.yaml` → `yolo_min_score` | 统一阈值（节点 + 后处理） | **是/否** |
 | `-p texts:=...` / `/target_words` | 模型开放词汇检测类别 | **是** |
 | `--target-classes` | 后处理类别过滤；空字符串=不过滤 | 否 |
-| `--min-score` | 后处理置信度阈值 | 否 |
-| `-p score_threshold:=...` | 推理节点内部阈值 | **是** |
+| `--min-score` | 后处理置信度阈值（默认读 mvp_tune） | 否 |
+| `-p score_threshold:=...` | 推理节点内部阈值（启动脚本从 mvp_tune 读取） | **是** |
 
 ## 调试命令
 

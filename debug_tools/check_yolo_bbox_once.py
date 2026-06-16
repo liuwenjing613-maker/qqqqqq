@@ -38,6 +38,7 @@ from sensor_msgs.msg import Image
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
 sys.path.append(PROJECT_ROOT)
 
+from src.config.mvp_tune import DEFAULT_TUNE_PATH, load_mvp_tune
 from src.perception.stamp_sync import StampSyncBuffer
 from src.perception.target_backend_yolo import (
     extract_yolo_target,
@@ -320,9 +321,15 @@ class CheckYoloBboxOnce(Node):
 
 
 def main():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--mvp-tune-config", default=DEFAULT_TUNE_PATH)
+    pre_args, _ = pre_parser.parse_known_args()
+    tune = load_mvp_tune(pre_args.mvp_tune_config)
+
     parser = argparse.ArgumentParser(
         description="Wait for YOLO-World bbox, save image + metadata once, then exit."
     )
+    parser.add_argument("--mvp-tune-config", default=pre_args.mvp_tune_config)
     parser.add_argument("--image-topic", default="/image_raw")
     parser.add_argument("--det-topic", default="/hobot_yolo_world")
     parser.add_argument("--save-dir", default=DEFAULT_SAVE_DIR)
@@ -333,9 +340,9 @@ def main():
     )
     parser.add_argument("--image-width", type=int, default=1280)
     parser.add_argument("--image-height", type=int, default=720)
-    parser.add_argument("--min-score", type=float, default=0.01)
-    parser.add_argument("--max-area-ratio", type=float, default=0.15)
-    parser.add_argument("--min-red-ratio", type=float, default=0.06)
+    parser.add_argument("--min-score", type=float, default=tune["min_score"])
+    parser.add_argument("--max-area-ratio", type=float, default=tune["max_area_ratio"])
+    parser.add_argument("--min-red-ratio", type=float, default=tune["min_red_ratio"])
     parser.add_argument("--no-red-verify", action="store_true")
     parser.add_argument(
         "--on-raw",

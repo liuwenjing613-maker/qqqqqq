@@ -2,7 +2,10 @@
 set -e
 
 PROJECT_DIR=~/rdk_x5_vln_robot
+PROJECT_DIR="$(eval echo "$PROJECT_DIR")"
 CAMERA_DEV=/dev/video0
+
+source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
 
 COMPRESSED_IMAGE_TOPIC=/image
 RAW_IMAGE_TOPIC=/image_raw
@@ -13,16 +16,13 @@ DET_TOPIC=/hobot_yolo_world
 # 只用 offline_vocabulary 内词
 TARGET_WORDS="${TARGET_WORDS:-backpack,handbag,suitcase}"
 TARGET_CLASSES="${TARGET_CLASSES:-backpack,handbag,suitcase}"
-SCORE_THRESHOLD="${SCORE_THRESHOLD:-0.001}"
-MIN_SCORE="${MIN_SCORE:-0.002}"
-MIN_RED_RATIO="${MIN_RED_RATIO:-0.06}"
-MAX_AREA_RATIO="${MAX_AREA_RATIO:-0.15}"
 RAW_MIN_SCORE="${RAW_MIN_SCORE:-0.0}"
 SAVE_INTERVAL="${SAVE_INTERVAL:-15}"
 SAVE_DIR="${SAVE_DIR:-$PROJECT_DIR/check_bbox}"
 
 echo "============================================================"
 echo " RDK X5 VLN Robot - YOLO-World Diagnostic Mode"
+echo " Tune file: $MVP_TUNE_FILE"
 echo " (camera + detection only, NO chassis / NO /cmd_vel)"
 echo " See yolo_world/README.md for inference vs post-process roles"
 echo "============================================================"
@@ -35,8 +35,7 @@ echo "TARGET_WORDS           = $TARGET_WORDS"
 echo "TARGET_CLASSES         = $TARGET_CLASSES"
 echo "SCORE_THRESHOLD (node) = $SCORE_THRESHOLD"
 echo "MIN_SCORE (MVP filter) = $MIN_SCORE"
-echo "MIN_RED_RATIO (HSV)    = $MIN_RED_RATIO"
-echo "MAX_AREA_RATIO         = $MAX_AREA_RATIO"
+echo "max_vx (tune)          = $MAX_VX"
 echo "RAW_MIN_SCORE (draw)   = $RAW_MIN_SCORE"
 echo "SAVE_DIR               = $SAVE_DIR"
 echo "SAVE_INTERVAL          = $SAVE_INTERVAL"
@@ -120,16 +119,14 @@ if [ -f "$PROJECT_DIR/source_stage10.sh" ]; then
 fi
 
 python3 debug_tools/yolo_world_diag_preview.py \
+  --mvp-tune-config "$MVP_TUNE_FILE" \
   --image-topic "$RAW_IMAGE_TOPIC" \
   --det-topic "$DET_TOPIC" \
   --save-dir "$SAVE_DIR" \
   --target-classes "$TARGET_CLASSES" \
   --image-width 1280 \
   --image-height 720 \
-  --min-score "$MIN_SCORE" \
   --raw-min-score "$RAW_MIN_SCORE" \
-  --min-red-ratio "$MIN_RED_RATIO" \
-  --max-area-ratio "$MAX_AREA_RATIO" \
   --save-interval "$SAVE_INTERVAL" \
   ${SHOW_ALL_BOXES:+--show-all-boxes} \
   2>&1 | tee "$PROJECT_DIR/logs/yolo_diag_preview.log"

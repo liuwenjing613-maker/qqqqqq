@@ -2,12 +2,13 @@
 set -e
 
 PROJECT_DIR=~/rdk_x5_vln_robot
+PROJECT_DIR="$(eval echo "$PROJECT_DIR")"
+source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
+
 IMAGE_TOPIC="${IMAGE_TOPIC:-/image_raw}"
 DET_TOPIC="${DET_TOPIC:-/hobot_yolo_world}"
 SAVE_DIR="${SAVE_DIR:-$PROJECT_DIR/check_bbox}"
 TARGET_CLASSES="${TARGET_CLASSES:-}"
-MIN_SCORE="${MIN_SCORE:-0.01}"
-MAX_AREA_RATIO="${MAX_AREA_RATIO:-0.15}"
 NO_RED_VERIFY="${NO_RED_VERIFY:-1}"
 TIMEOUT="${TIMEOUT:-0}"
 
@@ -18,7 +19,7 @@ echo "IMAGE_TOPIC     = $IMAGE_TOPIC"
 echo "DET_TOPIC       = $DET_TOPIC"
 echo "SAVE_DIR        = $SAVE_DIR"
 echo "TARGET_CLASSES  = ${TARGET_CLASSES:-(all)}"
-echo "MIN_SCORE       = $MIN_SCORE"
+echo "MIN_SCORE       = $MIN_SCORE (from $MVP_TUNE_FILE)"
 echo "MAX_AREA_RATIO  = $MAX_AREA_RATIO"
 echo "NO_RED_VERIFY   = $NO_RED_VERIFY"
 echo "TIMEOUT         = $TIMEOUT"

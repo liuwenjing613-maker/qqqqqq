@@ -21,6 +21,7 @@ from ai_msgs.msg import PerceptionTargets
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
 sys.path.append(PROJECT_ROOT)
 
+from src.config.mvp_tune import DEFAULT_TUNE_PATH, load_mvp_tune
 from src.perception.target_backend_yolo import (
     extract_yolo_target,
     list_all_yolo_detections,
@@ -148,9 +149,15 @@ class YoloWorldBBoxPreview(Node):
 
 
 def main():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--mvp-tune-config", default=DEFAULT_TUNE_PATH)
+    pre_args, _ = pre_parser.parse_known_args()
+    tune = load_mvp_tune(pre_args.mvp_tune_config)
+
     parser = argparse.ArgumentParser(
         description="YOLO-World bbox post-process preview (requires hobot_yolo_world running)."
     )
+    parser.add_argument("--mvp-tune-config", default=pre_args.mvp_tune_config)
     parser.add_argument("--det-topic", default="/hobot_yolo_world")
     parser.add_argument("--out-topic", default="/target_bbox_json")
     parser.add_argument(
@@ -160,9 +167,9 @@ def main():
     )
     parser.add_argument("--image-width", type=int, default=1280)
     parser.add_argument("--image-height", type=int, default=720)
-    parser.add_argument("--min-score", type=float, default=0.002)
-    parser.add_argument("--max-area-ratio", type=float, default=0.20)
-    parser.add_argument("--min-red-ratio", type=float, default=0.06)
+    parser.add_argument("--min-score", type=float, default=tune["min_score"])
+    parser.add_argument("--max-area-ratio", type=float, default=tune["max_area_ratio"])
+    parser.add_argument("--min-red-ratio", type=float, default=tune["min_red_ratio"])
     parser.add_argument("--require-red-verify", action="store_true")
     parser.add_argument(
         "--no-debug-all",
