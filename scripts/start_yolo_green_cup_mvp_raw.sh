@@ -16,8 +16,8 @@ CMD_TOPIC=/cmd_vel
 TARGET_WORDS_TOPIC=/target_words
 DET_TOPIC=/hobot_yolo_world
 
-INSTRUCTION="find the green cup"
-TARGET_WORDS="${TARGET_WORDS:-bottle,cup,wine glass}"
+INSTRUCTION="find the green bottle"
+TARGET_WORDS="${TARGET_WORDS:-green bottle,bottle,cup}"
 echo "============================================================"
 echo " RDK X5 VLN Robot MVP - YOLO-World Green Cup"
 echo " Tune file: $MVP_TUNE_FILE"
@@ -43,7 +43,12 @@ echo "KICK_DURATION            = $KICK_DURATION"
 echo "MIN_DRIVE_VX             = $MIN_DRIVE_VX"
 echo "ENABLE_KICK_START        = $ENABLE_KICK_START"
 echo "CMD_SMOOTH_ALPHA         = $CMD_SMOOTH_ALPHA"
+echo "MAX_VX_DELTA             = $MAX_VX_DELTA"
+echo "MAX_WZ_DELTA             = $MAX_WZ_DELTA"
 echo "RECOVERY_SCAN_WZ         = $RECOVERY_SCAN_WZ"
+echo "LOST_HOLD_FRAMES         = $LOST_HOLD_FRAMES"
+echo "LOST_OBSERVE_FRAMES      = $LOST_OBSERVE_FRAMES"
+echo "RECOVERY_SCAN_MAX_FRAMES = $RECOVERY_SCAN_MAX_FRAMES"
 echo "TURN_THRESHOLD           = $TURN_THRESHOLD"
 echo "FORWARD_THRESHOLD        = $FORWARD_THRESHOLD"
 echo "============================================================"

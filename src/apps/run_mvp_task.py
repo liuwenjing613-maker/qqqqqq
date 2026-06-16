@@ -61,6 +61,14 @@ class RunMVPTask(Node):
         forward_turn_scale=0.35,
         recovery_scan_wz=0.006,
         min_cruise_wz=0.16,
+        lost_hold_frames=3,
+        lost_observe_frames=7,
+        recovery_scan_max_frames=25,
+        recovery_replan_sec=2.0,
+        lost_hold_wz_scale=0.4,
+        lost_hold_max_wz=0.035,
+        recovery_pulse_frames=2,
+        recovery_observe_frames=6,
         stable_frames_required=3,
         lost_frames_limit=15,
     ):
@@ -91,8 +99,19 @@ class RunMVPTask(Node):
         self.sync_max_delta_sec = float(sync_max_delta_sec)
         self.recovery_scan_wz = float(recovery_scan_wz)
         self.min_cruise_wz = float(min_cruise_wz)
+        self.lost_hold_frames = max(0, int(lost_hold_frames))
+        self.lost_observe_frames = max(self.lost_hold_frames, int(lost_observe_frames))
+        self.recovery_scan_max_frames = max(self.lost_observe_frames + 1, int(recovery_scan_max_frames))
+        self.recovery_replan_sec = float(recovery_replan_sec)
+        self.lost_hold_wz_scale = float(lost_hold_wz_scale)
+        self.lost_hold_max_wz = float(lost_hold_max_wz)
+        self.recovery_pulse_frames = max(1, int(recovery_pulse_frames))
+        self.recovery_observe_frames = max(1, int(recovery_observe_frames))
         self.last_cmd = Twist()
         self.has_seen_target = False
+        self.last_seen_target_time = 0.0
+        self.last_target_wz_dir = 1.0
+        self.last_target_wz = 0.0
 
         self.bridge = CvBridge()
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
@@ -177,6 +196,13 @@ class RunMVPTask(Node):
         self.get_logger().info(
             f"fsm: stable_frames={stable_frames_required} lost_limit={lost_frames_limit} "
             f"recovery_scan_wz={recovery_scan_wz}"
+        )
+        self.get_logger().info(
+            "lost recovery: "
+            f"hold<= {self.lost_hold_frames}f, observe<= {self.lost_observe_frames}f, "
+            f"scan<= {self.recovery_scan_max_frames}f, replan={self.recovery_replan_sec:.2f}s, "
+            f"hold_scale={self.lost_hold_wz_scale:.2f}, hold_max_wz={self.lost_hold_max_wz:.3f}, "
+            f"pulse={self.recovery_pulse_frames}f/{self.recovery_observe_frames}f"
         )
         if self.backend == "yolo_world":
             self.get_logger().info(f"det_topic: {self.det_topic}")
@@ -313,17 +339,49 @@ class RunMVPTask(Node):
         self.last_cmd = Twist()
         self.cmd_pub.publish(Twist())
 
-    def publish_scan_cmd(self):
-        """
-        目标丢失后的简化恢复：原地慢速扫描。
-        注意：只用 angular.z，不用横移。
-        """
+    def publish_twist(self, vx, wz):
         msg = Twist()
-        msg.linear.x = 0.0
+        msg.linear.x = float(vx)
         msg.linear.y = 0.0
-        msg.angular.z = float(self.recovery_scan_wz)
+        msg.angular.z = float(wz)
         self.cmd_pub.publish(msg)
         self.last_cmd = msg
+        return msg
+
+    def publish_lost_recovery_cmd(self):
+        """
+        目标丢失后分阶段恢复：
+          A. 短时漏检：停住，只保留一点上一帧转向趋势。
+          B. 观察刹车：完全停住等图像稳定。
+          C. 脉冲扫描：小角速度命令触发底盘桥 kick，随后停下观察。
+          D. 扫描失败：停止等待重规划。
+        """
+        lost_frames = int(self.fsm.lost_frames)
+        lost_sec = time.time() - self.last_seen_target_time if self.last_seen_target_time else 0.0
+
+        if lost_frames <= self.lost_hold_frames:
+            wz = self.last_target_wz * self.lost_hold_wz_scale
+            wz = max(-self.lost_hold_max_wz, min(self.lost_hold_max_wz, wz))
+            self.publish_twist(0.0, wz)
+            return "LOST_HOLD_TURN"
+
+        if lost_frames <= self.lost_observe_frames:
+            self.publish_stop()
+            return "LOST_OBSERVE_STOP"
+
+        if lost_frames > self.recovery_scan_max_frames or lost_sec >= self.recovery_replan_sec:
+            self.publish_stop()
+            return "RECOVERY_REPLAN_WAIT"
+
+        scan_frame = lost_frames - self.lost_observe_frames - 1
+        cycle = self.recovery_pulse_frames + self.recovery_observe_frames
+        if scan_frame % cycle < self.recovery_pulse_frames:
+            wz = self.last_target_wz_dir * abs(self.recovery_scan_wz)
+            self.publish_twist(0.0, wz)
+            return "RECOVERY_PULSE_SCAN"
+
+        self.publish_stop()
+        return "RECOVERY_OBSERVE_STOP"
 
     def image_callback(self, msg):
         if self.success:
@@ -349,34 +407,26 @@ class RunMVPTask(Node):
         if target_visible:
             self.found_bbox_count += 1
             self.has_seen_target = True
+            self.last_seen_target_time = time.time()
+            cx = target.get("cx", self.image_width / 2.0)
+            ex = (cx - self.image_width / 2.0) / self.image_width
+            if abs(cmd.angular.z) > 1e-4:
+                self.last_target_wz = float(cmd.angular.z)
+                self.last_target_wz_dir = 1.0 if cmd.angular.z > 0.0 else -1.0
+            elif abs(ex) > 0.01:
+                self.last_target_wz_dir = 1.0 if ex < 0.0 else -1.0
         fsm_state = self.fsm.update(target_visible, servo_state)
 
         if not self.has_seen_target:
             # 目标第一次出现前忽略所有导航/恢复动作，避免启动阶段乱转。
             self.publish_stop()
             action = "WAIT_TARGET_STOP"
-        elif fsm_state == MVPState.RECOVERY_SCAN:
-            if self.has_seen_target:
-                self.publish_scan_cmd()
-                action = "RECOVERY_SCAN_CMD"
-            else:
-                # 启动阶段还没见过目标时不要原地扫描，否则底盘 kick 会表现为开机就旋转。
-                self.publish_stop()
-                action = "WAIT_TARGET_STOP"
         elif fsm_state == MVPState.SUCCESS:
             self.publish_stop()
             self.success = True
             action = "SUCCESS_STOP"
         elif servo_state == "LOST_STOP":
-            if self.fsm.lost_frames >= self.fsm.lost_frames_limit:
-                self.publish_stop()
-                action = "LOST_STOP_CMD"
-            elif abs(self.last_cmd.linear.x) > 1e-4 or abs(self.last_cmd.angular.z) > 1e-4:
-                self.cmd_pub.publish(self.last_cmd)
-                action = "HOLD_LAST_CMD"
-            else:
-                self.publish_stop()
-                action = "LOST_STOP_CMD"
+            action = self.publish_lost_recovery_cmd()
         else:
             self.cmd_pub.publish(cmd)
             self.last_cmd = cmd
@@ -465,6 +515,7 @@ def main():
     parser.add_argument("--max-area-ratio", type=float, default=tune["max_area_ratio"])
     parser.add_argument("--no-red-verify", action="store_true")
     parser.add_argument("--det-stale-sec", type=float, default=tune["det_stale_sec"])
+    parser.add_argument("--sync-max-delta-sec", type=float, default=tune["sync_max_delta_sec"])
     parser.add_argument("--max-vx", type=float, default=tune["max_vx"])
     parser.add_argument("--max-wz", type=float, default=tune["max_wz"])
     parser.add_argument("--kp-turn", type=float, default=tune["kp_turn"])
@@ -476,6 +527,14 @@ def main():
     parser.add_argument("--forward-turn-scale", type=float, default=tune["forward_turn_scale"])
     parser.add_argument("--recovery-scan-wz", type=float, default=tune["recovery_scan_wz"])
     parser.add_argument("--min-cruise-wz", type=float, default=tune["min_cruise_wz"])
+    parser.add_argument("--lost-hold-frames", type=int, default=tune["lost_hold_frames"])
+    parser.add_argument("--lost-observe-frames", type=int, default=tune["lost_observe_frames"])
+    parser.add_argument("--recovery-scan-max-frames", type=int, default=tune["recovery_scan_max_frames"])
+    parser.add_argument("--recovery-replan-sec", type=float, default=tune["recovery_replan_sec"])
+    parser.add_argument("--lost-hold-wz-scale", type=float, default=tune["lost_hold_wz_scale"])
+    parser.add_argument("--lost-hold-max-wz", type=float, default=tune["lost_hold_max_wz"])
+    parser.add_argument("--recovery-pulse-frames", type=int, default=tune["recovery_pulse_frames"])
+    parser.add_argument("--recovery-observe-frames", type=int, default=tune["recovery_observe_frames"])
     parser.add_argument("--arrive-area-ratio", type=float, default=tune["arrive_area_ratio"])
     parser.add_argument("--slowdown-area-ratio", type=float, default=tune["slowdown_area_ratio"])
     parser.add_argument("--stable-frames-required", type=int, default=tune["stable_frames_required"])
@@ -509,6 +568,7 @@ def main():
         min_red_ratio=args.min_red_ratio,
         max_area_ratio=args.max_area_ratio,
         require_red_verify=not args.no_red_verify,
+        sync_max_delta_sec=args.sync_max_delta_sec,
         max_vx=args.max_vx,
         max_wz=args.max_wz,
         kp_turn=args.kp_turn,
@@ -522,6 +582,14 @@ def main():
         forward_turn_scale=args.forward_turn_scale,
         recovery_scan_wz=args.recovery_scan_wz,
         min_cruise_wz=args.min_cruise_wz,
+        lost_hold_frames=args.lost_hold_frames,
+        lost_observe_frames=args.lost_observe_frames,
+        recovery_scan_max_frames=args.recovery_scan_max_frames,
+        recovery_replan_sec=args.recovery_replan_sec,
+        lost_hold_wz_scale=args.lost_hold_wz_scale,
+        lost_hold_max_wz=args.lost_hold_max_wz,
+        recovery_pulse_frames=args.recovery_pulse_frames,
+        recovery_observe_frames=args.recovery_observe_frames,
         stable_frames_required=args.stable_frames_required,
         lost_frames_limit=args.lost_frames_limit,
     )

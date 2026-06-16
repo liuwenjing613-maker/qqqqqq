@@ -17,6 +17,7 @@ run_chassis_bridge() {
   cd "${PROJECT_DIR}/ros2_bridge"
   source /opt/tros/humble/setup.bash
   python3 cmd_vel_to_rosmaster.py \
+    --mvp-tune-config "${MVP_TUNE_FILE}" \
     --port "${CHASSIS_PORT}" \
     --max-vx "${CHASSIS_MAX_VX}" \
     --max-wz "${CHASSIS_MAX_WZ}" \
@@ -25,6 +26,9 @@ run_chassis_bridge() {
     --kick-duration "${KICK_DURATION}" \
     --kick-cooldown "${KICK_COOLDOWN}" \
     --cmd-wz-deadzone "${CMD_WZ_DEADZONE}" \
+    --cmd-smooth-alpha "${CMD_SMOOTH_ALPHA}" \
+    --max-vx-delta "${MAX_VX_DELTA}" \
+    --max-wz-delta "${MAX_WZ_DELTA}" \
     "${kick_vx_flag}" \
     --control-rate-hz "${CONTROL_RATE_HZ}" \
     --debug \

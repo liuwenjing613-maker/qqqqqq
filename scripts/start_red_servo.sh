@@ -9,28 +9,18 @@ set -e
 # 2. 底盘桥 cmd_vel_to_rosmaster.py，订阅 /cmd_vel
 # 3. 红色视觉伺服 red_target_servo_auto_ros.py，订阅 /image，发布 /cmd_vel
 #
-# 默认参数：
-# CAMERA_DEV=/dev/video0
-# CHASSIS_PORT=/dev/ttyUSB0
-# IMAGE_TOPIC=/image
-#
-# 如果你的设备不同，可以这样运行：
+# 默认参数见 configs/mvp_tune.yaml；临时覆盖示例：
 # CAMERA_DEV=/dev/video8 CHASSIS_PORT=/dev/ttyUSB0 ./scripts/start_red_servo.sh
-# CAMERA_DEV=/dev/video0 CHASSIS_PORT=/dev/myserial ./scripts/start_red_servo.sh
 # ============================================================
 
 PROJECT_DIR="${PROJECT_DIR:-$HOME/rdk_x5_vln_robot}"
+source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
+
 CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
-CHASSIS_PORT="${CHASSIS_PORT:-/dev/ttyUSB1}"
 IMAGE_TOPIC="${IMAGE_TOPIC:-/image}"
 
-BRIDGE_MAX_VX="${BRIDGE_MAX_VX:-0.06}"
-BRIDGE_MAX_WZ="${BRIDGE_MAX_WZ:-0.18}"
-
-KICK_VX="${KICK_VX:-0.11}"
-KICK_DURATION="${KICK_DURATION:-0.22}"
-MIN_DRIVE_VX="${MIN_DRIVE_VX:-0.055}"
-KICK_MAX_WZ="${KICK_MAX_WZ:-0.12}"
+BRIDGE_MAX_VX="${BRIDGE_MAX_VX:-$CHASSIS_MAX_VX}"
+BRIDGE_MAX_WZ="${BRIDGE_MAX_WZ:-$CHASSIS_MAX_WZ}"
 
 SERVO_MAX_VX="${SERVO_MAX_VX:-0.04}"
 SERVO_MAX_WZ="${SERVO_MAX_WZ:-0.08}"
@@ -49,6 +39,7 @@ TROS_SETUP="/opt/tros/humble/setup.bash"
 
 echo "============================================================"
 echo " Red Visual Servo 一键启动"
+echo " Tune file: $MVP_TUNE_FILE"
 echo "============================================================"
 echo "PROJECT_DIR         = $PROJECT_DIR"
 echo "CAMERA_DEV          = $CAMERA_DEV"
@@ -56,6 +47,9 @@ echo "CHASSIS_PORT        = $CHASSIS_PORT"
 echo "IMAGE_TOPIC         = $IMAGE_TOPIC"
 echo "BRIDGE_MAX_VX       = $BRIDGE_MAX_VX"
 echo "BRIDGE_MAX_WZ       = $BRIDGE_MAX_WZ"
+echo "CMD_SMOOTH_ALPHA    = $CMD_SMOOTH_ALPHA"
+echo "MAX_VX_DELTA        = $MAX_VX_DELTA"
+echo "MAX_WZ_DELTA        = $MAX_WZ_DELTA"
 echo "SERVO_MAX_VX        = $SERVO_MAX_VX"
 echo "SERVO_MAX_WZ        = $SERVO_MAX_WZ"
 echo "KP_TURN             = $KP_TURN"
@@ -86,7 +80,7 @@ if [ ! -e "$CHASSIS_PORT" ]; then
   echo "请先执行："
   echo "  ls -l /dev/myserial"
   echo "  ls -l /dev/ttyUSB*"
-  echo "如果你实际是 /dev/myserial，请这样运行："
+  echo "修改 configs/mvp_tune.yaml 中的 chassis_port，或临时覆盖："
   echo "  CHASSIS_PORT=/dev/myserial ./scripts/start_red_servo.sh"
   exit 1
 fi
@@ -170,13 +164,19 @@ bash -lc "
 source $TROS_SETUP
 cd $PROJECT_DIR/ros2_bridge
 python3 cmd_vel_to_rosmaster.py \
+  --mvp-tune-config "$MVP_TUNE_FILE" \
   --port $CHASSIS_PORT \
   --max-vx $BRIDGE_MAX_VX \
   --max-wz $BRIDGE_MAX_WZ \
   --kick-vx $KICK_VX \
+  --kick-wz $KICK_WZ \
   --kick-duration $KICK_DURATION \
-  --min-drive-vx $MIN_DRIVE_VX \
-  --kick-max-wz $KICK_MAX_WZ \
+  --kick-cooldown $KICK_COOLDOWN \
+  --cmd-wz-deadzone $CMD_WZ_DEADZONE \
+  --cmd-smooth-alpha $CMD_SMOOTH_ALPHA \
+  --max-vx-delta $MAX_VX_DELTA \
+  --max-wz-delta $MAX_WZ_DELTA \
+  --control-rate-hz $CONTROL_RATE_HZ \
   --debug
 " > "$BRIDGE_LOG" 2>&1 &
 

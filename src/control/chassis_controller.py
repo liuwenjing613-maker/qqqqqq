@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
+import os
 import time
 import threading
 from Rosmaster_Lib import Rosmaster
+
+PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
+
+
+def _default_chassis_port() -> str:
+    try:
+        import sys
+
+        if PROJECT_ROOT not in sys.path:
+            sys.path.insert(0, PROJECT_ROOT)
+        from src.config.mvp_tune import load_mvp_tune
+
+        return load_mvp_tune()["chassis_port"]
+    except Exception:
+        return "/dev/ttyUSB1"
 
 
 def clamp(x, lo, hi):
@@ -25,14 +41,14 @@ class ChassisController:
 
     def __init__(
         self,
-        port="/dev/myserial",
+        port=None,
         max_vx=0.12,
         max_vy=0.08,
         max_wz=0.60,
         watchdog_timeout=0.5,
     ):
-        self.port = port
-        self.bot = Rosmaster(com=port)
+        self.port = port or _default_chassis_port()
+        self.bot = Rosmaster(com=self.port)
         self.bot.create_receive_threading()
         time.sleep(0.5)
 

@@ -2,8 +2,9 @@
 set -e
 
 PROJECT_DIR="${HOME}/rdk_x5_vln_robot"
+source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
+
 LIDAR_DEV="${LIDAR_DEV:-/dev/ydlidar}"
-CHASSIS_PORT="${CHASSIS_PORT:-/dev/rosmaster}"
 CMD_TOPIC="${CMD_TOPIC:-/cmd_vel}"
 
 echo "============================================================"
@@ -11,6 +12,7 @@ echo " RDK X5 VLN Robot - Lidar Path Test"
 echo "  lidar + chassis bridge + keyboard teleop"
 echo "============================================================"
 echo "PROJECT_DIR  = $PROJECT_DIR"
+echo "Tune file    = $MVP_TUNE_FILE"
 echo "LIDAR_DEV    = $LIDAR_DEV"
 echo "CHASSIS_PORT = $CHASSIS_PORT"
 echo "CMD_TOPIC    = $CMD_TOPIC"
@@ -31,9 +33,14 @@ echo "[2/4] start chassis bridge: $CMD_TOPIC -> M1"
 cd "$PROJECT_DIR/ros2_bridge"
 source "$PROJECT_DIR/scripts/source_ydlidar.sh"
 python3 cmd_vel_to_rosmaster.py \
+  --mvp-tune-config "$MVP_TUNE_FILE" \
   --port "$CHASSIS_PORT" \
   --max-vx 0.08 \
   --max-wz 0.35 \
+  --cmd-smooth-alpha "$CMD_SMOOTH_ALPHA" \
+  --max-vx-delta "$MAX_VX_DELTA" \
+  --max-wz-delta "$MAX_WZ_DELTA" \
+  --control-rate-hz "$CONTROL_RATE_HZ" \
   --debug \
   > "$PROJECT_DIR/logs/lidar_test_chassis_bridge.log" 2>&1 &
 sleep 2

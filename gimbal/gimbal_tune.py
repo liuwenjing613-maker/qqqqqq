@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 import time
 import argparse
+import os
+import sys
+
 from Rosmaster_Lib import Rosmaster
+
+PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
+sys.path.insert(0, PROJECT_ROOT)
+
+from src.config.mvp_tune import load_mvp_tune
 
 
 def clamp_angle(x):
@@ -9,8 +17,14 @@ def clamp_angle(x):
 
 
 def main():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--mvp-tune-config", default=None)
+    pre_args, _ = pre_parser.parse_known_args()
+    tune = load_mvp_tune(pre_args.mvp_tune_config)
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", default="/dev/myserial")
+    parser.add_argument("--mvp-tune-config", default=tune["config_path"])
+    parser.add_argument("--port", default=tune["chassis_port"])
     parser.add_argument("--yaw-id", type=int, default=1)
     parser.add_argument("--pitch-id", type=int, default=2)
     parser.add_argument("--yaw", type=int, default=90)

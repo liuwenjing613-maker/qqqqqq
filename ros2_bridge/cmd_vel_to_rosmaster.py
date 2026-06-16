@@ -15,6 +15,7 @@ import sys
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
 sys.path.append(PROJECT_ROOT)
 
+from src.config.mvp_tune import load_mvp_tune
 from src.control.cmd_smoother import CmdSmoother
 
 
@@ -186,8 +187,8 @@ class CmdVelToRosmaster(Node):
             # 启动脉冲必须直达底盘，不能被平滑器削弱到死区以下。
             out_vx, out_wz = raw_vx, raw_wz
         else:
-            # 脉冲后严格执行 /cmd_vel 的实际设定值，不再做最小速度或巡航改写。
-            out_vx, out_wz = raw_vx, raw_wz
+            # 脉冲后只做限速/低通平滑，不再做最小速度或巡航改写。
+            out_vx, out_wz = self.smoother.update(raw_vx, raw_wz)
         out_vx = clamp(out_vx, -self.max_vx, self.max_vx)
         out_wz = clamp(out_wz, -self.max_wz, self.max_wz)
 
@@ -240,21 +241,31 @@ class CmdVelToRosmaster(Node):
 
 
 def main():
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--mvp-tune-config", default=None)
+    pre_args, _ = pre_parser.parse_known_args()
+    tune = load_mvp_tune(pre_args.mvp_tune_config)
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", default="/dev/myserial")
-    parser.add_argument("--max-vx", type=float, default=0.10)
-    parser.add_argument("--max-wz", type=float, default=0.50)
+    parser.add_argument("--mvp-tune-config", default=tune["config_path"])
+    parser.add_argument("--port", default=tune["chassis_port"])
+    parser.add_argument("--max-vx", type=float, default=tune["chassis_max_vx"])
+    parser.add_argument("--max-wz", type=float, default=tune["chassis_max_wz"])
     parser.add_argument("--watchdog-timeout", type=float, default=0.5)
-    parser.add_argument("--enable-kick-start", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--kick-vx", type=float, default=0.09)
-    parser.add_argument("--kick-wz", type=float, default=0.24)
-    parser.add_argument("--kick-duration", type=float, default=0.18)
-    parser.add_argument("--kick-cooldown", type=float, default=1.0)
-    parser.add_argument("--cmd-wz-deadzone", type=float, default=0.01)
-    parser.add_argument("--cmd-smooth-alpha", type=float, default=0.4)
-    parser.add_argument("--max-vx-delta", type=float, default=0.015)
-    parser.add_argument("--max-wz-delta", type=float, default=0.02)
-    parser.add_argument("--control-rate-hz", type=float, default=20.0)
+    parser.add_argument(
+        "--enable-kick-start",
+        action=argparse.BooleanOptionalAction,
+        default=tune["enable_kick_start"],
+    )
+    parser.add_argument("--kick-vx", type=float, default=tune["kick_vx"])
+    parser.add_argument("--kick-wz", type=float, default=tune["kick_wz"])
+    parser.add_argument("--kick-duration", type=float, default=tune["kick_duration"])
+    parser.add_argument("--kick-cooldown", type=float, default=tune["kick_cooldown"])
+    parser.add_argument("--cmd-wz-deadzone", type=float, default=tune["cmd_wz_deadzone"])
+    parser.add_argument("--cmd-smooth-alpha", type=float, default=tune["cmd_smooth_alpha"])
+    parser.add_argument("--max-vx-delta", type=float, default=tune["max_vx_delta"])
+    parser.add_argument("--max-wz-delta", type=float, default=tune["max_wz_delta"])
+    parser.add_argument("--control-rate-hz", type=float, default=tune["control_rate_hz"])
     parser.add_argument("--debug", action="store_true")
     args, _ = parser.parse_known_args()
 

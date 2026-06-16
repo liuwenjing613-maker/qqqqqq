@@ -48,6 +48,9 @@ class TestMvpTune(unittest.TestCase):
             "RECOVERY_SCAN_WZ",
             "TURN_THRESHOLD",
             "FORWARD_THRESHOLD",
+            "SYNC_MAX_DELTA_SEC",
+            "LOST_HOLD_FRAMES",
+            "RECOVERY_SCAN_MAX_FRAMES",
         ):
             self.assertIn(f"export {key}=", text)
 
@@ -82,7 +85,16 @@ class TestMvpTune(unittest.TestCase):
             "lost_frames_limit": 12,
             "max_area_ratio": 0.12,
             "det_stale_sec": 0.8,
+            "sync_max_delta_sec": 0.10,
             "min_red_ratio": 0.05,
+            "lost_hold_frames": 2,
+            "lost_observe_frames": 5,
+            "recovery_scan_max_frames": 18,
+            "recovery_replan_sec": 1.8,
+            "lost_hold_wz_scale": 0.35,
+            "lost_hold_max_wz": 0.03,
+            "recovery_pulse_frames": 2,
+            "recovery_observe_frames": 4,
             "chassis_port": "/dev/ttyUSB1",
             "chassis_max_vx": 0.08,
             "chassis_max_wz": 0.18,
@@ -102,6 +114,9 @@ class TestMvpTune(unittest.TestCase):
             self.assertEqual(tune["score_threshold"], 0.005)
             self.assertEqual(tune["max_vx"], 0.04)
             self.assertEqual(tune["lost_frames_limit"], 12)
+            self.assertEqual(tune["sync_max_delta_sec"], 0.10)
+            self.assertEqual(tune["lost_hold_frames"], 2)
+            self.assertEqual(tune["recovery_scan_max_frames"], 18)
             self.assertAlmostEqual(tune["min_drive_vx"], max(0.02, 0.04 * 0.8))
         finally:
             os.unlink(path)

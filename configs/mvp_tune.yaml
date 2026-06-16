@@ -1,50 +1,85 @@
 # =============================================================================
-# MVP 统一调参入口 — 日常只改这个文件即可
-# 启动脚本与 run_mvp_task.py 会自动读取，无需多处同步修改
+# MVP YOLO-World green bottle 低分检测 + M1 底盘稳态配置
+# 启动脚本、run_mvp_task.py、底盘桥会自动读取；日常优先只改这里。
 # =============================================================================
 
-# YOLO 检测置信度（同时用于 hobot_yolo_world score_threshold 与 MVP min_score）
-yolo_min_score: 0.003
+# -----------------------------
+# YOLO 低分检测
+# -----------------------------
+yolo_min_score: 0.006
+det_stale_sec: 1.2
+sync_max_delta_sec: 0.2
 
-# 导航前进速度：先慢，标准化后再逐步加
-max_vx: 0.03
+# YOLO-World green bottle 不做红色强校验；这里仅保留兼容字段
+min_red_ratio: 0.045
+max_area_ratio: 0.24
 
-# 转向：小偏差不转；中等偏差边走边慢修正；明显偏差才原地慢转
-max_wz: 0.08
-kp_turn: 0.1
-wz_deadzone: 0.2
-# 最终 cmd_wz 小于该值时直接置 0，避免 0.003/0.004 这种微小角速度触发底盘 kick
-cmd_wz_deadzone: 0.01
-forward_turn_scale: 0.25
-turn_threshold: 0.25
+# -----------------------------
+# 视觉伺服巡航速度
+# 注意：这是目标可见时的巡航速度，不是启动脉冲
+# -----------------------------
+max_vx: 0.04
+max_wz: 0.055
+kp_turn: 0.10
 
-# 到达判定：目标框面积占比超过此值视为到达（越小停得越早）
+wz_deadzone: 0.08
+cmd_wz_deadzone: 0.012
+forward_turn_scale: 0.60
+turn_threshold: 0.30
+forward_threshold: 0.18
+
 arrive_area_ratio: 0.16
-# 开始减速的面积阈值（介于 0 与 arrive_area_ratio 之间）
 slowdown_area_ratio: 0.07
 
-# 状态机：连续看到/丢失多少帧后切换状态（丢 1 帧就停车会导致车不动）
-stable_frames_required: 2
-lost_frames_limit: 12
+# -----------------------------
+# FSM 稳定性
+# -----------------------------
+stable_frames_required: 5
+lost_frames_limit: 20
 
-# 检测过滤
-max_area_ratio: 0.15
-det_stale_sec: 1.0
-min_red_ratio: 0.06
+# -----------------------------
+# 目标丢失后恢复策略
+# A: 1~3 帧，vx=0，保留上一帧小角速度趋势，不触发新的强启动脉冲
+# B: 4~7 帧，完全停止观察，等图像稳定
+# C: 8~25 帧，小步脉冲扫描：转一下、停一下、再看
+# D: 超过 25 帧或约 2 秒，停止等待重规划
+# -----------------------------
+lost_hold_frames: 3
+lost_observe_frames: 7
+recovery_scan_max_frames: 25
+recovery_replan_sec: 2.0
+lost_hold_wz_scale: 0.40
+lost_hold_max_wz: 0.035
+recovery_scan_wz: 0.040
+recovery_pulse_frames: 2
+recovery_observe_frames: 6
 
-# 丢失后原地扫描角速度（巡航值，底盘桥会先 kick 再降到此速度）
-recovery_scan_wz: 0.06
+# -----------------------------
+# 底盘限制
+# chassis_max_wz 必须 >= kick_wz
+# -----------------------------
+# 底盘串口（Rosmaster M1，全项目唯一入口，改这里即可）
+# 确认方法: python3 v0/test_rosmaster_connection.py --port <端口>  正确时 battery>0
+# 常见设备: /dev/ttyUSB0  /dev/ttyUSB1  /dev/myserial  /dev/rosmaster
+chassis_port: /dev/ttyUSB0
+chassis_max_vx: 0.070
+chassis_max_wz: 0.260
 
-# 底盘串口与运动平滑
-chassis_port: /dev/ttyUSB1
-chassis_max_vx: 0.06
-chassis_max_wz: 0.25
-# 底盘启动脉冲：从停止进入任何非零动作前，先打一小段脉冲
+# -----------------------------
+# 启动脉冲
+# 根据实测：vx>=0.05, wz>=0.24 才能稳定启动
+# 所以幅值保留，靠 duration 控制不要转过
+# -----------------------------
 enable_kick_start: true
-kick_vx: 0.06
-kick_wz: 0.24
-kick_duration: 0.12
-kick_cooldown: 2.0
+kick_vx: 0.055
+kick_wz: 0.240
+kick_duration: 0.045
+kick_cooldown: 0.55
 
-# 底盘输出频率
+# -----------------------------
+# 底盘输出平滑器
+# -----------------------------
+cmd_smooth_alpha: 0.55
+max_vx_delta: 0.010
+max_wz_delta: 0.008
 control_rate_hz: 20

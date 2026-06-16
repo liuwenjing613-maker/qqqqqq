@@ -43,6 +43,7 @@ from src.perception.stamp_sync import StampSyncBuffer
 from src.perception.target_backend_yolo import (
     extract_yolo_target,
     list_all_yolo_detections,
+    list_yolo_candidates,
     parse_target_classes,
 )
 
@@ -93,6 +94,9 @@ class CheckYoloBboxOnce(Node):
         self.det_count = 0
         self.last_wait_log = 0.0
         self.last_sync_warn_time = 0.0
+        self.last_msg = None
+        self.last_frame = None
+        self.reject_counter = {}
 
         self.sensor_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -138,7 +142,45 @@ class CheckYoloBboxOnce(Node):
             self.get_logger().warn(
                 f"timeout after {self.timeout_sec:.1f}s, no bbox saved (det_count={self.det_count})"
             )
+            self._dump_reject_summary()
             rclpy.shutdown()
+
+    def _dump_reject_summary(self):
+        if self.last_msg is None or self.last_frame is None:
+            self.get_logger().warn(
+                "no synced det/frame pair was ever produced; "
+                "check stamp sync or whether YOLO/image topics are actually publishing."
+            )
+            return
+        try:
+            cands = list_yolo_candidates(
+                self.last_msg,
+                target_classes=self.target_classes,
+                image_width=self.image_width,
+                image_height=self.image_height,
+                min_score=0.0,
+                frame=self.last_frame,
+                require_red_verify=self.require_red_verify,
+                max_area_ratio=self.max_area_ratio,
+                min_area_ratio=0.0,
+                min_red_ratio=self.min_red_ratio,
+            )
+        except Exception as exc:
+            self.get_logger().warn(f"reject summary failed: {repr(exc)}")
+            return
+        if not cands:
+            self.get_logger().warn("last det msg had 0 candidates after class filter.")
+            return
+        cands.sort(key=lambda c: c.get("score", 0.0), reverse=True)
+        self.get_logger().warn(
+            f"rejection summary (top {min(5, len(cands))} by score, total={len(cands)}):"
+        )
+        for c in cands[:5]:
+            self.get_logger().warn(
+                f"  cls={c['class_name']} score={c['score']:.4f} bbox={c['bbox']} "
+                f"area={c['area_ratio']:.3f} red={c.get('red_ratio', 0):.3f} "
+                f"reject={c.get('reject_reason') or 'visible'}"
+            )
 
     def image_callback(self, msg: Image):
         if self.saved:
@@ -239,8 +281,13 @@ class CheckYoloBboxOnce(Node):
         if frame is None:
             return
 
+        self.last_msg = msg
+        self.last_frame = frame
+
         target = self._resolve_detection(msg, frame)
         if not target or not target.get("visible", False):
+            reason = (target or {}).get("reason") or (target or {}).get("reject_reason") or "no_target"
+            self.reject_counter[reason] = self.reject_counter.get(reason, 0) + 1
             return
 
         self._save_snapshot(frame, target)
@@ -343,7 +390,20 @@ def main():
     parser.add_argument("--min-score", type=float, default=tune["min_score"])
     parser.add_argument("--max-area-ratio", type=float, default=tune["max_area_ratio"])
     parser.add_argument("--min-red-ratio", type=float, default=tune["min_red_ratio"])
-    parser.add_argument("--no-red-verify", action="store_true")
+    red_group = parser.add_mutually_exclusive_group()
+    red_group.add_argument(
+        "--red-verify",
+        dest="require_red_verify",
+        action="store_true",
+        help="Enable HSV red ratio gate (default off; only useful for red targets).",
+    )
+    red_group.add_argument(
+        "--no-red-verify",
+        dest="require_red_verify",
+        action="store_false",
+        help=argparse.SUPPRESS,
+    )
+    parser.set_defaults(require_red_verify=False)
     parser.add_argument(
         "--on-raw",
         action="store_true",
@@ -352,7 +412,7 @@ def main():
     parser.add_argument(
         "--timeout",
         type=float,
-        default=0.0,
+        default=15.0,
         help="Exit without saving after N seconds (0 = wait forever)",
     )
     args, _ = parser.parse_known_args()
@@ -368,7 +428,7 @@ def main():
         min_score=args.min_score,
         max_area_ratio=args.max_area_ratio,
         min_red_ratio=args.min_red_ratio,
-        require_red_verify=not args.no_red_verify,
+        require_red_verify=args.require_red_verify,
         on_raw=args.on_raw,
         timeout_sec=args.timeout,
     )
@@ -380,6 +440,14 @@ def main():
     finally:
         if not node.saved:
             node.get_logger().warn("no YOLO bbox saved")
+            if node.reject_counter:
+                summary = ", ".join(
+                    f"{k}={v}" for k, v in sorted(
+                        node.reject_counter.items(), key=lambda kv: kv[1], reverse=True
+                    )
+                )
+                node.get_logger().warn(f"reject reasons across run: {summary}")
+            node._dump_reject_summary()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
