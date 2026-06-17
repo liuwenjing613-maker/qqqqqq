@@ -13,13 +13,24 @@ from src.vlm.qwen_ollama_client import QwenOllamaClient
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Test Qwen VLM u/v JSON on a static image")
     parser.add_argument("--image", required=True)
     parser.add_argument("--instruction", default="find the bottle")
-    parser.add_argument("--model", default="moondream:latest")
+    parser.add_argument("--model", default="qwen2.5vl:3b")
     parser.add_argument("--resize-width", type=int, default=256)
     parser.add_argument("--timeout", type=float, default=900.0)
-    parser.add_argument("--warmup", action="store_true", help="preload model before vision infer")
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        default=True,
+        help="preload model (text+vision) before infer (default: on)",
+    )
+    parser.add_argument(
+        "--no-warmup",
+        action="store_false",
+        dest="warmup",
+        help="skip model warmup",
+    )
     parser.add_argument("--recover", action="store_true", help="kill stuck llama-server before infer")
     parser.add_argument(
         "--prep",
@@ -54,11 +65,17 @@ def main():
         client.recover_stuck_server()
 
     if args.warmup:
-        dt = client.warmup()
-        print(f"[warmup] model loaded in {dt:.1f}s", flush=True)
+        dt = client.warmup_full()
+        print(f"[warmup] total {dt:.1f}s", flush=True)
 
     result = client.infer_navigation(img, args.instruction)
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    print("\n--- summary ---")
+    print(f"status={result.get('status')}")
+    print(f"u={result.get('u')} v={result.get('v')}")
+    print(f"target_visible={result.get('target_visible')} confidence={result.get('confidence')}")
+    print(f"latency={result.get('_latency_sec', 0):.1f}s")
 
 
 if __name__ == "__main__":
