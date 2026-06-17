@@ -1,0 +1,45 @@
+model: "moondream:latest"
+
+image_topic: "/image_raw"
+cmd_topic: "/cmd_vel"
+qwen_json_topic: "/qwen_nav_json"
+
+image_width: 1280
+image_height: 720
+qwen_resize_width: 256
+qwen_interval_sec: 240.0
+qwen_timeout_sec: 900.0
+
+# Qwen 判定
+target_lock_conf: 0.55
+inferred_conf: 0.35
+json_max_age_sec: 5.0
+
+# 像素视觉伺服
+max_vx: 0.035
+max_wz: 0.045
+kp_turn: 0.09
+wz_deadzone: 0.08
+turn_threshold: 0.28
+forward_turn_scale: 0.45
+cmd_wz_deadzone: 0.012
+
+# 到达判定
+arrive_area_ratio: 0.20
+slowdown_area_ratio: 0.08
+
+# 执行方式：短步，不连续狂奔
+servo_burst_sec: 0.25
+observe_stop_sec: 0.45
+
+# 搜索
+scan_wz: 0.040
+scan_burst_sec: 0.18
+scan_observe_sec: 0.50
+spawn_scan_views: 6
+
+# 底盘启动脉冲，按你实测保留
+kick_vx: 0.055
+kick_wz: 0.240
+kick_duration: 0.040
+kick_cooldown: 0.70
