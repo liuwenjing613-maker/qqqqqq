@@ -32,8 +32,8 @@ class RunQwenPixelTask(Node):
 
     /image_raw -> Qwen2.5-VL JSON(u,v) -> PixelPointServo -> /cmd_vel burst
 
-    到达：仅 VLM status=success + stop=true
-    verify 辅助触发：v 阈值 + 横向居中 + 前进步数
+    到达：verify 模式 + v/居中条件满足
+    模型 JSON 只含 u/v
     """
 
     def __init__(
@@ -90,6 +90,7 @@ class RunQwenPixelTask(Node):
             model=tune["model"],
             timeout=tune["qwen_timeout_sec"],
             resize_width=tune["qwen_resize_width"],
+            keep_alive=tune.get("qwen_keep_alive", "30m"),
         )
 
         self.servo = PixelPointServo(
@@ -149,42 +150,34 @@ class RunQwenPixelTask(Node):
             return float(default)
 
     def _parse_qwen_point(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        status = str(result.get("status", "searching"))
-        confidence = self._safe_float(result.get("confidence", 0.0), 0.0)
-        visible_flag = bool(result.get("target_visible", False))
         point_valid = bool(result.get("_point_valid", False))
         u = result.get("u")
         v = result.get("v")
 
-        can_servo = (
-            status == "target_locked"
-            and visible_flag
-            and point_valid
-            and u is not None
-            and v is not None
-            and confidence >= self.target_lock_conf
-        )
-
-        if can_servo:
+        if point_valid and u is not None and v is not None:
             return {
                 "visible": True,
                 "u": float(u),
                 "v": float(v),
                 "cx": float(u),
-                "status": status,
-                "confidence": confidence,
-                "stop": bool(result.get("stop", False)),
             }
 
         return {
             "visible": False,
             "u": u,
             "v": v,
-            "status": status,
-            "confidence": confidence,
-            "stop": bool(result.get("stop", False)),
-            "reason": f"not_locked status={status} conf={confidence:.2f} point_valid={point_valid}",
+            "reason": "no_valid_uv",
         }
+
+        # --- 旧版：依赖 status / target_visible / confidence ---
+        # status = str(result.get("status", "searching"))
+        # confidence = self._safe_float(result.get("confidence", 0.0), 0.0)
+        # can_servo = (
+        #     status == "target_locked"
+        #     and bool(result.get("target_visible", False))
+        #     and point_valid
+        #     and confidence >= self.target_lock_conf
+        # )
 
     def _should_enter_verify(self, target: Dict[str, Any]) -> bool:
         if not target.get("visible", False):
@@ -203,8 +196,9 @@ class RunQwenPixelTask(Node):
         return True
 
     def _publish_json(self, result: Dict[str, Any]):
+        payload = {"u": result.get("u"), "v": result.get("v")}
         msg = String()
-        msg.data = json.dumps(result, ensure_ascii=False)
+        msg.data = json.dumps(payload, ensure_ascii=False)
         self.json_pub.publish(msg)
 
     def _draw_debug(self, frame, result, target, servo_state, cmd, action):
@@ -218,7 +212,7 @@ class RunQwenPixelTask(Node):
 
         lines = [
             f"step={self.step_count} action={action} verify={self.verify_mode} fwd={self.forward_burst_count}",
-            f"status={result.get('status')} u={result.get('u')} v={result.get('v')} conf={result.get('confidence')}",
+            f"u={result.get('u')} v={result.get('v')}",
             f"servo={servo_state} cmd vx={cmd.linear.x:.3f} wz={cmd.angular.z:+.3f}",
         ]
         y0 = 24
@@ -267,29 +261,19 @@ class RunQwenPixelTask(Node):
 
         self._publish_json(result)
         target = self._parse_qwen_point(result)
-        status = str(result.get("status", "searching"))
-        stop_flag = bool(result.get("stop", False))
         latency = self._safe_float(result.get("_latency_sec", 0.0), 0.0)
 
         action = "STOP_OBSERVE"
         servo_state = "LOST_STOP"
         cmd = Twist()
 
-        if status == "unsafe":
-            self.publish_stop()
-            action = "UNSAFE_STOP"
-
-        elif status == "success" and stop_flag:
+        if self.verify_mode and self._should_enter_verify(target):
             self.publish_stop()
             self.success = True
-            action = "SUCCESS_STOP"
+            action = "VERIFY_SUCCESS"
 
         elif self.verify_mode:
-            if status == "success" and stop_flag:
-                self.publish_stop()
-                self.success = True
-                action = "VERIFY_SUCCESS"
-            elif target.get("visible", False):
+            if target.get("visible", False):
                 servo_state, cmd = self.servo.compute_cmd(target)
                 self.publish_cmd_burst(cmd, self.servo_burst_sec, self.observe_stop_sec)
                 if servo_state == "FORWARD":
@@ -322,8 +306,8 @@ class RunQwenPixelTask(Node):
         self.next_query_time = time.time() + self.qwen_interval_sec
 
         self.get_logger().info(
-            f"step={self.step_count} action={action} status={status} "
-            f"u={result.get('u')} v={result.get('v')} conf={result.get('confidence')} "
+            f"step={self.step_count} action={action} "
+            f"u={result.get('u')} v={result.get('v')} "
             f"latency={latency:.1f}s verify={self.verify_mode} servo={servo_state} "
             f"cmd_vx={cmd.linear.x:.3f} cmd_wz={cmd.angular.z:+.3f}"
         )
@@ -355,6 +339,7 @@ def main():
     parser.add_argument("--qwen-interval-sec", type=float, default=tune["qwen_interval_sec"])
     parser.add_argument("--qwen-timeout-sec", type=float, default=tune["qwen_timeout_sec"])
     parser.add_argument("--qwen-resize-width", type=int, default=tune["qwen_resize_width"])
+    parser.add_argument("--qwen-keep-alive", default=tune.get("qwen_keep_alive", "30m"))
     parser.add_argument("--target-lock-conf", type=float, default=tune["target_lock_conf"])
     parser.add_argument("--verify-v-min", type=float, default=tune["verify_v_min"])
     parser.add_argument("--verify-u-center-px", type=float, default=tune["verify_u_center_px"])
@@ -402,6 +387,7 @@ def main():
             "qwen_interval_sec": args.qwen_interval_sec,
             "qwen_timeout_sec": args.qwen_timeout_sec,
             "qwen_resize_width": args.qwen_resize_width,
+            "qwen_keep_alive": args.qwen_keep_alive,
             "target_lock_conf": args.target_lock_conf,
             "verify_v_min": args.verify_v_min,
             "verify_u_center_px": args.verify_u_center_px,
@@ -433,6 +419,7 @@ def main():
             model=tune["model"],
             timeout=tune["qwen_timeout_sec"],
             resize_width=tune["qwen_resize_width"],
+            keep_alive=tune.get("qwen_keep_alive", "30m"),
         )
         print("[run_qwen_pixel_task] warming up Qwen before spin...", flush=True)
         qwen_client.warmup_full(timeout=tune["qwen_timeout_sec"])

@@ -39,6 +39,7 @@ def load_qwen_pixel_tune(path: str = DEFAULT_TUNE_PATH) -> Dict[str, Any]:
         "qwen_resize_width": _as_int(raw.get("qwen_resize_width", 256), "qwen_resize_width"),
         "qwen_interval_sec": _as_float(raw.get("qwen_interval_sec", 240.0), "qwen_interval_sec"),
         "qwen_timeout_sec": _as_float(raw.get("qwen_timeout_sec", 900.0), "qwen_timeout_sec"),
+        "qwen_keep_alive": str(raw.get("qwen_keep_alive", "30m")),
         "target_lock_conf": _as_float(raw.get("target_lock_conf", 0.45), "target_lock_conf"),
         "max_vx": _as_float(raw.get("max_vx", 0.035), "max_vx"),
         "max_wz": _as_float(raw.get("max_wz", 0.045), "max_wz"),

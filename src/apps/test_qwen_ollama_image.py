@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--instruction", default="find the bottle")
     parser.add_argument("--model", default="qwen2.5vl:3b")
-    parser.add_argument("--resize-width", type=int, default=256)
+    parser.add_argument("--resize-width", type=int, default=96)
     parser.add_argument("--timeout", type=float, default=900.0)
     parser.add_argument(
         "--warmup",
@@ -72,10 +72,15 @@ def main():
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
     print("\n--- summary ---")
-    print(f"status={result.get('status')}")
     print(f"u={result.get('u')} v={result.get('v')}")
-    print(f"target_visible={result.get('target_visible')} confidence={result.get('confidence')}")
     print(f"latency={result.get('_latency_sec', 0):.1f}s")
+    print(
+        f"ollama: total_ms={result.get('_ollama_total_ms', 0):.0f} "
+        f"load_ms={result.get('_ollama_load_ms', 0):.0f} "
+        f"prompt_eval_ms={result.get('_ollama_prompt_eval_ms', 0):.0f} "
+        f"eval_ms={result.get('_ollama_eval_ms', 0):.0f} "
+        f"eval_count={result.get('_ollama_eval_count', 0)}"
+    )
 
 
 if __name__ == "__main__":
