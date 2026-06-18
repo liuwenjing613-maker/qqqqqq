@@ -91,6 +91,7 @@ class RunQwenPixelTask(Node):
             timeout=tune["qwen_timeout_sec"],
             resize_width=tune["qwen_resize_width"],
             keep_alive=tune.get("qwen_keep_alive", "30m"),
+            coord_mode=tune.get("qwen_coord_mode", "norm1000"),
         )
 
         self.servo = PixelPointServo(
@@ -150,11 +151,11 @@ class RunQwenPixelTask(Node):
             return float(default)
 
     def _parse_qwen_point(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        point_valid = bool(result.get("_point_valid", False))
+        usable = bool(result.get("usable", False))
         u = result.get("u")
         v = result.get("v")
 
-        if point_valid and u is not None and v is not None:
+        if usable and u is not None and v is not None:
             return {
                 "visible": True,
                 "u": float(u),
@@ -339,6 +340,7 @@ def main():
     parser.add_argument("--qwen-interval-sec", type=float, default=tune["qwen_interval_sec"])
     parser.add_argument("--qwen-timeout-sec", type=float, default=tune["qwen_timeout_sec"])
     parser.add_argument("--qwen-resize-width", type=int, default=tune["qwen_resize_width"])
+    parser.add_argument("--qwen-coord-mode", default=tune.get("qwen_coord_mode", "norm1000"))
     parser.add_argument("--qwen-keep-alive", default=tune.get("qwen_keep_alive", "30m"))
     parser.add_argument("--target-lock-conf", type=float, default=tune["target_lock_conf"])
     parser.add_argument("--verify-v-min", type=float, default=tune["verify_v_min"])
@@ -387,6 +389,7 @@ def main():
             "qwen_interval_sec": args.qwen_interval_sec,
             "qwen_timeout_sec": args.qwen_timeout_sec,
             "qwen_resize_width": args.qwen_resize_width,
+            "qwen_coord_mode": args.qwen_coord_mode,
             "qwen_keep_alive": args.qwen_keep_alive,
             "target_lock_conf": args.target_lock_conf,
             "verify_v_min": args.verify_v_min,
@@ -420,6 +423,7 @@ def main():
             timeout=tune["qwen_timeout_sec"],
             resize_width=tune["qwen_resize_width"],
             keep_alive=tune.get("qwen_keep_alive", "30m"),
+            coord_mode=tune.get("qwen_coord_mode", "norm1000"),
         )
         print("[run_qwen_pixel_task] warming up Qwen before spin...", flush=True)
         qwen_client.warmup_full(timeout=tune["qwen_timeout_sec"])

@@ -38,61 +38,39 @@ def test_attach_ollama_timing():
     assert result["_ollama_eval_count"] == 42
 
 
-def test_parse_nav_result_uv_only():
-    raw = {"u": 430, "v": 512}
-    out = parse_nav_result(raw, orig_w=1280, orig_h=1707, model_w=256, model_h=341, sx=5.0, sy=5.0)
-    assert out["u"] == 430
-    assert out["v"] == 512
-    assert out["cx"] == 430
-    assert out["_point_valid"] is True
+def test_parse_nav_result_norm1000_uv_only():
+    raw = {"u": 500, "v": 500}
+    out = parse_nav_result(
+        raw,
+        orig_w=1280,
+        orig_h=1707,
+        model_w=192,
+        model_h=256,
+        sx=1280 / 192,
+        sy=1707 / 256,
+        coord_mode="norm1000",
+    )
+    assert out["usable"] is True
+    assert out["u"] == pytest.approx(639.5, rel=0.01)
+    assert out["v"] == pytest.approx(853.0, rel=0.01)
     assert "status" not in out
     assert "confidence" not in out
 
 
-def test_parse_nav_result_orig_coords():
-    raw = {"u": 640, "v": 360}
-    out = parse_nav_result(raw, orig_w=1280, orig_h=720, model_w=256, model_h=144, sx=5.0, sy=5.0)
-    assert out["u"] == 640
-    assert out["v"] == 360
-    assert out["_point_valid"] is True
-
-
-def test_parse_nav_result_scales_model_coords():
-    raw = {"u": 100, "v": 80}
-    out = parse_nav_result(raw, orig_w=1280, orig_h=720, model_w=256, model_h=144, sx=5.0, sy=5.0)
-    assert out["u"] == 500
-    assert out["v"] == 400
-    assert out["_coords_scaled_from_model"] is True
-
-
-def test_parse_nav_result_scales_ollama_internal_coords():
-    raw = {"u": 298, "v": 360}
-    out = parse_nav_result(raw, orig_w=1280, orig_h=1707, model_w=96, model_h=128, sx=13.33, sy=13.34)
-    assert out["_coords_scaled_from_ollama_internal"] is True
-    assert out["u"] == pytest.approx(681.1, rel=0.01)
-    assert out["v"] == pytest.approx(812.9, rel=0.01)
-
-
-def test_parse_nav_result_scales_192_ollama_internal_coords():
-    raw = {"u": 405, "v": 391}
-    out = parse_nav_result(raw, orig_w=1280, orig_h=1707, model_w=192, model_h=256, sx=6.67, sy=6.67)
-    assert out["_coords_scaled_from_ollama_internal"] is True
-    assert out["u"] == pytest.approx(925.7, rel=0.01)
-    assert out["v"] == pytest.approx(882.7, rel=0.01)
-
-
-def test_parse_nav_result_keeps_orig_coords_at_256_width():
-    raw = {"u": 430, "v": 512}
-    out = parse_nav_result(raw, orig_w=1280, orig_h=1707, model_w=256, model_h=341, sx=5.0, sy=5.0)
-    assert out["u"] == 430
-    assert out["v"] == 512
-    assert out["_coords_scaled_from_ollama_internal"] is False
-
-
 def test_parse_nav_result_null_uv():
     raw = {"u": None, "v": None}
-    out = parse_nav_result(raw, orig_w=1280, orig_h=720, model_w=256, model_h=144, sx=5.0, sy=5.0)
+    out = parse_nav_result(
+        raw,
+        orig_w=1280,
+        orig_h=720,
+        model_w=192,
+        model_h=256,
+        sx=1280 / 192,
+        sy=720 / 256,
+        coord_mode="norm1000",
+    )
     assert out["u"] is None
+    assert out["usable"] is False
     assert out["_point_valid"] is False
 
 

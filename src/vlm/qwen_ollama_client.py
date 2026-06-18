@@ -2,7 +2,7 @@
 import base64
 import json
 import logging
-import math
+import os
 import re
 import subprocess
 import time
@@ -27,55 +27,23 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
-def smart_resize(
-    height: int,
-    width: int,
-    min_pixels: int = 512 * 28 * 28,
-    max_pixels: int = 2048 * 28 * 28,
-    factor: int = 28,
-) -> Tuple[int, int]:
-    """
-    Qwen2.5-VL / Ollama vision preprocessor: snap to multiples of 28 and
-    clamp total pixels to [min_pixels, max_pixels].
-    Returns (height, width).
-    """
-    h, w = float(height), float(width)
+def _extract_uv_fields(raw: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
+    """Read u/v from model JSON; fall back to x/y or point list for compatibility."""
+    u = _safe_float(raw.get("u"))
+    v = _safe_float(raw.get("v"))
+    if u is not None and v is not None:
+        return u, v
 
-    def round_by_factor(x: float) -> int:
-        return int(round(x / factor) * factor)
+    x = _safe_float(raw.get("x"))
+    y = _safe_float(raw.get("y"))
+    if x is not None and y is not None:
+        return x, y
 
-    def ceil_by_factor(x: float) -> int:
-        return int(math.ceil(x / factor) * factor)
+    p = raw.get("target_point") or raw.get("point")
+    if isinstance(p, (list, tuple)) and len(p) >= 2:
+        return _safe_float(p[0]), _safe_float(p[1])
 
-    def floor_by_factor(x: float) -> int:
-        return int(math.floor(x / factor) * factor)
-
-    h_bar = max(factor, round_by_factor(h))
-    w_bar = max(factor, round_by_factor(w))
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
-        h_bar = floor_by_factor(height / beta)
-        w_bar = floor_by_factor(width / beta)
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = ceil_by_factor(height * beta)
-        w_bar = ceil_by_factor(width * beta)
-    return h_bar, w_bar
-
-
-def _normalize_status(raw_status: Any, target_visible: bool, point_valid: bool, stop: bool) -> str:
-    status = str(raw_status or "searching").strip()
-    if "/" not in status:
-        return status
-
-    # Model echoed the enum template; infer a concrete status.
-    if stop:
-        return "success"
-    if target_visible and point_valid:
-        return "target_locked"
-    if "unsafe" in status and stop:
-        return "unsafe"
-    return "searching"
+    return None, None
 
 
 def parse_nav_result(
@@ -86,82 +54,144 @@ def parse_nav_result(
     model_h: int,
     sx: float,
     sy: float,
+    coord_mode: str = "norm1000",
+    min_confidence: float = 0.0,
 ) -> Dict[str, Any]:
     """
-    解析千问 JSON，只输出 u/v（原图像素系）。
+    Parse Qwen JSON with explicit coord_mode mapping to original-image pixels.
+    Model output is u/v only; null u or v means not visible.
     """
-    u_raw = _safe_float(raw.get("u"))
-    v_raw = _safe_float(raw.get("v"))
+    raw_u, raw_v = _extract_uv_fields(raw)
 
-    u: Optional[float] = None
-    v: Optional[float] = None
-    coords_scaled = False
-    coords_from_ollama_internal = False
-    ollama_internal_h, ollama_internal_w = smart_resize(model_h, model_w)
+    confidence = _safe_float(raw.get("confidence"))
+    conf_ok = confidence is None or confidence >= min_confidence
 
-    if u_raw is not None and v_raw is not None:
-        if u_raw <= model_w and v_raw <= model_h and (sx > 1.01 or sy > 1.01):
-            logger.warning(
-                "u,v look like sent-jpeg coords (u=%.1f v=%.1f sent=%dx%d), scaling to orig",
-                u_raw,
-                v_raw,
-                model_w,
-                model_h,
-            )
-            u_raw *= sx
-            v_raw *= sy
-            coords_scaled = True
-        elif (
-            not coords_scaled
-            and model_w < 256
-            and u_raw <= ollama_internal_w
-            and v_raw <= ollama_internal_h
-            and (u_raw > model_w or v_raw > model_h)
-        ):
-            logger.warning(
-                "u,v look like Ollama/Qwen internal coords "
-                "(u=%.1f v=%.1f internal=%dx%d sent=%dx%d), scaling to orig",
-                u_raw,
-                v_raw,
-                ollama_internal_w,
-                ollama_internal_h,
-                model_w,
-                model_h,
-            )
-            u_raw = u_raw / ollama_internal_w * orig_w
-            v_raw = v_raw / ollama_internal_h * orig_h
-            coords_scaled = True
-            coords_from_ollama_internal = True
+    mapped_u: Optional[float] = None
+    mapped_v: Optional[float] = None
+    coord_invalid = False
+    coord_reason = ""
 
-        u = _clamp(u_raw, 0, max(0, orig_w - 1))
-        v = _clamp(v_raw, 0, max(0, orig_h - 1))
+    if raw_u is None or raw_v is None:
+        coord_reason = "missing_point"
+    elif not conf_ok:
+        coord_invalid = True
+        coord_reason = f"low_confidence:{confidence}"
+    elif coord_mode == "norm1000":
+        if not (0 <= raw_u <= 1000 and 0 <= raw_v <= 1000):
+            coord_invalid = True
+            coord_reason = f"norm1000_out_of_range:{raw_u},{raw_v}"
+        else:
+            mapped_u = raw_u / 1000.0 * (orig_w - 1)
+            mapped_v = raw_v / 1000.0 * (orig_h - 1)
 
-    point_valid = u is not None and v is not None
+    elif coord_mode == "model":
+        if not (0 <= raw_u < model_w and 0 <= raw_v < model_h):
+            coord_invalid = True
+            coord_reason = f"model_coord_out_of_range:{raw_u},{raw_v},model={model_w}x{model_h}"
+        else:
+            mapped_u = raw_u * sx
+            mapped_v = raw_v * sy
+
+    elif coord_mode == "original":
+        if not (0 <= raw_u < orig_w and 0 <= raw_v < orig_h):
+            coord_invalid = True
+            coord_reason = f"orig_coord_out_of_range:{raw_u},{raw_v},orig={orig_w}x{orig_h}"
+        else:
+            mapped_u = raw_u
+            mapped_v = raw_v
+
+    else:
+        coord_invalid = True
+        coord_reason = f"unknown_coord_mode:{coord_mode}"
+
+    if coord_invalid or coord_reason == "missing_point":
+        mapped_u = None
+        mapped_v = None
+
+    point_valid = mapped_u is not None and mapped_v is not None
+    usable = point_valid and not coord_invalid
 
     return {
-        "u": u,
-        "v": v,
-        "cx": u,
+        "u": mapped_u,
+        "v": mapped_v,
+        "cx": mapped_u,
+        "usable": usable,
         "_point_valid": point_valid,
-        "_coords_scaled_from_model": coords_scaled,
-        "_coords_scaled_from_ollama_internal": coords_from_ollama_internal,
-        "_ollama_internal_width": ollama_internal_w,
-        "_ollama_internal_height": ollama_internal_h,
+        "_raw_u": raw_u,
+        "_raw_v": raw_v,
+        "_coord_mode": coord_mode,
+        "_coord_invalid": coord_invalid,
+        "_coord_reason": coord_reason,
     }
 
-    # --- 旧版：含 status / target_visible / confidence / stop ---
-    # target_visible = bool(raw.get("target_visible", False))
-    # confidence = _safe_float(raw.get("confidence")) or 0.0
-    # stop = bool(raw.get("stop", False))
-    # status = _normalize_status(raw.get("status", "searching"), target_visible, point_valid, stop)
-    # return {
-    #     "status": status,
-    #     "target_visible": target_visible and point_valid,
-    #     "u": u, "v": v, "cx": u,
-    #     "confidence": confidence,
-    #     "stop": stop,
-    #     ...
-    # }
+
+def save_qwen_coord_debug(
+    debug_dir: str,
+    prefix: str,
+    frame_bgr,
+    model_bgr,
+    result: Dict[str, Any],
+    coord_mode: str,
+) -> Dict[str, str]:
+    """Save input / raw-point / mapped-point debug images."""
+    os.makedirs(debug_dir, exist_ok=True)
+    paths: Dict[str, str] = {}
+
+    input_path = os.path.join(debug_dir, f"{prefix}_qwen_input.jpg")
+    cv2.imwrite(input_path, model_bgr)
+    paths["debug_qwen_input"] = input_path
+
+    raw_u = result.get("_raw_u")
+    raw_v = result.get("_raw_v")
+    mh, mw = model_bgr.shape[:2]
+
+    raw_vis = model_bgr.copy()
+    if raw_u is not None and raw_v is not None:
+        if coord_mode == "model":
+            px, py = int(raw_u), int(raw_v)
+        elif coord_mode == "norm1000":
+            px = int(round(raw_u / 1000.0 * (mw - 1)))
+            py = int(round(raw_v / 1000.0 * (mh - 1)))
+        else:
+            px = int(round(float(raw_u) * mw / max(1, result.get("_orig_image_width", mw) - 1)))
+            py = int(round(float(raw_v) * mh / max(1, result.get("_orig_image_height", mh) - 1)))
+
+        if 0 <= px < mw and 0 <= py < mh:
+            cv2.circle(raw_vis, (px, py), 8, (0, 0, 255), 2)
+        cv2.putText(
+            raw_vis,
+            f"raw({raw_u},{raw_v})",
+            (8, 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (0, 0, 255),
+            2,
+        )
+
+    raw_path = os.path.join(debug_dir, f"{prefix}_qwen_input_raw_point.jpg")
+    cv2.imwrite(raw_path, raw_vis)
+    paths["debug_qwen_input_raw_point"] = raw_path
+
+    mapped = frame_bgr.copy()
+    u = result.get("u")
+    v = result.get("v")
+    if u is not None and v is not None:
+        cv2.circle(mapped, (int(u), int(v)), 18, (0, 0, 255), 4)
+        cv2.putText(
+            mapped,
+            f"mapped({u:.1f},{v:.1f})",
+            (int(u) + 20, max(30, int(v) - 20)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            (0, 0, 255),
+            2,
+        )
+
+    mapped_path = os.path.join(debug_dir, f"{prefix}_orig_mapped_point.jpg")
+    cv2.imwrite(mapped_path, mapped)
+    paths["debug_orig_mapped_point"] = mapped_path
+
+    return paths
 
 
 def _normalize_keep_alive(value: Any) -> Any:
@@ -178,7 +208,7 @@ def _normalize_keep_alive(value: Any) -> Any:
 class QwenOllamaClient:
     """
     本地 Ollama Qwen2.5-VL 客户端。
-    输入 BGR 图像 + 指令，输出 u/v 点伺服 JSON。
+    输入 BGR 图像 + 指令，输出 u/v 点伺服 JSON（原图像素系）。
     """
 
     def __init__(
@@ -186,11 +216,15 @@ class QwenOllamaClient:
         model: str = "qwen2.5vl:3b",
         url: str = "http://127.0.0.1:11434/api/generate",
         timeout: float = 900.0,
-        resize_width: int = 96,
+        resize_width: int = 192,
         jpeg_quality: int = 60,
         num_predict: int = 80,
         num_ctx: int = 2048,
         keep_alive: Any = "1h",
+        coord_mode: str = "norm1000",
+        debug_dir: Optional[str] = None,
+        save_debug: bool = False,
+        min_confidence: float = 0.0,
     ):
         self.model = model
         self.url = url
@@ -200,47 +234,55 @@ class QwenOllamaClient:
         self.num_predict = int(num_predict)
         self.num_ctx = int(num_ctx)
         self.keep_alive = _normalize_keep_alive(keep_alive)
+        self.coord_mode = str(coord_mode)
+        self.debug_dir = debug_dir
+        self.save_debug = bool(save_debug)
+        self.min_confidence = float(min_confidence)
 
-    def _build_prompt(self, instruction: str, orig_w: int, orig_h: int) -> str:
-        return f"""
-你是移动机器人视觉模块。只输出严格 JSON，不要 Markdown，不要解释。
+    def _build_prompt(
+        self,
+        instruction: str,
+        orig_w: int,
+        orig_h: int,
+        model_w: int,
+        model_h: int,
+    ) -> str:
+        target = instruction.strip()
 
-用户目标：{instruction}
+        if self.coord_mode == "norm1000":
+            return (
+                f"Target: {target}\n"
+                "Return ONLY one JSON object. No markdown. No explanation.\n"
+                "Use normalized coordinates from 0 to 1000.\n"
+                "Top-left is (0,0), bottom-right is (1000,1000).\n"
+                "Output format must use fields u and v only.\n"
+                'If the target is visible: {"u":500,"v":500}\n'
+                'If the target is not visible: {"u":null,"v":null}\n'
+            )
 
-坐标系：
-原始图像 width={orig_w}, height={orig_h}。
-u/v 必须按这个原始图像像素坐标输出，原点在左上角。
+        if self.coord_mode == "model":
+            return (
+                f"Target: {target}\n"
+                f"The image you see is {model_w}x{model_h} pixels.\n"
+                "Return ONLY one JSON object. No markdown. No explanation.\n"
+                "Use pixel coordinates in the image you see.\n"
+                f"u must be 0 to {model_w - 1}; v must be 0 to {model_h - 1}.\n"
+                'If visible: {"u":100,"v":100}\n'
+                'If not visible: {"u":null,"v":null}\n'
+            )
 
-输出格式（仅此两个字段）：
-{{"u": 0, "v": 0}}
+        if self.coord_mode == "original":
+            return (
+                f"Target: {target}\n"
+                f"Original image size is {orig_w}x{orig_h}.\n"
+                "Return ONLY one JSON object. No markdown. No explanation.\n"
+                "Use pixel coordinates in the original image.\n"
+                f"u must be 0 to {orig_w - 1}; v must be 0 to {orig_h - 1}.\n"
+                'If visible: {"u":100,"v":100}\n'
+                'If not visible: {"u":null,"v":null}\n'
+            )
 
-规则：
-1. u 是目标中心横坐标，范围 0 到 {orig_w - 1}。
-2. v 是目标中心纵坐标，范围 0 到 {orig_h - 1}。
-3. 看得到目标时输出整数像素点；看不到时输出 {{"u": null, "v": null}}。
-4. 不要输出 status、confidence、bbox 或其他字段。
-""".strip()
-
-        # --- 旧版 prompt（含 status/confidence/stop + 原图尺寸约束）---
-        # return f"""
-        # 你是移动机器人视觉导航模块。只输出严格 JSON，不要输出 Markdown，不要解释。
-        #
-        # 用户目标：{instruction}
-        #
-        # 原始图像尺寸：
-        # width={orig_w}, height={orig_h}
-        #
-        # 输出 JSON 格式必须为：
-        # {{
-        #   "status": "target_locked/searching/success/unsafe",
-        #   "target_visible": true,
-        #   "u": 0,
-        #   "v": 0,
-        #   "confidence": 0.0,
-        #   "stop": false
-        # }}
-        # ...
-        # """.strip()
+        raise ValueError(f"unknown coord_mode: {self.coord_mode}")
 
     def _resize_frame(self, frame_bgr):
         h, w = frame_bgr.shape[:2]
@@ -255,7 +297,7 @@ u/v 必须按这个原始图像像素坐标输出，原点在左上角。
         sy = h / float(new_h)
         return resized, sx, sy
 
-    def _frame_to_base64(self, frame_bgr) -> Tuple[str, int, int, float, float]:
+    def _frame_to_base64(self, frame_bgr) -> Tuple[str, Any, int, int, float, float]:
         resized, sx, sy = self._resize_frame(frame_bgr)
         ok, buf = cv2.imencode(
             ".jpg",
@@ -266,8 +308,8 @@ u/v 必须按这个原始图像像素坐标输出，原点在左上角。
             raise RuntimeError("cv2.imencode failed")
 
         img64 = base64.b64encode(buf.tobytes()).decode("utf-8")
-        rh, rw = resized.shape[:2]
-        return img64, rw, rh, sx, sy
+        model_h, model_w = resized.shape[:2]
+        return img64, resized, model_w, model_h, sx, sy
 
     def _extract_json(self, text: str) -> Dict[str, Any]:
         text = (text or "").strip()
@@ -377,28 +419,10 @@ u/v 必须按这个原始图像像素坐标输出，原点在左上角。
         import numpy as np
 
         blank = np.zeros((128, 128, 3), dtype=np.uint8)
-        img_b64, model_w, model_h, _, _ = self._frame_to_base64(blank)
-        '''payload = {
-            "model": self.model,
-            "prompt": (
-                'Return JSON only: {"status":"searching","target_visible":false,'
-                '"u":null,"v":null,"confidence":0.0,"stop":false}'
-            ),
-            "images": [img_b64],
-            "stream": False,
-            "format": "json",
-            "keep_alive": self.keep_alive,
-            "options": {
-                "temperature": 0,
-                "num_predict": 16,
-                "num_ctx": 512,
-            },
-        }'''
+        img_b64, _, model_w, model_h, _, _ = self._frame_to_base64(blank)
         payload = {
             "model": self.model,
-            "prompt": (
-                'Return JSON only: {"u":null,"v":null}'
-            ),
+            "prompt": 'Return JSON only: {"u":null,"v":null}',
             "images": [img_b64],
             "stream": False,
             "format": "json",
@@ -435,9 +459,9 @@ u/v 必须按这个原始图像像素坐标输出，原点在左上角。
         return dt
 
     def infer_navigation(self, frame_bgr, instruction: str) -> Dict[str, Any]:
-        img_b64, model_w, model_h, sx, sy = self._frame_to_base64(frame_bgr)
+        img_b64, model_bgr, model_w, model_h, sx, sy = self._frame_to_base64(frame_bgr)
         orig_h, orig_w = frame_bgr.shape[:2]
-        prompt = self._build_prompt(instruction, orig_w, orig_h)
+        prompt = self._build_prompt(instruction, orig_w, orig_h, model_w, model_h)
 
         payload = {
             "model": self.model,
@@ -456,6 +480,7 @@ u/v 必须按这个原始图像像素坐标输出，原点在左上角。
         t0 = time.time()
         print(
             f"[QwenOllama] infer start model={self.model} "
+            f"coord_mode={self.coord_mode} "
             f"image={model_w}x{model_h} orig={orig_w}x{orig_h} "
             f"keep_alive={self.keep_alive} timeout={self.timeout:.0f}s",
             flush=True,
@@ -480,7 +505,17 @@ u/v 必须按这个原始图像像素坐标输出，原点在左上角。
 
         raw_text = data.get("response", "")
         raw_json = self._extract_json(raw_text)
-        result = parse_nav_result(raw_json, orig_w, orig_h, model_w, model_h, sx, sy)
+        result = parse_nav_result(
+            raw_json,
+            orig_w,
+            orig_h,
+            model_w,
+            model_h,
+            sx,
+            sy,
+            coord_mode=self.coord_mode,
+            min_confidence=self.min_confidence,
+        )
 
         result["_raw_text"] = raw_text
         result["_raw_json"] = raw_json
@@ -493,8 +528,23 @@ u/v 必须按这个原始图像像素坐标输出，原点在左上角。
         result["_scale_x_to_orig"] = sx
         result["_scale_y_to_orig"] = sy
 
+        if self.save_debug and self.debug_dir:
+            prefix = f"qwen_{int(time.time() * 1000)}"
+            debug_paths = save_qwen_coord_debug(
+                self.debug_dir,
+                prefix,
+                frame_bgr,
+                model_bgr,
+                result,
+                self.coord_mode,
+            )
+            result.update(debug_paths)
+
         print(
             f"[QwenOllama] infer done latency={dt:.1f}s "
+            f"usable={result.get('usable')} "
+            f"u={result.get('u')} v={result.get('v')} "
+            f"raw=({result.get('_raw_u')},{result.get('_raw_v')}) "
             f"ollama_total_ms={result['_ollama_total_ms']:.0f} "
             f"load_ms={result['_ollama_load_ms']:.0f} "
             f"prompt_eval_ms={result['_ollama_prompt_eval_ms']:.0f} "

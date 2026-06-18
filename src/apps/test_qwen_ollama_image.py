@@ -17,7 +17,10 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--instruction", default="find the bottle")
     parser.add_argument("--model", default="qwen2.5vl:3b")
-    parser.add_argument("--resize-width", type=int, default=96)
+    parser.add_argument("--resize-width", type=int, default=192)
+    parser.add_argument("--coord-mode", default="norm1000", choices=["norm1000", "model", "original"])
+    parser.add_argument("--save-debug", action="store_true")
+    parser.add_argument("--debug-dir", default="debug_qwen")
     parser.add_argument("--timeout", type=float, default=900.0)
     parser.add_argument(
         "--warmup",
@@ -47,6 +50,9 @@ def main():
         model=args.model,
         resize_width=args.resize_width,
         timeout=args.timeout,
+        coord_mode=args.coord_mode,
+        debug_dir=args.debug_dir,
+        save_debug=args.save_debug,
     )
 
     if args.prep:
@@ -72,7 +78,8 @@ def main():
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
     print("\n--- summary ---")
-    print(f"u={result.get('u')} v={result.get('v')}")
+    print(f"usable={result.get('usable')} u={result.get('u')} v={result.get('v')}")
+    print(f"raw=({result.get('_raw_u')},{result.get('_raw_v')}) coord_mode={args.coord_mode}")
     print(f"latency={result.get('_latency_sec', 0):.1f}s")
     print(
         f"ollama: total_ms={result.get('_ollama_total_ms', 0):.0f} "
