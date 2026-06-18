@@ -27,21 +27,37 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
+def _scalar_coord(value: Any) -> Optional[float]:
+    """
+    Normalize one coordinate field from model JSON.
+    Scalar -> as-is; list/tuple -> center (mean of numeric elements).
+    """
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        nums = [_safe_float(x) for x in value]
+        nums = [n for n in nums if n is not None]
+        if not nums:
+            return None
+        return sum(nums) / len(nums)
+    return _safe_float(value)
+
+
 def _extract_uv_fields(raw: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
     """Read u/v from model JSON; fall back to x/y or point list for compatibility."""
-    u = _safe_float(raw.get("u"))
-    v = _safe_float(raw.get("v"))
+    u = _scalar_coord(raw.get("u"))
+    v = _scalar_coord(raw.get("v"))
     if u is not None and v is not None:
         return u, v
 
-    x = _safe_float(raw.get("x"))
-    y = _safe_float(raw.get("y"))
+    x = _scalar_coord(raw.get("x"))
+    y = _scalar_coord(raw.get("y"))
     if x is not None and y is not None:
         return x, y
 
     p = raw.get("target_point") or raw.get("point")
     if isinstance(p, (list, tuple)) and len(p) >= 2:
-        return _safe_float(p[0]), _safe_float(p[1])
+        return _scalar_coord(p[0]), _scalar_coord(p[1])
 
     return None, None
 
@@ -160,12 +176,23 @@ def save_qwen_coord_debug(
             cv2.circle(raw_vis, (px, py), 8, (0, 0, 255), 2)
         cv2.putText(
             raw_vis,
-            f"raw({raw_u},{raw_v})",
+            f"raw({raw_u:.1f},{raw_v:.1f})",
             (8, 22),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             (0, 0, 255),
             2,
+        )
+    else:
+        raw_json = result.get("_raw_json") or {}
+        cv2.putText(
+            raw_vis,
+            f"no point: {json.dumps(raw_json, ensure_ascii=False)[:80]}",
+            (8, 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            (0, 0, 255),
+            1,
         )
 
     raw_path = os.path.join(debug_dir, f"{prefix}_qwen_input_raw_point.jpg")
@@ -183,6 +210,16 @@ def save_qwen_coord_debug(
             (int(u) + 20, max(30, int(v) - 20)),
             cv2.FONT_HERSHEY_SIMPLEX,
             1.0,
+            (0, 0, 255),
+            2,
+        )
+    elif result.get("_coord_reason"):
+        cv2.putText(
+            mapped,
+            f"unusable: {result.get('_coord_reason')}",
+            (12, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
             (0, 0, 255),
             2,
         )
@@ -253,11 +290,17 @@ class QwenOllamaClient:
             return (
                 f"Target: {target}\n"
                 "Return ONLY one JSON object. No markdown. No explanation.\n"
-                "Use normalized coordinates from 0 to 1000.\n"
-                "Top-left is (0,0), bottom-right is (1000,1000).\n"
-                "Output format must use fields u and v only.\n"
-                'If the target is visible: {"u":500,"v":500}\n'
-                'If the target is not visible: {"u":null,"v":null}\n'
+                "The JSON must contain exactly two fields: u and v.\n"
+                "u and v are normalized coordinates from 0 to 1000, not pixel coordinates.\n"
+                "u=0 means the left edge of the provided image, u=1000 means the right edge.\n"
+                "v=0 means the top edge of the provided image, v=1000 means the bottom edge.\n"
+                "Locate the center of the visible target object itself.\n"
+                "Do not place the point on the floor, shadow, table leg, wheel, background, or nearby area.\n"
+                "If the target is a bottle, place the point at the center of the bottle body.\n"
+                "If multiple matching targets are visible, choose the clearest and largest matching target.\n"
+                "If the target is not clearly visible, return null values.\n"
+                "Do not guess. Do not infer the target position from context.\n"
+                'Output schema: {"u": <integer or null>, "v": <integer or null>}\n'
             )
 
         if self.coord_mode == "model":

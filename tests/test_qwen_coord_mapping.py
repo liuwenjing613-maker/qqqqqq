@@ -80,6 +80,26 @@ def test_norm1000_out_of_range_invalid():
     assert r["v"] is None
 
 
+def test_norm1000_array_uv_takes_center():
+    """Model sometimes returns u/v as [min, max] spans; use center."""
+    raw = {"u": [432, 567], "v": [432, 568]}
+    r = parse_nav_result(
+        raw,
+        orig_w=1280,
+        orig_h=1707,
+        model_w=192,
+        model_h=256,
+        sx=1280 / 192,
+        sy=1707 / 256,
+        coord_mode="norm1000",
+    )
+    assert r["usable"] is True
+    assert r["_raw_u"] == pytest.approx(499.5)
+    assert r["_raw_v"] == pytest.approx(500.0)
+    assert abs(r["u"] - 638.86) < 2
+    assert abs(r["v"] - 853.0) < 2
+
+
 def test_extract_xy_fallback():
     raw = {"x": 500, "y": 500}
     r = parse_nav_result(
