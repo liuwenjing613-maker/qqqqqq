@@ -535,21 +535,87 @@ class QwenOllamaClient:
         )
         return dt
 
-    def warmup_full(self, frame_bgr=None, timeout: Optional[float] = None) -> float:
-        """Text + vision warmup so the first real infer skips cold-start."""
+    def warmup_navigation(
+        self,
+        frame_bgr=None,
+        instruction: str = "find the bottle",
+        timeout: Optional[float] = None,
+    ) -> float:
+        """
+        Warm up the real navigation path: same image resize + _build_prompt() as infer_navigation().
+        """
+        import numpy as np
+
+        if frame_bgr is None:
+            blank_h = max(8, int(round(self.resize_width * 0.75)))
+            frame_bgr = np.zeros((blank_h, self.resize_width, 3), dtype=np.uint8)
+
+        img_b64, _, model_w, model_h, _, _ = self._frame_to_base64(frame_bgr)
+        orig_h, orig_w = frame_bgr.shape[:2]
+        prompt = self._build_prompt(instruction, orig_w, orig_h, model_w, model_h)
+        num_predict = min(self.num_predict, 8)
+
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "images": [img_b64],
+            "stream": False,
+            "format": "json",
+            "keep_alive": self.keep_alive,
+            "options": {
+                "temperature": 0,
+                "num_predict": num_predict,
+                "num_ctx": self.num_ctx,
+            },
+        }
+
+        t0 = time.time()
+        print(
+            f"[QwenOllama] warmup navigation start image={model_w}x{model_h} "
+            f"orig={orig_w}x{orig_h} num_ctx={self.num_ctx} num_predict={num_predict}...",
+            flush=True,
+        )
+        data = self._post_generate(payload, timeout=timeout or self.timeout)
+        dt = time.time() - t0
+        load_ms = data.get("load_duration", 0) / 1e6
+        prompt_eval_ms = data.get("prompt_eval_duration", 0) / 1e6
+        eval_ms = data.get("eval_duration", 0) / 1e6
+        total_ms = data.get("total_duration", 0) / 1e6
+        print(
+            f"[QwenOllama] warmup navigation done in {dt:.1f}s "
+            f"ollama_total_ms={total_ms:.0f} "
+            f"load_ms={load_ms:.0f} "
+            f"prompt_eval_ms={prompt_eval_ms:.0f} "
+            f"eval_ms={eval_ms:.0f}",
+            flush=True,
+        )
+        return dt
+
+    def warmup_full(
+        self,
+        frame_bgr=None,
+        timeout: Optional[float] = None,
+        instruction: str = "find the bottle",
+    ) -> float:
+        """Text + real navigation warmup so the first real infer is closer to warm state."""
         t0 = time.time()
         self.warmup(timeout=timeout)
-        self.warmup_vision(frame_bgr=frame_bgr, timeout=timeout)
+        self.warmup_navigation(frame_bgr=frame_bgr, instruction=instruction, timeout=timeout)
         dt = time.time() - t0
         print(f"[QwenOllama] warmup_full total {dt:.1f}s", flush=True)
         return dt
 
-    def warmup_on_camera_frame(self, frame_bgr, timeout: Optional[float] = None) -> float:
+    def warmup_on_camera_frame(
+        self,
+        frame_bgr,
+        timeout: Optional[float] = None,
+        instruction: str = "find the bottle",
+    ) -> float:
         """
         Warm up under the same memory layout as live navigation (camera already running).
-        Uses the actual camera frame and the same resize/ctx settings as infer_navigation.
+        Uses the actual camera frame and the real navigation prompt path.
         """
-        return self.warmup_full(frame_bgr=frame_bgr, timeout=timeout)
+        return self.warmup_full(frame_bgr=frame_bgr, timeout=timeout, instruction=instruction)
 
     def infer_navigation(self, frame_bgr, instruction: str) -> Dict[str, Any]:
         img_b64, model_bgr, model_w, model_h, sx, sy = self._frame_to_base64(frame_bgr)

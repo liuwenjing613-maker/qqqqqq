@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional
 
 import cv2
@@ -80,6 +81,10 @@ class RunQwenLidarNav(Node):
         self.last_scan_time: Optional[float] = None
 
         self.query_busy = False
+        self.qwen_executor = ThreadPoolExecutor(max_workers=1)
+        self.qwen_future = None
+        self.qwen_future_kind = None
+        self.qwen_future_frame = None
         self.step_count = 0
         self.forward_burst_count = 0
         self.arrive_count = 0
@@ -199,7 +204,11 @@ class RunQwenLidarNav(Node):
         )
         try:
             timeout = float(self.cfg.get("qwen_warmup_timeout_sec", self.cfg["qwen_timeout_sec"]))
-            dt = self.qwen.warmup_on_camera_frame(frame, timeout=timeout)
+            dt = self.qwen.warmup_on_camera_frame(
+                frame,
+                timeout=timeout,
+                instruction=self.instruction,
+            )
             self.get_logger().info(f"aligned Qwen warmup done in {dt:.1f}s")
             return True
         except Exception as e:
@@ -335,63 +344,73 @@ class RunQwenLidarNav(Node):
         path = os.path.join(self.debug_dir, f"qwen_lidar_{self.step_count:04d}_{safe_action}.jpg")
         cv2.imwrite(path, vis)
 
-    def decision_timer_cb(self):
-        if self.success:
-            self.publish_stop()
+    def _submit_qwen_warmup(self, frame) -> None:
+        if self.qwen_future is not None:
             return
-        now = time.time()
-        if self.query_busy or self.latest_frame is None:
-            return
-
-        if self.qwen_warmup_pending:
-            self.query_busy = True
-            frame = self.latest_frame.copy()
-            self._sync_image_geometry(frame)
-            ok = self._run_camera_aligned_warmup(frame)
-            self.qwen_warmup_pending = False
-            self.query_busy = False
-            if not ok:
-                self.next_query_time = time.time() + self.timeout_backoff_sec
-                self._maybe_recover_ollama()
-            return
-
-        if now < self.next_allowed_action_time or now < self.next_query_time:
-            return
-
-        if self.step_count >= self.max_steps:
-            self.get_logger().warn("max_steps reached, stop")
-            self.publish_stop()
-            self.success = True
-            return
-
-        if self.require_lidar and not self._scan_is_fresh():
-            self.publish_stop()
-            self.get_logger().warn("waiting for fresh /scan, motion disabled")
-            self._publish_state({
-                "step": self.step_count,
-                "action": "WAIT_LIDAR",
-                "success": self.success,
-                "lidar_valid": False,
-                "lidar_reason": "no_fresh_scan",
-            })
-            self.next_query_time = time.time() + self.lidar_wait_backoff_sec
-            return
-
         self.query_busy = True
+        self.qwen_future_kind = "warmup"
+        self.qwen_future_frame = frame
+        self.qwen_future = self.qwen_executor.submit(self._run_camera_aligned_warmup, frame)
+        self.get_logger().info("submitted async Qwen warmup")
+
+    def _submit_qwen_infer(self, frame) -> None:
+        if self.qwen_future is not None:
+            return
+        self.query_busy = True
+        self.qwen_future_kind = "infer"
+        self.qwen_future_frame = frame
         self.step_count += 1
-        frame = self.latest_frame.copy()
-        self._sync_image_geometry(frame)
+        self.qwen_future = self.qwen_executor.submit(self.qwen.infer_navigation, frame, self.instruction)
+        self.publish_stop()
+        self.get_logger().info(f"submitted async Qwen infer step={self.step_count}")
+
+    def _poll_qwen_future(self) -> bool:
+        if self.qwen_future is None:
+            return False
+
+        if not self.qwen_future.done():
+            return True
+
+        kind = self.qwen_future_kind
+        frame = self.qwen_future_frame
 
         try:
-            result = self.qwen.infer_navigation(frame, self.instruction)
+            output = self.qwen_future.result()
         except Exception as e:
-            self.get_logger().error(f"Qwen infer failed: {repr(e)}")
+            self.get_logger().error(f"async Qwen {kind} failed: {repr(e)}")
             self.publish_stop()
             self.next_query_time = time.time() + self.timeout_backoff_sec
+            self.qwen_future = None
+            self.qwen_future_kind = None
+            self.qwen_future_frame = None
             self.query_busy = False
-            self._maybe_recover_ollama()
-            return
+            if kind == "infer":
+                self._maybe_recover_ollama()
+            return True
 
+        self.qwen_future = None
+        self.qwen_future_kind = None
+        self.qwen_future_frame = None
+        self.query_busy = False
+
+        if kind == "warmup":
+            self.qwen_warmup_pending = False
+            if output:
+                self.next_query_time = time.time() + 1.0
+                self.get_logger().info("async Qwen warmup completed")
+            else:
+                self.next_query_time = time.time() + self.timeout_backoff_sec
+                self._maybe_recover_ollama()
+                self.get_logger().error("async Qwen warmup failed")
+            return True
+
+        if kind == "infer":
+            self._handle_qwen_result(output, frame)
+            return True
+
+        return True
+
+    def _handle_qwen_result(self, result: Dict[str, Any], frame) -> None:
         target = self._parse_qwen_point(result)
         depth_state = self.lidar.estimate_for_point(target.get("u"), self.image_width)
 
@@ -417,7 +436,6 @@ class RunQwenLidarNav(Node):
                 **lidar_payload,
             })
             self.next_query_time = time.time() + self.lidar_wait_backoff_sec
-            self.query_busy = False
             return
 
         action = "STOP_OBSERVE"
@@ -472,12 +490,60 @@ class RunQwenLidarNav(Node):
             f"servo={servo_res.state} vx={servo_res.cmd.linear.x:.3f} wz={servo_res.cmd.angular.z:+.3f} "
             f"latency={result.get('_latency_sec')}"
         )
-        self._draw_debug(frame, target, servo_res, action)
+        if frame is not None:
+            self._draw_debug(frame, target, servo_res, action)
         self.next_query_time = time.time() + self.qwen_interval_sec
-        self.query_busy = False
+
+    def decision_timer_cb(self):
+        if self.success:
+            self.publish_stop()
+            return
+
+        now = time.time()
+        if self.latest_frame is None:
+            return
+
+        if self._poll_qwen_future():
+            return
+
+        if self.qwen_warmup_pending:
+            frame = self.latest_frame.copy()
+            self._sync_image_geometry(frame)
+            self._submit_qwen_warmup(frame)
+            return
+
+        if now < self.next_allowed_action_time or now < self.next_query_time:
+            return
+
+        if self.step_count >= self.max_steps:
+            self.get_logger().warn("max_steps reached, stop")
+            self.publish_stop()
+            self.success = True
+            return
+
+        if self.require_lidar and not self._scan_is_fresh():
+            self.publish_stop()
+            self.get_logger().warn("waiting for fresh /scan, motion disabled")
+            self._publish_state({
+                "step": self.step_count,
+                "action": "WAIT_LIDAR",
+                "success": self.success,
+                "lidar_valid": False,
+                "lidar_reason": "no_fresh_scan",
+            })
+            self.next_query_time = time.time() + self.lidar_wait_backoff_sec
+            return
+
+        frame = self.latest_frame.copy()
+        self._sync_image_geometry(frame)
+        self._submit_qwen_infer(frame)
 
     def destroy_node(self):
         self.publish_stop()
+        try:
+            self.qwen_executor.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            self.qwen_executor.shutdown(wait=False)
         time.sleep(0.2)
         super().destroy_node()
 

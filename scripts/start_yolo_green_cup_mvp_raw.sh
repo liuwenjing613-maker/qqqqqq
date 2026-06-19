@@ -56,18 +56,18 @@ echo "============================================================"
 cd $PROJECT_DIR
 mkdir -p logs data/images/mvp_debug
 
-echo "[0/6] stop old processes..."
+echo "[0/5] stop old processes..."
 bash scripts/stop_all_safe.sh || true
 sleep 1
 
-echo "[1/6] start camera: hobot_usb_cam -> $COMPRESSED_IMAGE_TOPIC"
+echo "[1/5] start camera: hobot_usb_cam -> $COMPRESSED_IMAGE_TOPIC"
 cd $PROJECT_DIR/perception
 source /opt/tros/humble/setup.bash
 ros2 launch $PROJECT_DIR/perception/launch/usb_cam.launch.py usb_video_device:=$CAMERA_DEV \
   > $PROJECT_DIR/logs/yolo_green_cup_camera_compressed.log 2>&1 &
 sleep 3
 
-echo "[2/6] start image bridge: $COMPRESSED_IMAGE_TOPIC -> $RAW_IMAGE_TOPIC"
+echo "[2/5] start image bridge: $COMPRESSED_IMAGE_TOPIC -> $RAW_IMAGE_TOPIC"
 cd $PROJECT_DIR
 source /opt/tros/humble/setup.bash
 python3 src/perception/compressed_to_raw_image.py \
@@ -76,13 +76,8 @@ python3 src/perception/compressed_to_raw_image.py \
   > $PROJECT_DIR/logs/yolo_green_cup_image_raw_bridge.log 2>&1 &
 sleep 2
 
-echo "[3/6] publish target words BEFORE YOLO -> $TARGET_WORDS_TOPIC"
-source /opt/tros/humble/setup.bash
-ros2 topic pub -r 1 $TARGET_WORDS_TOPIC std_msgs/msg/String "{data: '$TARGET_WORDS'}" \
-  > $PROJECT_DIR/logs/yolo_green_cup_target_words.log 2>&1 &
-sleep 2
-
-echo "[4/6] start YOLO-World: $YOLO_IMAGE_TOPIC -> $DET_TOPIC"
+echo "[3/5] start YOLO-World: $YOLO_IMAGE_TOPIC -> $DET_TOPIC"
+echo "  target_words: -p texts only (run_mvp_task.py publishes $TARGET_WORDS_TOPIC @ 1Hz)"
 cd /opt/tros/humble/lib/hobot_yolo_world
 source /opt/tros/humble/setup.bash
 
@@ -103,12 +98,12 @@ ros2 run hobot_yolo_world hobot_yolo_world \
   > $PROJECT_DIR/logs/yolo_green_cup_yolo_world.log 2>&1 &
 sleep 4
 
-echo "[5/6] start chassis bridge: $CMD_TOPIC -> M1"
+echo "[4/5] start chassis bridge: $CMD_TOPIC -> M1"
 source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
 run_chassis_bridge "$PROJECT_DIR/logs/yolo_green_cup_chassis_bridge.log"
 sleep 2
 
-echo "[5.5/6] check topics..."
+echo "[4.5/5] check topics..."
 cd $PROJECT_DIR
 source /opt/tros/humble/setup.bash
 if [ -f "$PROJECT_DIR/source_stage10.sh" ]; then
@@ -121,7 +116,7 @@ ros2 topic info $TARGET_WORDS_TOPIC || true
 ros2 topic info $DET_TOPIC || true
 ros2 topic info $CMD_TOPIC || true
 
-echo "[6/6] start MVP task: YOLO backend, green cup, no red verify"
+echo "[5/5] start MVP task: YOLO backend, green cup, no red verify"
 cd $PROJECT_DIR
 source /opt/tros/humble/setup.bash
 if [ -f "$PROJECT_DIR/source_stage10.sh" ]; then

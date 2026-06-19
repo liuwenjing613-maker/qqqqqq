@@ -35,7 +35,7 @@ class CompressedToRawImage(Node):
         self.sensor_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1,
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            reliability=QoSReliabilityPolicy.RELIABLE,
         )
 
         self.pub = self.create_publisher(Image, self.out_topic, self.sensor_qos)

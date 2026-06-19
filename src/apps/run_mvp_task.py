@@ -233,8 +233,36 @@ class RunMVPTask(Node):
     def det_callback(self, msg: PerceptionTargets):
         self.last_det_time = time.time()
         stamp = msg.header.stamp
-        if stamp.sec or stamp.nanosec:
-            self.det_buffer.push(stamp, msg)
+        if not (stamp.sec or stamp.nanosec):
+            fallback = self.get_clock().now().to_msg()
+            self.get_logger().warn(
+                "det header.stamp empty, using node clock fallback "
+                f"({fallback.sec}.{fallback.nanosec:09d})"
+            )
+            msg.header.stamp = fallback
+            stamp = msg.header.stamp
+        self.det_buffer.push(stamp, msg)
+
+    def _log_mvp_target_diagnostic(self, target):
+        if target.get("visible", False):
+            self.get_logger().info(
+                "[MVP_TARGET] "
+                f"class={target.get('class_name', '')} "
+                f"score={target.get('score', 0.0):.4f} "
+                f"bbox={target.get('bbox')} "
+                f"area_ratio={target.get('area_ratio', 0.0):.4f} "
+                f"red_ratio={target.get('red_ratio', 0.0):.4f}"
+            )
+        else:
+            self.get_logger().info(
+                "[MVP_REJECT] "
+                f"reason={target.get('reason', 'unknown')} "
+                f"class={target.get('class_name', '')} "
+                f"score={target.get('score', 0.0):.4f} "
+                f"bbox={target.get('bbox')} "
+                f"area_ratio={target.get('area_ratio', 0.0):.4f} "
+                f"red_ratio={target.get('red_ratio', 0.0):.4f}"
+            )
 
     def resolve_target(self, frame, image_stamp=None):
         if self.backend == "red":
@@ -266,6 +294,7 @@ class RunMVPTask(Node):
             min_red_ratio=self.min_red_ratio,
             require_red_verify=self.require_red_verify,
         )
+        self._log_mvp_target_diagnostic(target)
         return target, matched_frame
 
     def _draw_bbox_overlay(self, img, target, fsm_state, servo_state, trigger):
