@@ -49,22 +49,17 @@ def load_yaml(path: str) -> Dict[str, Any]:
 
 
 class RunQwenLidarNav(Node):
-    def __init__(self, instruction: str, cfg: Dict[str, Any], *, skip_warmup: bool = False):
+    def __init__(self, instruction: str, cfg: Dict[str, Any]):
         super().__init__("run_qwen_lidar_nav")
 
         self.instruction = instruction
         self.cfg = cfg
-        self.skip_warmup = bool(skip_warmup)
         self.require_lidar = bool(cfg.get("require_lidar", True))
         self.recover_on_timeout = bool(cfg.get("recover_on_timeout", True))
         self.recover_script = os.path.expanduser(str(cfg.get(
             "recover_script",
             os.path.join(PROJECT_ROOT, "scripts/ollama_recover.sh"),
         )))
-
-        self.qwen_warmup_pending = (
-            not self.skip_warmup and bool(cfg.get("qwen_warmup_on_first_frame", True))
-        )
 
         self.image_topic = cfg["image_topic"]
         self.scan_topic = cfg["scan_topic"]
@@ -83,7 +78,6 @@ class RunQwenLidarNav(Node):
         self.query_busy = False
         self.qwen_executor = ThreadPoolExecutor(max_workers=1)
         self.qwen_future = None
-        self.qwen_future_kind = None
         self.qwen_future_frame = None
         self.step_count = 0
         self.forward_burst_count = 0
@@ -182,10 +176,7 @@ class RunQwenLidarNav(Node):
             f"timeout={cfg['qwen_timeout_sec']}s keep_alive={cfg.get('qwen_keep_alive', -1)}"
         )
 
-        if self.qwen_warmup_pending:
-            self.get_logger().info("waiting for first camera frame, then aligned Qwen warmup...")
-        elif self.skip_warmup:
-            self.get_logger().warn("warmup skipped; first infer may be very slow on RDK X5")
+        self.get_logger().info("waiting for first camera frame; step=1 will be first infer (no discard warmup)")
 
     def _sync_image_geometry(self, frame) -> None:
         frame_h, frame_w = frame.shape[:2]
@@ -197,23 +188,6 @@ class RunQwenLidarNav(Node):
             self.image_width = int(frame_w)
             self.image_height = int(frame_h)
             self.servo.update_image_width(frame_w)
-
-    def _run_camera_aligned_warmup(self, frame) -> bool:
-        self.get_logger().info(
-            f"camera frame ready ({frame.shape[1]}x{frame.shape[0]}), running aligned Qwen warmup..."
-        )
-        try:
-            timeout = float(self.cfg.get("qwen_warmup_timeout_sec", self.cfg["qwen_timeout_sec"]))
-            dt = self.qwen.warmup_on_camera_frame(
-                frame,
-                timeout=timeout,
-                instruction=self.instruction,
-            )
-            self.get_logger().info(f"aligned Qwen warmup done in {dt:.1f}s")
-            return True
-        except Exception as e:
-            self.get_logger().error(f"aligned Qwen warmup failed: {repr(e)}")
-            return False
 
     def _maybe_recover_ollama(self) -> None:
         if not self.recover_on_timeout:
@@ -344,25 +318,21 @@ class RunQwenLidarNav(Node):
         path = os.path.join(self.debug_dir, f"qwen_lidar_{self.step_count:04d}_{safe_action}.jpg")
         cv2.imwrite(path, vis)
 
-    def _submit_qwen_warmup(self, frame) -> None:
-        if self.qwen_future is not None:
-            return
-        self.query_busy = True
-        self.qwen_future_kind = "warmup"
-        self.qwen_future_frame = frame
-        self.qwen_future = self.qwen_executor.submit(self._run_camera_aligned_warmup, frame)
-        self.get_logger().info("submitted async Qwen warmup")
-
     def _submit_qwen_infer(self, frame) -> None:
         if self.qwen_future is not None:
             return
         self.query_busy = True
-        self.qwen_future_kind = "infer"
         self.qwen_future_frame = frame
         self.step_count += 1
         self.qwen_future = self.qwen_executor.submit(self.qwen.infer_navigation, frame, self.instruction)
         self.publish_stop()
-        self.get_logger().info(f"submitted async Qwen infer step={self.step_count}")
+        if self.step_count == 1:
+            self.get_logger().info(
+                f"submitted first infer as step=1 ({frame.shape[1]}x{frame.shape[0]}); "
+                "result will drive navigation (no separate warmup)"
+            )
+        else:
+            self.get_logger().info(f"submitted async Qwen infer step={self.step_count}")
 
     def _poll_qwen_future(self) -> bool:
         if self.qwen_future is None:
@@ -371,43 +341,24 @@ class RunQwenLidarNav(Node):
         if not self.qwen_future.done():
             return True
 
-        kind = self.qwen_future_kind
         frame = self.qwen_future_frame
 
         try:
-            output = self.qwen_future.result()
+            result = self.qwen_future.result()
         except Exception as e:
-            self.get_logger().error(f"async Qwen {kind} failed: {repr(e)}")
+            self.get_logger().error(f"async Qwen infer failed: {repr(e)}")
             self.publish_stop()
             self.next_query_time = time.time() + self.timeout_backoff_sec
             self.qwen_future = None
-            self.qwen_future_kind = None
             self.qwen_future_frame = None
             self.query_busy = False
-            if kind == "infer":
-                self._maybe_recover_ollama()
+            self._maybe_recover_ollama()
             return True
 
         self.qwen_future = None
-        self.qwen_future_kind = None
         self.qwen_future_frame = None
         self.query_busy = False
-
-        if kind == "warmup":
-            self.qwen_warmup_pending = False
-            if output:
-                self.next_query_time = time.time() + 1.0
-                self.get_logger().info("async Qwen warmup completed")
-            else:
-                self.next_query_time = time.time() + self.timeout_backoff_sec
-                self._maybe_recover_ollama()
-                self.get_logger().error("async Qwen warmup failed")
-            return True
-
-        if kind == "infer":
-            self._handle_qwen_result(output, frame)
-            return True
-
+        self._handle_qwen_result(result, frame)
         return True
 
     def _handle_qwen_result(self, result: Dict[str, Any], frame) -> None:
@@ -506,12 +457,6 @@ class RunQwenLidarNav(Node):
         if self._poll_qwen_future():
             return
 
-        if self.qwen_warmup_pending:
-            frame = self.latest_frame.copy()
-            self._sync_image_geometry(frame)
-            self._submit_qwen_warmup(frame)
-            return
-
         if now < self.next_allowed_action_time or now < self.next_query_time:
             return
 
@@ -552,12 +497,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default=DEFAULT_CONFIG)
     parser.add_argument("--instruction", default="find the bottle")
-    parser.add_argument("--no-warmup", action="store_true")
     args = parser.parse_args()
 
     cfg = load_yaml(args.config)
     rclpy.init()
-    node = RunQwenLidarNav(args.instruction, cfg, skip_warmup=args.no_warmup)
+    node = RunQwenLidarNav(args.instruction, cfg)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

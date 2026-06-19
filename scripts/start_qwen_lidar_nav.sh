@@ -33,7 +33,7 @@ ros2 launch hobot_usb_cam hobot_usb_cam.launch.py \
   usb_video_device:="$CAMERA_DEV" \
   usb_image_width:=640 \
   usb_image_height:=480 \
-  usb_framerate:=15 \
+  usb_framerate:=10 \
   > logs/qwen_lidar_camera.log 2>&1 &
 sleep 3
 
@@ -41,7 +41,7 @@ echo "[5/8] start compressed -> raw image bridge..."
 python3 src/perception/compressed_to_raw_image.py \
   --in-topic /image \
   --out-topic /image_raw \
-  --max-fps 3 \
+  --max-fps 2 \
   > logs/qwen_lidar_image_raw.log 2>&1 &
 sleep 2
 

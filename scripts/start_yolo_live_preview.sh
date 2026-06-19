@@ -9,7 +9,9 @@ PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$PROJECT_DIR"
 
 if [ -f /opt/tros/humble/setup.bash ]; then
+  set +u
   source /opt/tros/humble/setup.bash
+  set -u
 fi
 
 TARGET_WORDS="${TARGET_WORDS:-bottle,water bottle,cup}"

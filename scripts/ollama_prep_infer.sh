@@ -51,10 +51,10 @@ fi
 echo "[prep] memory after:"
 free -h
 
-echo "[prep] warming up model (text + vision)..."
+echo "[prep] text warmup only (no vision warmup)..."
 cd /root/rdk_x5_vln_robot
-python3 src/apps/ollama_warmup.py --model "${MODEL}" || {
-  echo "[prep] WARN: warmup failed; first infer will be slower"
+python3 src/apps/ollama_warmup.py --model "${MODEL}" --text-only || {
+  echo "[prep] WARN: text warmup failed; first infer will load model"
 }
 
 echo "[prep] ready for inference with model=${MODEL}"

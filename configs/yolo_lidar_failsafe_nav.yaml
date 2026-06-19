@@ -1,0 +1,137 @@
+# P0 YOLO / YOLO-World + LiDAR failsafe navigation
+# Target visible: YOLO bbox center -> visual servo
+# Target not visible: LiDAR free-space waypoint -> explore
+# Qwen image inference is NOT in the control loop
+
+# ===== Topics =====
+image_topic: "/image_raw"
+scan_topic: "/scan"
+cmd_topic: "/cmd_vel"
+
+target_bbox_topic: "/target_bbox_json"
+target_words_topic: "/target_words"
+
+state_topic: "/failsafe_nav_state"
+point_topic: "/failsafe_nav_point"
+
+# ===== Image geometry =====
+camera_width: 640
+camera_height: 480
+image_width: 640
+image_height: 480
+
+camera_hfov_deg: 70.0
+camera_lidar_yaw_offset_deg: 0.0
+
+# ===== Target words (aligned with start_yolo_live_preview.sh) =====
+instruction: "bottle"
+
+target_words:
+  - "bottle"
+  - "water bottle"
+  - "cup"
+
+context_words:
+  - "table"
+  - "desk"
+  - "shelf"
+
+publish_target_words: true
+target_words_publish_period_sec: 3.0
+
+# ===== Target parser =====
+target_min_score: 0.002
+target_stable_frames: 1
+target_lost_timeout_sec: 0.8
+target_memory_sec: 1.5
+accept_unknown_class: true
+
+bbox_min_area_ratio: 0.0005
+bbox_max_area_ratio: 0.24
+bbox_edge_margin_px: 4
+
+# ===== YOLO bridge (yolo_world_to_bbox_json.py) =====
+yolo_bridge:
+  det_topic: "/hobot_yolo_world"
+  out_topic: "/target_bbox_json"
+  target_classes: "bottle,cup"
+  min_score: 0.002
+  max_area_ratio: 0.24
+  require_red_verify: false
+  publish_rate_hz: 10.0
+
+# ===== LiDAR basic =====
+lidar_min_range: 0.08
+lidar_max_range: 6.0
+lidar_front_deg: 18.0
+lidar_target_window_deg: 8.0
+
+# ===== Safety distances, m =====
+emergency_stop_distance: 0.22
+hard_stop_distance: 0.32
+slow_distance: 0.55
+normal_distance: 0.90
+arrive_distance: 0.38
+
+# ===== Target visual servo =====
+target_max_vx: 0.045
+target_mid_vx: 0.035
+target_slow_vx: 0.020
+target_min_vx: 0.012
+
+target_kp_turn: 0.22
+target_max_wz: 0.14
+target_wz_deadzone: 0.06
+target_cmd_wz_deadzone: 0.015
+target_turn_threshold: 0.20
+target_forward_turn_scale: 0.45
+
+# ===== Free-space waypoint =====
+free_space_enabled: true
+free_space_sector_deg: 70.0
+free_space_step_deg: 5.0
+free_space_window_deg: 10.0
+free_space_min_clearance: 0.45
+free_space_good_clearance: 1.20
+free_space_center_prefer_deg: 12.0
+free_space_smooth_alpha: 0.35
+
+free_space_waypoint_v_ratio: 0.62
+free_space_min_u_ratio: 0.20
+free_space_max_u_ratio: 0.80
+
+free_space_clearance_weight: 0.60
+free_space_center_weight: 0.30
+free_space_consistency_weight: 0.10
+
+# ===== Explore control =====
+explore_vx: 0.040
+explore_slow_vx: 0.020
+explore_kp_turn: 0.20
+explore_max_wz: 0.12
+explore_turn_only_threshold: 0.22
+explore_forward_turn_scale: 0.55
+
+target_burst_sec: 0.25
+target_observe_sec: 0.20
+explore_burst_sec: 0.30
+explore_observe_sec: 0.10
+
+# ===== Blocked / scan recovery =====
+scan_wz: 0.12
+scan_burst_sec: 0.25
+scan_observe_sec: 0.20
+blocked_rotate_alternate: true
+blocked_front_distance: 0.35
+
+# ===== Arrive =====
+center_arrive_px: 80
+arrive_required_count: 3
+min_forward_bursts_before_arrive: 2
+
+# ===== Runtime =====
+control_rate_hz: 20.0
+decision_rate_hz: 5.0
+max_steps: 600
+save_debug: true
+debug_dir: "data/images/yolo_lidar_failsafe_debug"

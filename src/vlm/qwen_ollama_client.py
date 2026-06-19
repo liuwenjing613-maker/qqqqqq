@@ -286,7 +286,7 @@ class QwenOllamaClient:
     ) -> str:
         target = instruction.strip()
 
-        if self.coord_mode == "norm1000":
+        '''if self.coord_mode == "norm1000":
             return (
                 f"Target: {target}\n"
                 "Return ONLY one JSON object. No markdown. No explanation.\n"
@@ -338,7 +338,34 @@ class QwenOllamaClient:
                 "\n"
                 'Target visible output: {"u":500,"v":500}\n'
                 'Target not visible and no safe waypoint output: {"u":null,"v":null}\n'
+            )'''
+        if self.coord_mode == "norm1000":
+            return (
+                f"Target: {target}\n"
+                "Return ONLY one JSON object with exactly two fields: u and v. No markdown. No explanation.\n"
+                "u and v are normalized coordinates from 0 to 1000: u=0 left, u=1000 right, v=0 top, v=1000 bottom.\n"
+                "\n"
+                "First decide whether the target is clearly visible.\n"
+                "\n"
+                "If the target is clearly visible, output the CENTER of the visible target object itself.\n"
+                "Do NOT point to floor, shadow, background, nearby area, furniture legs, wheels, labels, straps, ropes, handles, logos, caps, or borders.\n"
+                "For bottle/cup, use the center of the main visible body only: u halfway between its left/right body edges, v near its vertical body center.\n"
+                "If multiple matching targets are visible, choose the clearest and largest one.\n"
+                "\n"
+                "If the target is NOT clearly visible, output a conservative navigation waypoint on safe visible free floor, not a guessed target position.\n"
+                "Prefer the centerline of the largest connected free-floor region. If the forward center path is open, choose a centered floor point.\n"
+                "In corridors/passages, choose the passage center, not the left/right side.\n"
+                "Usually use u=400..600 when the center path is open; use u<350 or u>650 only if the center is blocked.\n"
+                "Usually use v=550..700; avoid v>750 unless no farther safe floor exists, and avoid v<450 unless the visible floor is very short/blocked.\n"
+                "Do NOT place the waypoint on walls, doors, cabinets, furniture, object bodies, obstacles, shadows, reflections, image borders, floor edges, or near-bottom floor patches when a safer farther central point exists.\n"
+                "\n"
+                "Priority: if any matching target is clearly visible, ALWAYS output the target center and ignore waypoint rules.\n"
+                "Use waypoint rules ONLY when no matching target is clearly visible. If no safe visible free-floor waypoint exists, return null values.\n"
+                "\n"
+                'Target visible output: {"u":500,"v":500}\n'
+                'Target not visible and no safe waypoint output: {"u":null,"v":null}\n'
             )
+
 
         if self.coord_mode == "model":
             return (

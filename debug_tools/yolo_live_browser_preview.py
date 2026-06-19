@@ -29,6 +29,7 @@ from sensor_msgs.msg import Image
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.perception.multi_frame_voter import MultiFrameTargetVoter
 from src.perception.stamp_sync import StampSyncBuffer
 from src.perception.target_backend_yolo import (
     extract_yolo_target,
@@ -94,6 +95,17 @@ class YoloLiveBrowserPreview(Node):
         self.last_status = "WAITING"
         self.last_raw_count = 0
         self.last_reject_reason = ""
+
+        self.target_voter = MultiFrameTargetVoter(
+            window_size=10,
+            min_votes=3,
+            lost_hold_frames=3,
+            iou_threshold=0.20,
+            center_dist_threshold=0.18,
+            smooth_alpha=0.65,
+            image_width=self.image_width,
+            image_height=self.image_height,
+        )
 
         qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -189,6 +201,9 @@ class YoloLiveBrowserPreview(Node):
                 require_red_verify=self.require_red_verify,
                 min_red_iou=0.10,
             )
+
+            single_frame_target = mvp_target
+            mvp_target = self.target_voter.update(mvp_target)
         except Exception as exc:
             self.get_logger().warn(f"process detections failed: {repr(exc)}")
 
@@ -218,12 +233,14 @@ class YoloLiveBrowserPreview(Node):
                     f"score={float(mvp_target.get('score', 0.0)):.4f} "
                     f"bbox={mvp_target.get('bbox')} "
                     f"area={float(mvp_target.get('area_ratio', 0.0)):.4f} "
-                    f"red={float(mvp_target.get('red_ratio', 0.0)):.4f} "
+                    f"vote={mvp_target.get('vote_count')}/{mvp_target.get('vote_window')} "
+                    f"reason={mvp_target.get('reason')} "
                     f"raw={len(raw_dets or [])} [{summary}]"
                 )
             else:
                 self.get_logger().warn(
-                    f"[MVP_REJECT] reason={self.last_reject_reason} "
+                    f"[MVP_REJECT] reason={mvp_target.get('reason')} "
+                    f"vote={mvp_target.get('vote_count')}/{mvp_target.get('vote_window')} "
                     f"raw={len(raw_dets or [])} [{summary}]"
                 )
 
@@ -291,8 +308,17 @@ class YoloLiveBrowserPreview(Node):
                 f"rej={best.get('reject_reason') or 'ok'}"
             )
 
+        vote_text = ""
+        if mvp_target:
+            vote_count = mvp_target.get("vote_count")
+            vote_window = mvp_target.get("vote_window")
+            vote_reason = mvp_target.get("vote_reason") or mvp_target.get("reason")
+                
+            if vote_count is not None and vote_window is not None:
+                vote_text = f" vote={vote_count}/{vote_window} vote_reason={vote_reason}"
+
         lines = [
-            f"YOLO-World LIVE | status={status} raw={len(raw_dets or [])}",
+            f"YOLO-World LIVE | status={status} raw={len(raw_dets or [])}{vote_text}",
             f"target_classes={','.join(self.target_classes) if self.target_classes else 'ALL'}",
             f"min={self.min_score} raw_min={self.raw_min_score} max_area={self.max_area_ratio}",
             f"frames={self.frame_count} dets={self.det_count} mvp_found={self.mvp_found_count}",
