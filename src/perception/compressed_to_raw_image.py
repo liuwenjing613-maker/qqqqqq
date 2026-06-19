@@ -22,18 +22,20 @@ class CompressedToRawImage(Node):
     - /image_raw：算法真正使用的 BGR8 原图
     """
 
-    def __init__(self, in_topic="/image", out_topic="/image_raw", frame_id="usb_camera"):
+    def __init__(self, in_topic="/image", out_topic="/image_raw", frame_id="usb_camera", max_fps=10.0):
         super().__init__("compressed_to_raw_image")
 
         self.in_topic = in_topic
         self.out_topic = out_topic
         self.frame_id = frame_id
         self.bridge = CvBridge()
+        self.max_fps = float(max_fps)
+        self._last_pub_time = 0.0
 
         self.sensor_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
-            depth=5,
-            reliability=QoSReliabilityPolicy.RELIABLE,
+            depth=1,
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
         )
 
         self.pub = self.create_publisher(Image, self.out_topic, self.sensor_qos)
@@ -52,6 +54,13 @@ class CompressedToRawImage(Node):
 
     def callback(self, msg: CompressedImage):
         try:
+            if self.max_fps > 0.0:
+                now = time.time()
+                min_interval = 1.0 / self.max_fps
+                if now - self._last_pub_time < min_interval:
+                    return
+                self._last_pub_time = now
+
             np_arr = np.frombuffer(msg.data, np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
@@ -84,13 +93,15 @@ def main():
     parser.add_argument("--in-topic", default="/image")
     parser.add_argument("--out-topic", default="/image_raw")
     parser.add_argument("--frame-id", default="usb_camera")
+    parser.add_argument("--max-fps", type=float, default=10.0, help="throttle /image_raw publish rate")
     args, _ = parser.parse_known_args()
 
     rclpy.init()
     node = CompressedToRawImage(
         in_topic=args.in_topic,
         out_topic=args.out_topic,
-        frame_id=args.frame_id
+        frame_id=args.frame_id,
+        max_fps=args.max_fps,
     )
 
     try:

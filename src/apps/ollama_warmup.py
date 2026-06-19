@@ -14,11 +14,22 @@ def main():
     parser = argparse.ArgumentParser(description="Warm up Qwen VLM before inference")
     parser.add_argument("--model", default="qwen2.5vl:3b")
     parser.add_argument("--timeout", type=float, default=900.0)
+    parser.add_argument("--resize-width", type=int, default=192)
+    parser.add_argument("--num-ctx", type=int, default=256)
+    parser.add_argument("--num-predict", type=int, default=16)
+    parser.add_argument("--keep-alive", default=-1)
     parser.add_argument("--text-only", action="store_true", help="only text warmup")
     parser.add_argument("--vision-only", action="store_true", help="only vision warmup")
     args = parser.parse_args()
 
-    client = QwenOllamaClient(model=args.model, timeout=args.timeout)
+    client = QwenOllamaClient(
+        model=args.model,
+        timeout=args.timeout,
+        resize_width=args.resize_width,
+        num_ctx=args.num_ctx,
+        num_predict=args.num_predict,
+        keep_alive=args.keep_alive,
+    )
     if not client.check_health():
         raise RuntimeError(f"Ollama/model unavailable: {args.model}")
 

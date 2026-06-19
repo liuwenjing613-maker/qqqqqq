@@ -1,0 +1,78 @@
+# Qwen-only + LiDAR navigation config
+# 不接 YOLO-World，只用 Qwen 输出 u/v，再由独立点伺服 + 雷达控制小车。
+
+model: "qwen2.5vl:3b"
+
+image_topic: "/image_raw"
+scan_topic: "/scan"
+cmd_topic: "/cmd_vel"
+qwen_json_topic: "/qwen_nav_json"
+state_topic: "/qwen_lidar_state"
+
+# 相机分辨率（与 start_qwen_lidar_nav.sh 启动参数保持一致，降低内存占用）
+camera_width: 640
+camera_height: 480
+
+# 与真实相机一致，避免启动时误报
+image_width: 640
+image_height: 480
+
+# Qwen 推理设置 — 与 bench 热启动参数对齐
+qwen_resize_width: 192
+qwen_jpeg_quality: 45
+qwen_coord_mode: "norm1000"
+qwen_interval_sec: 2.5
+qwen_timeout_sec: 900.0
+qwen_keep_alive: -1
+qwen_num_predict: 16
+qwen_num_ctx: 256
+# 收到第一帧相机图后在「相机已开」的内存状态下做对齐预热（推荐保持 true）
+qwen_warmup_on_first_frame: true
+
+# Servo 基础参数，参考你当前 qwen_pixel_tune
+max_vx: 0.040
+mid_vx: 0.030
+slow_vx: 0.018
+min_vx: 0.012
+
+max_wz: 0.060
+kp_turn: 0.11
+wz_deadzone: 0.07
+cmd_wz_deadzone: 0.012
+turn_threshold: 0.24
+forward_turn_scale: 0.45
+
+# 短步执行，不连续狂奔
+servo_burst_sec: 0.25
+observe_stop_sec: 0.45
+
+# Qwen 返回 null 或无效点时扫描
+scan_wz: 0.055
+scan_burst_sec: 0.20
+scan_observe_sec: 0.55
+lost_scan_max: 8
+
+# 雷达参数
+lidar_min_range: 0.08
+lidar_max_range: 6.0
+lidar_front_deg: 18.0
+lidar_target_window_deg: 8.0
+camera_hfov_deg: 70.0
+camera_lidar_yaw_offset_deg: 0.0
+
+# 安全距离，单位 m
+emergency_stop_distance: 0.22
+hard_stop_distance: 0.32
+slow_distance: 0.55
+normal_distance: 0.90
+arrive_distance: 0.38
+
+# 成功/停止判据
+center_arrive_px: 80
+arrive_required_count: 3
+min_forward_bursts_before_arrive: 2
+
+# 运行限制
+max_steps: 80
+debug_dir: "data/images/qwen_lidar_debug"
+save_debug: true

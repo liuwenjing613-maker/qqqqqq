@@ -479,7 +479,7 @@ class QwenOllamaClient:
             "keep_alive": self.keep_alive,
             "options": {
                 "num_predict": 1,
-                "num_ctx": 256,
+                "num_ctx": self.num_ctx,
             },
         }
         t0 = time.time()
@@ -494,12 +494,16 @@ class QwenOllamaClient:
         )
         return dt
 
-    def warmup_vision(self, timeout: Optional[float] = None) -> float:
-        """Preload vision encoder with a minimal image request."""
+    def warmup_vision(self, frame_bgr=None, timeout: Optional[float] = None) -> float:
+        """Preload vision encoder using the same resize/ctx path as infer_navigation."""
         import numpy as np
 
-        blank = np.zeros((128, 128, 3), dtype=np.uint8)
-        img_b64, _, model_w, model_h, _, _ = self._frame_to_base64(blank)
+        if frame_bgr is None:
+            # 4:3 placeholder matching typical USB camera aspect.
+            blank_h = max(8, int(round(self.resize_width * 0.75)))
+            frame_bgr = np.zeros((blank_h, self.resize_width, 3), dtype=np.uint8)
+
+        img_b64, _, model_w, model_h, _, _ = self._frame_to_base64(frame_bgr)
         payload = {
             "model": self.model,
             "prompt": 'Return JSON only: {"u":null,"v":null}',
@@ -509,34 +513,43 @@ class QwenOllamaClient:
             "keep_alive": self.keep_alive,
             "options": {
                 "temperature": 0,
-                "num_predict": 16,
-                "num_ctx": 512,
+                "num_predict": self.num_predict,
+                "num_ctx": self.num_ctx,
             },
         }
 
         t0 = time.time()
         print(
-            f"[QwenOllama] warmup vision start image={model_w}x{model_h}...",
+            f"[QwenOllama] warmup vision start image={model_w}x{model_h} "
+            f"num_ctx={self.num_ctx} num_predict={self.num_predict}...",
             flush=True,
         )
         data = self._post_generate(payload, timeout=timeout)
         dt = time.time() - t0
         load_ms = data.get("load_duration", 0) / 1e6
+        prompt_eval_ms = data.get("prompt_eval_duration", 0) / 1e6
         print(
             f"[QwenOllama] warmup vision done in {dt:.1f}s "
-            f"(ollama_load_ms={load_ms:.0f})",
+            f"(ollama_load_ms={load_ms:.0f} prompt_eval_ms={prompt_eval_ms:.0f})",
             flush=True,
         )
         return dt
 
-    def warmup_full(self, timeout: Optional[float] = None) -> float:
+    def warmup_full(self, frame_bgr=None, timeout: Optional[float] = None) -> float:
         """Text + vision warmup so the first real infer skips cold-start."""
         t0 = time.time()
         self.warmup(timeout=timeout)
-        self.warmup_vision(timeout=timeout)
+        self.warmup_vision(frame_bgr=frame_bgr, timeout=timeout)
         dt = time.time() - t0
         print(f"[QwenOllama] warmup_full total {dt:.1f}s", flush=True)
         return dt
+
+    def warmup_on_camera_frame(self, frame_bgr, timeout: Optional[float] = None) -> float:
+        """
+        Warm up under the same memory layout as live navigation (camera already running).
+        Uses the actual camera frame and the same resize/ctx settings as infer_navigation.
+        """
+        return self.warmup_full(frame_bgr=frame_bgr, timeout=timeout)
 
     def infer_navigation(self, frame_bgr, instruction: str) -> Dict[str, Any]:
         img_b64, model_bgr, model_w, model_h, sx, sy = self._frame_to_base64(frame_bgr)

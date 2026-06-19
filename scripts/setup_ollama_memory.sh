@@ -30,7 +30,7 @@ text = path.read_text()
 env_lines = {
     'OLLAMA_NUM_PARALLEL': '1',
     'OLLAMA_MAX_LOADED_MODELS': '1',
-    'OLLAMA_KEEP_ALIVE': '2m',
+    'OLLAMA_KEEP_ALIVE': '-1',
     'OLLAMA_HOST': 'http://127.0.0.1:11434',
 }
 for key, val in env_lines.items():
