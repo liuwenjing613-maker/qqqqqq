@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
+"""
+Qwen-only + LiDAR navigation node.
+
+/image_raw + /scan -> Qwen u/v -> point servo -> /cmd_vel.
+This branch does NOT use YOLO-World.
+"""
 import argparse
 import json
 import os
 import sys
 import time
+import subprocess
 from typing import Any, Dict, Optional
 
 import cv2
@@ -17,7 +24,8 @@ from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import String
 
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
-sys.path.append(PROJECT_ROOT)
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
 
 from src.vlm.qwen_ollama_client import QwenOllamaClient
 from src.perception.lidar_depth import LidarDepthEstimator
@@ -28,8 +36,15 @@ DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "configs/qwen_lidar_nav.yaml")
 
 
 def load_yaml(path: str) -> Dict[str, Any]:
-    with open(os.path.expanduser(path), "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    path = os.path.expanduser(path)
+    with open(path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    if not isinstance(cfg, dict):
+        raise RuntimeError(
+            f"Config file did not parse into a dict: {path}. "
+            "Your YAML may have been compressed into one commented line."
+        )
+    return cfg
 
 
 class RunQwenLidarNav(Node):
@@ -38,9 +53,16 @@ class RunQwenLidarNav(Node):
 
         self.instruction = instruction
         self.cfg = cfg
-        self.skip_warmup = skip_warmup
+        self.skip_warmup = bool(skip_warmup)
+        self.require_lidar = bool(cfg.get("require_lidar", True))
+        self.recover_on_timeout = bool(cfg.get("recover_on_timeout", True))
+        self.recover_script = os.path.expanduser(str(cfg.get(
+            "recover_script",
+            os.path.join(PROJECT_ROOT, "scripts/ollama_recover.sh"),
+        )))
+
         self.qwen_warmup_pending = (
-            not skip_warmup and bool(cfg.get("qwen_warmup_on_first_frame", True))
+            not self.skip_warmup and bool(cfg.get("qwen_warmup_on_first_frame", True))
         )
 
         self.image_topic = cfg["image_topic"]
@@ -53,8 +75,9 @@ class RunQwenLidarNav(Node):
         self.image_height = int(cfg["image_height"])
 
         self.bridge = CvBridge()
-        self.latest_frame = None
-        self.latest_scan = None
+        self.latest_frame: Optional[Any] = None
+        self.latest_scan: Optional[LaserScan] = None
+        self.last_scan_time: Optional[float] = None
 
         self.query_busy = False
         self.step_count = 0
@@ -82,57 +105,60 @@ class RunQwenLidarNav(Node):
         self.arrive_required_count = int(cfg["arrive_required_count"])
         self.min_forward_bursts_before_arrive = int(cfg["min_forward_bursts_before_arrive"])
 
-        self.debug_dir = os.path.join(PROJECT_ROOT, cfg.get("debug_dir", "data/images/qwen_lidar_debug"))
+        self.max_scan_age_sec = float(cfg.get("max_scan_age_sec", 1.5))
+        self.timeout_backoff_sec = float(cfg.get("timeout_backoff_sec", 8.0))
+        self.lidar_wait_backoff_sec = float(cfg.get("lidar_wait_backoff_sec", 1.0))
+
+        debug_dir_cfg = cfg.get("debug_dir", "data/images/qwen_lidar_debug")
+        self.debug_dir = debug_dir_cfg if os.path.isabs(debug_dir_cfg) else os.path.join(PROJECT_ROOT, debug_dir_cfg)
         self.save_debug = bool(cfg.get("save_debug", True))
         if self.save_debug:
             os.makedirs(self.debug_dir, exist_ok=True)
 
         self.qwen = QwenOllamaClient(
             model=cfg["model"],
-            timeout=cfg["qwen_timeout_sec"],
-            resize_width=cfg["qwen_resize_width"],
-            jpeg_quality=cfg.get("qwen_jpeg_quality", 60),
-            num_predict=cfg.get("qwen_num_predict", 64),
-            num_ctx=cfg.get("qwen_num_ctx", 768),
-            keep_alive=cfg.get("qwen_keep_alive", "1h"),
+            timeout=float(cfg["qwen_timeout_sec"]),
+            resize_width=int(cfg["qwen_resize_width"]),
+            jpeg_quality=int(cfg.get("qwen_jpeg_quality", 45)),
+            num_predict=int(cfg.get("qwen_num_predict", 16)),
+            num_ctx=int(cfg.get("qwen_num_ctx", 256)),
+            keep_alive=cfg.get("qwen_keep_alive", -1),
             coord_mode=cfg.get("qwen_coord_mode", "norm1000"),
             debug_dir=self.debug_dir,
             save_debug=self.save_debug,
+            min_confidence=float(cfg.get("min_confidence", 0.0)),
         )
 
         self.lidar = LidarDepthEstimator(
-            min_range=cfg["lidar_min_range"],
-            max_range=cfg["lidar_max_range"],
-            front_deg=cfg["lidar_front_deg"],
-            target_window_deg=cfg["lidar_target_window_deg"],
-            camera_hfov_deg=cfg["camera_hfov_deg"],
-            camera_lidar_yaw_offset_deg=cfg["camera_lidar_yaw_offset_deg"],
+            min_range=float(cfg["lidar_min_range"]),
+            max_range=float(cfg["lidar_max_range"]),
+            front_deg=float(cfg["lidar_front_deg"]),
+            target_window_deg=float(cfg["lidar_target_window_deg"]),
+            camera_hfov_deg=float(cfg["camera_hfov_deg"]),
+            camera_lidar_yaw_offset_deg=float(cfg["camera_lidar_yaw_offset_deg"]),
         )
 
         self.servo = QwenLidarPointServo(
             image_width=self.image_width,
-            kp_turn=cfg["kp_turn"],
-            max_wz=cfg["max_wz"],
-            wz_deadzone=cfg["wz_deadzone"],
-            cmd_wz_deadzone=cfg["cmd_wz_deadzone"],
-            turn_threshold=cfg["turn_threshold"],
-            forward_turn_scale=cfg["forward_turn_scale"],
-            max_vx=cfg["max_vx"],
-            mid_vx=cfg["mid_vx"],
-            slow_vx=cfg["slow_vx"],
-            min_vx=cfg["min_vx"],
-            emergency_stop_distance=cfg["emergency_stop_distance"],
-            hard_stop_distance=cfg["hard_stop_distance"],
-            slow_distance=cfg["slow_distance"],
-            normal_distance=cfg["normal_distance"],
+            require_lidar=self.require_lidar,
+            kp_turn=float(cfg["kp_turn"]),
+            max_wz=float(cfg["max_wz"]),
+            wz_deadzone=float(cfg["wz_deadzone"]),
+            cmd_wz_deadzone=float(cfg["cmd_wz_deadzone"]),
+            turn_threshold=float(cfg["turn_threshold"]),
+            forward_turn_scale=float(cfg["forward_turn_scale"]),
+            max_vx=float(cfg["max_vx"]),
+            mid_vx=float(cfg["mid_vx"]),
+            slow_vx=float(cfg["slow_vx"]),
+            min_vx=float(cfg["min_vx"]),
+            emergency_stop_distance=float(cfg["emergency_stop_distance"]),
+            hard_stop_distance=float(cfg["hard_stop_distance"]),
+            slow_distance=float(cfg["slow_distance"]),
+            normal_distance=float(cfg["normal_distance"]),
         )
 
-        self.image_sub = self.create_subscription(
-            Image, self.image_topic, self.image_callback, qos_profile_sensor_data
-        )
-        self.scan_sub = self.create_subscription(
-            LaserScan, self.scan_topic, self.scan_callback, qos_profile_sensor_data
-        )
+        self.image_sub = self.create_subscription(Image, self.image_topic, self.image_callback, qos_profile_sensor_data)
+        self.scan_sub = self.create_subscription(LaserScan, self.scan_topic, self.scan_callback, qos_profile_sensor_data)
 
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
         self.json_pub = self.create_publisher(String, self.json_topic, 10)
@@ -141,51 +167,66 @@ class RunQwenLidarNav(Node):
         self.create_timer(0.05, self.control_timer_cb)
         self.create_timer(0.20, self.decision_timer_cb)
 
-        self.get_logger().info("===== QWEN + LIDAR NAV START =====")
+        self.get_logger().info("===== QWEN-ONLY + LIDAR NAV START =====")
         self.get_logger().info(f"instruction={instruction}")
-        self.get_logger().info(f"image_topic={self.image_topic} scan_topic={self.scan_topic}")
+        self.get_logger().info(f"image_topic={self.image_topic} scan_topic={self.scan_topic} cmd_topic={self.cmd_topic}")
+        self.get_logger().info(
+            "qwen params: "
+            f"w={cfg['qwen_resize_width']} q={cfg.get('qwen_jpeg_quality', 45)} "
+            f"np={cfg.get('qwen_num_predict', 16)} ctx={cfg.get('qwen_num_ctx', 256)} "
+            f"timeout={cfg['qwen_timeout_sec']}s keep_alive={cfg.get('qwen_keep_alive', -1)}"
+        )
+
         if self.qwen_warmup_pending:
-            self.get_logger().info(
-                "waiting for first camera frame, then aligned Qwen warmup (camera-on mode)..."
-            )
+            self.get_logger().info("waiting for first camera frame, then aligned Qwen warmup...")
         elif self.skip_warmup:
-            self.get_logger().warn(
-                "warmup skipped (--no-warmup); first infer may be very slow on 7GB boards"
-            )
+            self.get_logger().warn("warmup skipped; first infer may be very slow on RDK X5")
 
     def _sync_image_geometry(self, frame) -> None:
         frame_h, frame_w = frame.shape[:2]
         if frame_w != self.image_width or frame_h != self.image_height:
             self.get_logger().warn(
-                f"frame size mismatch config={self.image_width}x{self.image_height}, "
+                f"frame size mismatch current={self.image_width}x{self.image_height}, "
                 f"actual={frame_w}x{frame_h}; using actual"
             )
-            self.image_width = frame_w
-            self.image_height = frame_h
+            self.image_width = int(frame_w)
+            self.image_height = int(frame_h)
             self.servo.update_image_width(frame_w)
 
     def _run_camera_aligned_warmup(self, frame) -> bool:
         self.get_logger().info(
-            f"camera frame ready ({frame.shape[1]}x{frame.shape[0]}), "
-            "running aligned Qwen warmup with camera already on..."
+            f"camera frame ready ({frame.shape[1]}x{frame.shape[0]}), running aligned Qwen warmup..."
         )
         try:
-            dt = self.qwen.warmup_on_camera_frame(frame, timeout=self.cfg["qwen_timeout_sec"])
+            timeout = float(self.cfg.get("qwen_warmup_timeout_sec", self.cfg["qwen_timeout_sec"]))
+            dt = self.qwen.warmup_on_camera_frame(frame, timeout=timeout)
             self.get_logger().info(f"aligned Qwen warmup done in {dt:.1f}s")
             return True
         except Exception as e:
             self.get_logger().error(f"aligned Qwen warmup failed: {repr(e)}")
             return False
 
+    def _maybe_recover_ollama(self) -> None:
+        if not self.recover_on_timeout:
+            return
+        if not os.path.exists(self.recover_script):
+            self.get_logger().warn(f"recover script not found, skip: {self.recover_script}")
+            return
+        self.get_logger().warn(f"running Ollama recover script: {self.recover_script}")
+        try:
+            subprocess.run(["bash", self.recover_script], timeout=30, check=False)
+        except Exception as e:
+            self.get_logger().error(f"ollama recover failed: {repr(e)}")
+
     def image_callback(self, msg: Image):
         try:
-            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-            self.latest_frame = frame
+            self.latest_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as e:
             self.get_logger().error(f"cv_bridge failed: {repr(e)}")
 
     def scan_callback(self, msg: LaserScan):
         self.latest_scan = msg
+        self.last_scan_time = time.time()
         self.lidar.update_scan(msg)
 
     def publish_stop(self):
@@ -209,21 +250,9 @@ class RunQwenLidarNav(Node):
         usable = bool(result.get("usable", result.get("_point_valid", False)))
         u = result.get("u")
         v = result.get("v")
-
         if usable and u is not None and v is not None:
-            return {
-                "visible": True,
-                "u": float(u),
-                "v": float(v),
-                "cx": float(u),
-            }
-
-        return {
-            "visible": False,
-            "u": u,
-            "v": v,
-            "reason": result.get("_coord_reason", "no_valid_uv"),
-        }
+            return {"visible": True, "u": float(u), "v": float(v), "cx": float(u)}
+        return {"visible": False, "u": u, "v": v, "reason": result.get("_coord_reason", "no_valid_uv")}
 
     def _scan_cmd(self) -> Twist:
         msg = Twist()
@@ -232,40 +261,46 @@ class RunQwenLidarNav(Node):
         self.scan_direction *= -1.0
         return msg
 
+    def _scan_is_fresh(self) -> bool:
+        if self.latest_scan is None or self.last_scan_time is None:
+            return False
+        return (time.time() - self.last_scan_time) <= self.max_scan_age_sec
+
     def _check_arrive(self, target: Dict[str, Any], front_distance: Optional[float], target_distance: Optional[float]) -> bool:
         if not target.get("visible", False):
             self.arrive_count = 0
             return False
-
         u = target.get("u")
         if u is None:
             self.arrive_count = 0
             return False
-
         center = self.image_width / 2.0
         centered = abs(float(u) - center) <= self.center_arrive_px
-
         depth_used = target_distance if target_distance is not None else front_distance
         close_enough = depth_used is not None and depth_used <= self.arrive_distance
-
         moved_enough = self.forward_burst_count >= self.min_forward_bursts_before_arrive
-
         if centered and close_enough and moved_enough:
             self.arrive_count += 1
         else:
             self.arrive_count = 0
-
         return self.arrive_count >= self.arrive_required_count
 
     def _publish_json(self, result: Dict[str, Any], state: str, lidar_state: Dict[str, Any]):
         payload = {
             "u": result.get("u"),
             "v": result.get("v"),
+            "raw_u": result.get("_raw_u"),
+            "raw_v": result.get("_raw_v"),
+            "usable": bool(result.get("usable", result.get("_point_valid", False))),
             "state": state,
             "front_distance": lidar_state.get("front_distance"),
             "target_distance": lidar_state.get("target_distance"),
             "target_angle_deg": lidar_state.get("target_angle_deg"),
             "latency_sec": result.get("_latency_sec"),
+            "ollama_total_ms": result.get("_ollama_total_ms"),
+            "ollama_load_ms": result.get("_ollama_load_ms"),
+            "ollama_prompt_eval_ms": result.get("_ollama_prompt_eval_ms"),
+            "ollama_eval_ms": result.get("_ollama_eval_ms"),
         }
         msg = String()
         msg.data = json.dumps(payload, ensure_ascii=False)
@@ -276,16 +311,14 @@ class RunQwenLidarNav(Node):
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.state_pub.publish(msg)
 
-    def _draw_debug(self, frame, target, servo_res, action: str):
+    def _draw_debug(self, frame, target: Dict[str, Any], servo_res, action: str):
         if not self.save_debug:
             return
-
         vis = frame.copy()
         u, v = target.get("u"), target.get("v")
         if u is not None and v is not None:
             cv2.drawMarker(vis, (int(u), int(v)), (0, 0, 255), cv2.MARKER_CROSS, 24, 2)
             cv2.circle(vis, (int(u), int(v)), 8, (0, 255, 0), 2)
-
         lines = [
             f"step={self.step_count} action={action}",
             f"u={u} v={v} state={servo_res.state}",
@@ -293,20 +326,19 @@ class RunQwenLidarNav(Node):
             f"front={servo_res.front_distance} target_d={servo_res.target_distance}",
             f"reason={servo_res.reason}",
         ]
-
         y = 24
         for line in lines:
             cv2.putText(vis, line, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
             y += 24
-
-        path = os.path.join(self.debug_dir, f"qwen_lidar_{self.step_count:04d}_{action}.jpg")
+        os.makedirs(self.debug_dir, exist_ok=True)
+        safe_action = "".join(c if c.isalnum() or c in "_-" else "_" for c in action)
+        path = os.path.join(self.debug_dir, f"qwen_lidar_{self.step_count:04d}_{safe_action}.jpg")
         cv2.imwrite(path, vis)
 
     def decision_timer_cb(self):
         if self.success:
             self.publish_stop()
             return
-
         now = time.time()
         if self.query_busy or self.latest_frame is None:
             return
@@ -319,7 +351,8 @@ class RunQwenLidarNav(Node):
             self.qwen_warmup_pending = False
             self.query_busy = False
             if not ok:
-                self.next_query_time = time.time() + 10.0
+                self.next_query_time = time.time() + self.timeout_backoff_sec
+                self._maybe_recover_ollama()
             return
 
         if now < self.next_allowed_action_time or now < self.next_query_time:
@@ -331,9 +364,21 @@ class RunQwenLidarNav(Node):
             self.success = True
             return
 
+        if self.require_lidar and not self._scan_is_fresh():
+            self.publish_stop()
+            self.get_logger().warn("waiting for fresh /scan, motion disabled")
+            self._publish_state({
+                "step": self.step_count,
+                "action": "WAIT_LIDAR",
+                "success": self.success,
+                "lidar_valid": False,
+                "lidar_reason": "no_fresh_scan",
+            })
+            self.next_query_time = time.time() + self.lidar_wait_backoff_sec
+            return
+
         self.query_busy = True
         self.step_count += 1
-
         frame = self.latest_frame.copy()
         self._sync_image_geometry(frame)
 
@@ -342,39 +387,64 @@ class RunQwenLidarNav(Node):
         except Exception as e:
             self.get_logger().error(f"Qwen infer failed: {repr(e)}")
             self.publish_stop()
-            self.next_query_time = time.time() + 10.0
+            self.next_query_time = time.time() + self.timeout_backoff_sec
             self.query_busy = False
+            self._maybe_recover_ollama()
             return
 
         target = self._parse_qwen_point(result)
         depth_state = self.lidar.estimate_for_point(target.get("u"), self.image_width)
 
+        if self.require_lidar and depth_state.front_distance is None:
+            self.publish_stop()
+            action = "WAIT_LIDAR_VALID"
+            servo_res = self.servo.stop_result(action, depth_state.reason, depth_state.front_distance, depth_state.target_distance)
+            lidar_payload = {
+                "front_distance": depth_state.front_distance,
+                "target_distance": depth_state.target_distance,
+                "target_angle_deg": depth_state.target_angle_deg,
+                "lidar_valid": depth_state.valid,
+                "lidar_reason": depth_state.reason,
+            }
+            self._publish_json(result, action, lidar_payload)
+            self._publish_state({
+                "step": self.step_count,
+                "action": action,
+                "success": self.success,
+                "servo_state": servo_res.state,
+                "cmd_vx": 0.0,
+                "cmd_wz": 0.0,
+                **lidar_payload,
+            })
+            self.next_query_time = time.time() + self.lidar_wait_backoff_sec
+            self.query_busy = False
+            return
+
         action = "STOP_OBSERVE"
-        servo_res = self.servo.compute_cmd(
-            target,
-            front_distance=depth_state.front_distance,
-            target_distance=depth_state.target_distance,
-        )
+        servo_res = self.servo.compute_cmd(target, depth_state.front_distance, depth_state.target_distance)
 
         if self._check_arrive(target, depth_state.front_distance, depth_state.target_distance):
             self.publish_stop()
             self.success = True
             action = "ARRIVE_SUCCESS"
-
         elif target.get("visible", False):
             self.publish_cmd_burst(servo_res.cmd, self.servo_burst_sec, self.observe_stop_sec)
             action = servo_res.state
             if servo_res.state in ("FORWARD", "FORWARD_STEER") and servo_res.cmd.linear.x > 0.0:
                 self.forward_burst_count += 1
             self.lost_scan_count = 0
-
         else:
-            # Qwen 没给点：小角度扫描
             self.arrive_count = 0
             self.lost_scan_count += 1
-            scan_cmd = self._scan_cmd()
-            self.publish_cmd_burst(scan_cmd, self.scan_burst_sec, self.scan_observe_sec)
-            action = "SEARCH_SCAN"
+            if self.lost_scan_count > int(self.cfg.get("lost_scan_max", 8)):
+                self.publish_stop()
+                action = "LOST_STOP"
+                servo_res = self.servo.stop_result(action, "lost_scan_max_reached", depth_state.front_distance, depth_state.target_distance)
+            else:
+                scan_cmd = self._scan_cmd()
+                self.publish_cmd_burst(scan_cmd, self.scan_burst_sec, self.scan_observe_sec)
+                action = "SEARCH_SCAN"
+                servo_res = self.servo.scan_result(scan_cmd, depth_state.front_distance, depth_state.target_distance, "qwen_no_valid_point")
 
         lidar_payload = {
             "front_distance": depth_state.front_distance,
@@ -383,7 +453,6 @@ class RunQwenLidarNav(Node):
             "lidar_valid": depth_state.valid,
             "lidar_reason": depth_state.reason,
         }
-
         self._publish_json(result, action, lidar_payload)
         self._publish_state({
             "step": self.step_count,
@@ -391,21 +460,19 @@ class RunQwenLidarNav(Node):
             "success": self.success,
             "forward_burst_count": self.forward_burst_count,
             "arrive_count": self.arrive_count,
+            "lost_scan_count": self.lost_scan_count,
             "servo_state": servo_res.state,
             "cmd_vx": servo_res.cmd.linear.x,
             "cmd_wz": servo_res.cmd.angular.z,
             **lidar_payload,
         })
-
         self.get_logger().info(
-            f"step={self.step_count} action={action} "
-            f"u={result.get('u')} v={result.get('v')} "
+            f"step={self.step_count} action={action} u={result.get('u')} v={result.get('v')} "
             f"front={depth_state.front_distance} target_d={depth_state.target_distance} "
-            f"servo={servo_res.state} vx={servo_res.cmd.linear.x:.3f} wz={servo_res.cmd.angular.z:+.3f}"
+            f"servo={servo_res.state} vx={servo_res.cmd.linear.x:.3f} wz={servo_res.cmd.angular.z:+.3f} "
+            f"latency={result.get('_latency_sec')}"
         )
-
         self._draw_debug(frame, target, servo_res, action)
-
         self.next_query_time = time.time() + self.qwen_interval_sec
         self.query_busy = False
 
@@ -423,10 +490,8 @@ def main():
     args = parser.parse_args()
 
     cfg = load_yaml(args.config)
-
     rclpy.init()
     node = RunQwenLidarNav(args.instruction, cfg, skip_warmup=args.no_warmup)
-
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

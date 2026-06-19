@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+"""LiDAR helper for Qwen-only navigation."""
 import math
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
 
 import numpy as np
 from sensor_msgs.msg import LaserScan
@@ -17,22 +18,14 @@ class LidarDepthState:
 
 
 class LidarDepthEstimator:
-    """
-    将 2D LaserScan 近似为：
-    - 正前方距离 front_distance
-    - 图像横向 u 对应方向的 target_distance
-
-    注意：这不是像素级深度，只是水平角方向距离。
-    """
-
     def __init__(
         self,
-        min_range: float = 0.08,
-        max_range: float = 6.0,
-        front_deg: float = 18.0,
-        target_window_deg: float = 8.0,
-        camera_hfov_deg: float = 70.0,
-        camera_lidar_yaw_offset_deg: float = 0.0,
+        min_range=0.08,
+        max_range=6.0,
+        front_deg=18.0,
+        target_window_deg=8.0,
+        camera_hfov_deg=70.0,
+        camera_lidar_yaw_offset_deg=0.0,
     ):
         self.min_range = float(min_range)
         self.max_range = float(max_range)
@@ -45,32 +38,32 @@ class LidarDepthEstimator:
     def update_scan(self, scan: LaserScan) -> None:
         self.latest_scan = scan
 
+    @staticmethod
+    def _angle_diff(a: float, b: float) -> float:
+        return math.atan2(math.sin(a - b), math.cos(a - b))
+
     def _valid_ranges_near_angle(self, angle_rad: float, window_deg: float) -> List[float]:
         scan = self.latest_scan
         if scan is None:
             return []
-
-        window_rad = math.radians(window_deg)
-        values = []
-
+        window_rad = math.radians(float(window_deg))
         angle_min = float(scan.angle_min)
         angle_inc = float(scan.angle_increment)
-
         if abs(angle_inc) < 1e-9:
             return []
-
+        values = []
         for i, r in enumerate(scan.ranges):
-            if not math.isfinite(r):
+            try:
+                rv = float(r)
+            except Exception:
                 continue
-            if r < self.min_range or r > self.max_range:
+            if not math.isfinite(rv):
                 continue
-
+            if rv < self.min_range or rv > self.max_range:
+                continue
             a = angle_min + i * angle_inc
-            # wrap 到 [-pi, pi]
-            da = math.atan2(math.sin(a - angle_rad), math.cos(a - angle_rad))
-            if abs(da) <= window_rad:
-                values.append(float(r))
-
+            if abs(self._angle_diff(a, angle_rad)) <= window_rad:
+                values.append(rv)
         return values
 
     def _median_distance(self, angle_deg: float, window_deg: float) -> Optional[float]:
@@ -83,33 +76,16 @@ class LidarDepthEstimator:
         return self._median_distance(0.0, self.front_deg)
 
     def pixel_u_to_angle_deg(self, u: float, image_width: int) -> float:
-        # u 在左边为负角，右边为正角。若你的雷达坐标反了，后面把符号反过来。
-        x_norm = (float(u) - image_width / 2.0) / max(1.0, image_width)
-        angle = x_norm * self.camera_hfov_deg + self.camera_lidar_yaw_offset_deg
-        return float(angle)
+        x_norm = (float(u) - float(image_width) / 2.0) / max(1.0, float(image_width))
+        return float(x_norm * self.camera_hfov_deg + self.camera_lidar_yaw_offset_deg)
 
     def estimate_for_point(self, u: Optional[float], image_width: int) -> LidarDepthState:
         if self.latest_scan is None:
             return LidarDepthState(valid=False, reason="no_scan")
-
         front = self.front_distance()
-
         if u is None:
-            return LidarDepthState(
-                front_distance=front,
-                target_distance=None,
-                target_angle_deg=None,
-                valid=front is not None,
-                reason="no_u",
-            )
-
-        angle_deg = self.pixel_u_to_angle_deg(float(u), image_width)
+            return LidarDepthState(front_distance=front, valid=front is not None, reason="no_u")
+        angle_deg = self.pixel_u_to_angle_deg(float(u), int(image_width))
         target = self._median_distance(angle_deg, self.target_window_deg)
-
-        return LidarDepthState(
-            front_distance=front,
-            target_distance=target,
-            target_angle_deg=angle_deg,
-            valid=(front is not None or target is not None),
-            reason="ok" if (front is not None or target is not None) else "no_valid_ranges",
-        )
+        valid = front is not None or target is not None
+        return LidarDepthState(front, target, angle_deg, valid, "ok" if valid else "no_valid_ranges")
