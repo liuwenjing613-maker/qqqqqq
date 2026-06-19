@@ -97,12 +97,12 @@ class YoloLiveBrowserPreview(Node):
         self.last_reject_reason = ""
 
         self.target_voter = MultiFrameTargetVoter(
-            window_size=10,
-            min_votes=3,
-            lost_hold_frames=3,
-            iou_threshold=0.20,
-            center_dist_threshold=0.18,
-            smooth_alpha=0.65,
+            window_size=6,
+            min_votes=2,
+            lost_hold_frames=1,
+            iou_threshold=0.05,
+            center_dist_threshold=0.35,
+            smooth_alpha=0.20,
             image_width=self.image_width,
             image_height=self.image_height,
         )
@@ -309,16 +309,21 @@ class YoloLiveBrowserPreview(Node):
             )
 
         vote_text = ""
+        stale_text = ""
         if mvp_target:
             vote_count = mvp_target.get("vote_count")
             vote_window = mvp_target.get("vote_window")
             vote_reason = mvp_target.get("vote_reason") or mvp_target.get("reason")
-                
+
             if vote_count is not None and vote_window is not None:
                 vote_text = f" vote={vote_count}/{vote_window} vote_reason={vote_reason}"
+            stale_text = (
+                f" stale={mvp_target.get('stale', False)} "
+                f"source={mvp_target.get('source')}"
+            )
 
         lines = [
-            f"YOLO-World LIVE | status={status} raw={len(raw_dets or [])}{vote_text}",
+            f"YOLO-World LIVE | status={status} raw={len(raw_dets or [])}{vote_text}{stale_text}",
             f"target_classes={','.join(self.target_classes) if self.target_classes else 'ALL'}",
             f"min={self.min_score} raw_min={self.raw_min_score} max_area={self.max_area_ratio}",
             f"frames={self.frame_count} dets={self.det_count} mvp_found={self.mvp_found_count}",

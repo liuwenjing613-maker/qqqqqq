@@ -18,7 +18,7 @@ max_area_ratio: 0.24
 # 视觉伺服巡航速度
 # 注意：这是目标可见时的巡航速度，不是启动脉冲
 # -----------------------------
-max_vx: 0.04
+max_vx: 0.004
 max_wz: 0.055
 kp_turn: 0.10
 
@@ -34,7 +34,7 @@ slowdown_area_ratio: 0.07
 # -----------------------------
 # FSM 稳定性
 # -----------------------------
-stable_frames_required: 5
+stable_frames_required: 3
 lost_frames_limit: 20
 
 # -----------------------------
@@ -61,7 +61,7 @@ recovery_observe_frames: 6
 # 底盘串口（Rosmaster M1，全项目唯一入口，改这里即可）
 # 确认方法: python3 v0/test_rosmaster_connection.py --port <端口>  正确时 battery>0
 # 常见设备: /dev/ttyUSB0  /dev/ttyUSB1  /dev/myserial  /dev/rosmaster
-chassis_port: /dev/ttyUSB0
+chassis_port: /dev/ttyUSB1
 chassis_max_vx: 0.070
 chassis_max_wz: 0.260
 

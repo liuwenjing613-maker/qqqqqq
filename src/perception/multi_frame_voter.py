@@ -168,6 +168,7 @@ class MultiFrameTargetVoter:
 
         if self.locked_target is not None:
             self.lost_count += 1
+
             if self.lost_count <= self.lost_hold_frames:
                 held = deepcopy(self.locked_target)
                 held["visible"] = True
@@ -176,7 +177,14 @@ class MultiFrameTargetVoter:
                 held["vote_window"] = self.window_size
                 held["vote_reason"] = "hold_last_target"
                 held["reason"] = "hold_last_target"
+                held["stale"] = True
+                held["source"] = "held_old_target"
                 return held
+
+            # 超过保持帧数后，释放旧目标，允许重新识别
+            self.locked_target = None
+            self.history.clear()
+            self.lost_count = 0
 
         return {
             "visible": False,
@@ -185,6 +193,8 @@ class MultiFrameTargetVoter:
             "vote_window": self.window_size,
             "reason": "waiting_multiframe_votes",
             "vote_reason": "waiting_multiframe_votes",
+            "stale": False,
+            "source": "no_target",
         }
 
     def _best_voted_candidate(self):
@@ -236,47 +246,42 @@ class MultiFrameTargetVoter:
         return iou >= self.iou_threshold or dist <= self.center_dist_threshold
 
     def _average_cluster(self, cluster):
-        base = deepcopy(max(cluster, key=lambda t: float(t.get("score", 0.0))))
+        """
+        多帧投票只负责确认目标可信；
+        控制和显示用 bbox 必须尽量来自最新一帧，避免小车运动时旧框滞后。
+        """
+        latest = deepcopy(cluster[-1])
 
-        xs, ys, ws, hs = [], [], [], []
-        for t in cluster:
-            x, y, w, h = [float(v) for v in t.get("bbox", [0, 0, 0, 0])]
-            xs.append(x)
-            ys.append(y)
-            ws.append(w)
-            hs.append(h)
-
-        bbox = [
-            int(round(sum(xs) / len(xs))),
-            int(round(sum(ys) / len(ys))),
-            int(round(sum(ws) / len(ws))),
-            int(round(sum(hs) / len(hs))),
-        ]
-
-        base["bbox"] = bbox
-        base["cx"], base["cy"] = _bbox_center(bbox)
-        base["area_ratio"] = _bbox_area_ratio(
-            bbox,
+        bbox = latest.get("bbox", [0, 0, 0, 0])
+        latest["bbox"] = [int(round(float(v))) for v in bbox]
+        latest["cx"], latest["cy"] = _bbox_center(latest["bbox"])
+        latest["area_ratio"] = _bbox_area_ratio(
+            latest["bbox"],
             image_width=self.image_width,
             image_height=self.image_height,
         )
-        base["score"] = max(float(t.get("score", 0.0)) for t in cluster)
-        return base
+
+        # 记录 cluster 里的最高分，但位置使用最新 bbox
+        latest["score"] = max(float(t.get("score", 0.0)) for t in cluster)
+        latest["latest_score"] = float(cluster[-1].get("score", 0.0))
+        latest["stale"] = False
+        latest["source"] = "latest_voted_candidate"
+
+        return latest
 
     def _merge_with_locked(self, candidate, vote_count):
         out = deepcopy(candidate)
 
         if self.locked_target is not None:
             same = self._is_same_object(self.locked_target, candidate)
-            old_score = float(self.locked_target.get("score", 0.0))
-            new_score = float(candidate.get("score", 0.0))
 
-            # If new voted target is far away and not much stronger, keep locked target.
             if not same:
-    # 如果新目标已经通过多帧投票，就允许切换。
-    # 不要因为旧目标 score 高就一直锁死旧目标。
+                # 新候选已经通过多帧投票，允许切换。
+                # 不要因为旧目标 score 高就一直锁死旧目标。
                 out["vote_reason"] = "switch_to_voted_candidate"
                 out["reason"] = "switch_to_voted_candidate"
+                out["stale"] = False
+                out["source"] = "latest_voted_candidate"
 
             if same:
                 smoothed_bbox = _smooth_bbox(
@@ -296,6 +301,13 @@ class MultiFrameTargetVoter:
         out["voted"] = True
         out["vote_count"] = vote_count
         out["vote_window"] = self.window_size
-        out["vote_reason"] = "confirmed_by_multiframe_votes"
-        out["reason"] = "confirmed_by_multiframe_votes"
+        out["stale"] = False
+
+        if "vote_reason" not in out:
+            out["vote_reason"] = "confirmed_by_multiframe_votes"
+        if "reason" not in out:
+            out["reason"] = out["vote_reason"]
+        if "source" not in out:
+            out["source"] = "latest_voted_candidate"
+
         return out

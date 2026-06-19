@@ -20,7 +20,8 @@ sys.path.append(PROJECT_ROOT)
 
 from src.vlm.mock_qwen import mock_qwen_parse
 from src.perception.target_backend_red import find_red_target
-from src.perception.target_backend_yolo import extract_yolo_target
+from src.perception.multi_frame_voter import MultiFrameTargetVoter
+from src.perception.target_backend_yolo import extract_yolo_target, parse_target_classes
 from src.perception.stamp_sync import StampSyncBuffer
 from src.config.mvp_tune import DEFAULT_TUNE_PATH, load_mvp_tune
 from src.control.mvp_visual_servo import MVPVisualServo
@@ -71,6 +72,13 @@ class RunMVPTask(Node):
         recovery_observe_frames=6,
         stable_frames_required=3,
         lost_frames_limit=15,
+        target_classes_override=None,
+        yolo_prompts_override=None,
+        publish_target_words=True,
+        use_multi_frame_voter=False,
+        vote_window_size=6,
+        vote_min_votes=2,
+        vote_lost_hold_frames=1,
     ):
         super().__init__("run_mvp_task")
 
@@ -117,8 +125,27 @@ class RunMVPTask(Node):
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
 
         self.qwen_result = mock_qwen_parse(self.instruction)
-        self.yolo_prompts = list(self.qwen_result.get("possible_yolo_world_prompts", []))
-        self.target_classes = list(self.qwen_result.get("target_classes", []))
+        if yolo_prompts_override is not None:
+            self.yolo_prompts = parse_target_classes(yolo_prompts_override)
+        else:
+            self.yolo_prompts = list(self.qwen_result.get("possible_yolo_world_prompts", []))
+        if target_classes_override is not None:
+            self.target_classes = parse_target_classes(target_classes_override)
+        else:
+            self.target_classes = list(self.qwen_result.get("target_classes", []))
+        self.enable_target_words_pub = bool(publish_target_words)
+        self.target_voter = None
+        if use_multi_frame_voter:
+            self.target_voter = MultiFrameTargetVoter(
+                window_size=int(vote_window_size),
+                min_votes=int(vote_min_votes),
+                lost_hold_frames=int(vote_lost_hold_frames),
+                iou_threshold=0.05,
+                center_dist_threshold=0.35,
+                smooth_alpha=0.20,
+                image_width=self.image_width,
+                image_height=self.image_height,
+            )
         self.det_buffer = StampSyncBuffer(
             max_len=sync_buffer_len,
             max_delta_sec=self.sync_max_delta_sec,
@@ -144,13 +171,19 @@ class RunMVPTask(Node):
                 self.det_callback,
                 10,
             )
-            self.target_words_pub = self.create_publisher(
-                String,
-                self.target_words_topic,
-                10,
-            )
-            self.create_timer(1.0, self.publish_target_words)
-            self.publish_target_words()
+            if self.enable_target_words_pub:
+                self.target_words_pub = self.create_publisher(
+                    String,
+                    self.target_words_topic,
+                    10,
+                )
+                self.create_timer(1.0, self.publish_target_words)
+                self.publish_target_words()
+            else:
+                self.target_words_pub = None
+                self.get_logger().info(
+                    "target_words publish disabled (external publisher expected)"
+                )
 
         self.servo = MVPVisualServo(
             image_width=self.image_width,
@@ -216,6 +249,13 @@ class RunMVPTask(Node):
             self.get_logger().info(
                 f"stamp_sync max_delta={self.sync_max_delta_sec}s buffer={sync_buffer_len}"
             )
+            if self.target_voter is not None:
+                self.get_logger().info(
+                    "multi_frame_voter: enabled "
+                    f"window={self.target_voter.window_size} "
+                    f"min_votes={self.target_voter.min_votes} "
+                    f"lost_hold={self.target_voter.lost_hold_frames}"
+                )
         if self.save_bbox:
             self.get_logger().info(
                 f"save_bbox_dir={self.save_bbox_dir} interval={self.save_bbox_interval}"
@@ -224,7 +264,11 @@ class RunMVPTask(Node):
         self.get_logger().info(json.dumps(self.qwen_result, ensure_ascii=False))
 
     def publish_target_words(self):
-        if self.backend != "yolo_world" or not self.yolo_prompts:
+        if (
+            self.backend != "yolo_world"
+            or not self.enable_target_words_pub
+            or not self.yolo_prompts
+        ):
             return
         msg = String()
         msg.data = ",".join(self.yolo_prompts)
@@ -264,6 +308,11 @@ class RunMVPTask(Node):
                 f"red_ratio={target.get('red_ratio', 0.0):.4f}"
             )
 
+    def _is_stale_control_target(self, target):
+        if not target or not target.get("visible", False):
+            return False
+        return bool(target.get("stale", False)) or target.get("vote_reason") == "hold_last_target"
+
     def resolve_target(self, frame, image_stamp=None):
         if self.backend == "red":
             return find_red_target(frame), frame
@@ -294,6 +343,8 @@ class RunMVPTask(Node):
             min_red_ratio=self.min_red_ratio,
             require_red_verify=self.require_red_verify,
         )
+        if self.target_voter is not None:
+            target = self.target_voter.update(target)
         self._log_mvp_target_diagnostic(target)
         return target, matched_frame
 
@@ -429,6 +480,23 @@ class RunMVPTask(Node):
         self.frame_buffer.push(msg.header.stamp, frame)
 
         target, vis_frame = self.resolve_target(frame, msg.header.stamp)
+
+        if self._is_stale_control_target(target):
+            self.get_logger().warn(
+                "[SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. "
+                f"reason={target.get('reason')} "
+                f"vote_reason={target.get('vote_reason')} "
+                f"source={target.get('source')} "
+                f"bbox={target.get('bbox')}"
+            )
+            self.publish_stop()
+            self.get_logger().info(
+                f"frame={self.frame_count} fsm={self.fsm.state} action=STALE_TARGET_STOP "
+                f"bbox={target.get('bbox')} cx={target.get('cx', 0.0):.0f} "
+                f"area={target.get('area_ratio', 0.0):.3f} "
+                f"vote_reason={target.get('vote_reason')}"
+            )
+            return
 
         servo_state, cmd = self.servo.compute_cmd(target)
 
@@ -577,6 +645,29 @@ def main():
         help="Save annotated snapshots to this dir (e.g. check_bbox); set to enable",
     )
     parser.add_argument("--save-bbox-interval", type=int, default=15)
+    parser.add_argument(
+        "--target-classes",
+        default=None,
+        help="Override mock_qwen target_classes, e.g. bottle",
+    )
+    parser.add_argument(
+        "--yolo-prompts",
+        default=None,
+        help="Override YOLO /target_words prompts, e.g. bottle",
+    )
+    parser.add_argument(
+        "--no-publish-target-words",
+        action="store_true",
+        help="Do not publish /target_words (use external ros2 topic pub)",
+    )
+    parser.add_argument(
+        "--multi-frame-voter",
+        action="store_true",
+        help="Use MultiFrameTargetVoter (same as live preview post-process)",
+    )
+    parser.add_argument("--vote-window-size", type=int, default=6)
+    parser.add_argument("--vote-min-votes", type=int, default=2)
+    parser.add_argument("--vote-lost-hold-frames", type=int, default=1)
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -621,6 +712,13 @@ def main():
         recovery_observe_frames=args.recovery_observe_frames,
         stable_frames_required=args.stable_frames_required,
         lost_frames_limit=args.lost_frames_limit,
+        target_classes_override=args.target_classes,
+        yolo_prompts_override=args.yolo_prompts,
+        publish_target_words=not args.no_publish_target_words,
+        use_multi_frame_voter=args.multi_frame_voter,
+        vote_window_size=args.vote_window_size,
+        vote_min_votes=args.vote_min_votes,
+        vote_lost_hold_frames=args.vote_lost_hold_frames,
     )
 
     try:
