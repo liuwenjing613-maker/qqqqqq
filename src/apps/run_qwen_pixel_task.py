@@ -90,7 +90,10 @@ class RunQwenPixelTask(Node):
             model=tune["model"],
             timeout=tune["qwen_timeout_sec"],
             resize_width=tune["qwen_resize_width"],
-            keep_alive=tune.get("qwen_keep_alive", "30m"),
+            jpeg_quality=tune.get("qwen_jpeg_quality", 45),
+            num_predict=tune.get("qwen_num_predict", 16),
+            num_ctx=tune.get("qwen_num_ctx", 256),
+            keep_alive=tune.get("qwen_keep_alive", "-1"),
             coord_mode=tune.get("qwen_coord_mode", "norm1000"),
         )
 
@@ -422,7 +425,10 @@ def main():
             model=tune["model"],
             timeout=tune["qwen_timeout_sec"],
             resize_width=tune["qwen_resize_width"],
-            keep_alive=tune.get("qwen_keep_alive", "30m"),
+            jpeg_quality=tune.get("qwen_jpeg_quality", 45),
+            num_predict=tune.get("qwen_num_predict", 16),
+            num_ctx=tune.get("qwen_num_ctx", 256),
+            keep_alive=tune.get("qwen_keep_alive", "-1"),
             coord_mode=tune.get("qwen_coord_mode", "norm1000"),
         )
         print("[run_qwen_pixel_task] warming up Qwen before spin...", flush=True)

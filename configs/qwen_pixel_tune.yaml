@@ -8,9 +8,13 @@ image_width: 1280
 image_height: 720
 qwen_resize_width: 192
 qwen_coord_mode: "norm1000"
-qwen_interval_sec: 240.0
+qwen_interval_sec: 0.5
 qwen_timeout_sec: 900.0
-qwen_keep_alive: "1h"
+qwen_keep_alive: -1
+
+qwen_num_predict: 16
+qwen_num_ctx: 256
+qwen_jpeg_quality: 45
 
 # Qwen 判定
 target_lock_conf: 0.45

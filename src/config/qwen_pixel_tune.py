@@ -59,7 +59,10 @@ def load_qwen_pixel_tune(path: str = DEFAULT_TUNE_PATH) -> Dict[str, Any]:
         "scan_wz": _as_float(raw.get("scan_wz", 0.040), "scan_wz"),
         "scan_burst_sec": _as_float(raw.get("scan_burst_sec", 0.18), "scan_burst_sec"),
         "scan_observe_sec": _as_float(raw.get("scan_observe_sec", 0.50), "scan_observe_sec"),
-    }
+        "qwen_jpeg_quality": _as_int(raw.get("qwen_jpeg_quality", 45), "qwen_jpeg_quality"),
+        "qwen_num_predict": _as_int(raw.get("qwen_num_predict", 16), "qwen_num_predict"),
+        "qwen_num_ctx": _as_int(raw.get("qwen_num_ctx", 256), "qwen_num_ctx"),
+        }
 
 
 if __name__ == "__main__":

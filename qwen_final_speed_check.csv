@@ -1,0 +1,15 @@
+model,width,jpeg_quality,num_predict,num_ctx,coord_mode,repeat_id,ok,usable,latency_sec,u,v,raw_u,raw_v,coord_invalid,coord_reason,orig_w,orig_h,model_w,model_h,scale_x,scale_y,ollama_total_ms,ollama_load_ms,ollama_prompt_eval_ms,ollama_eval_ms,debug_qwen_input,debug_qwen_input_raw_point,debug_orig_mapped_point,raw_json,error
+qwen2.5vl:3b,160,45,12,256,norm1000,0,False,False,484.57693910598755,,,,,,,,,,,,,,,,,,,,{},"No JSON found in model output: {""u"":475,""v"":382"
+qwen2.5vl:3b,160,45,12,256,norm1000,1,False,False,7.130767345428467,,,,,,,,,,,,,,,,,,,,{},"No JSON found in model output: {""u"":475,""v"":625"
+qwen2.5vl:3b,160,45,12,256,norm1000,2,False,False,7.030165433883667,,,,,,,,,,,,,,,,,,,,{},"No JSON found in model output: {""u"":475,""v"":625"
+qwen2.5vl:3b,160,45,12,256,norm1000,3,False,False,6.9955713748931885,,,,,,,,,,,,,,,,,,,,{},"No JSON found in model output: {""u"":475,""v"":625"
+qwen2.5vl:3b,160,45,12,256,norm1000,4,False,False,6.920933485031128,,,,,,,,,,,,,,,,,,,,{},"No JSON found in model output: {""u"":475,""v"":625"
+qwen2.5vl:3b,160,45,12,256,norm1000,5,False,False,7.129295110702515,,,,,,,,,,,,,,,,,,,,{},"No JSON found in model output: {""u"":475,""v"":625"
+qwen2.5vl:3b,160,45,16,256,norm1000,0,True,True,7.722645282745361,607.525,1066.25,475.0,625.0,False,,1280,1707,160,213,8.0,8.014084507042254,7664.641457,2318.973297,332.217,4828.161,,,,"{""u"": 475, ""v"": 625}",
+qwen2.5vl:3b,160,45,16,256,norm1000,1,True,True,7.440754413604736,607.525,1066.25,475.0,625.0,False,,1280,1707,160,213,8.0,8.014084507042254,7378.577409,2314.972299,335.979,4509.845,,,,"{""u"": 475, ""v"": 625}",
+qwen2.5vl:3b,160,45,16,256,norm1000,2,True,True,7.418864011764526,607.525,1066.25,475.0,625.0,False,,1280,1707,160,213,8.0,8.014084507042254,7353.759958,2250.897304,334.766,4576.204,,,,"{""u"": 475, ""v"": 625}",
+qwen2.5vl:3b,160,45,16,256,norm1000,3,True,True,7.7867536544799805,607.525,1066.25,475.0,625.0,False,,1280,1707,160,213,8.0,8.014084507042254,7719.385582,2415.97764,338.691,4797.65,,,,"{""u"": 475, ""v"": 625}",
+qwen2.5vl:3b,160,45,16,256,norm1000,4,True,True,7.8756914138793945,607.525,1066.25,475.0,625.0,False,,1280,1707,160,213,8.0,8.014084507042254,7811.600537,2261.73219,447.471,4935.046,,,,"{""u"": 475, ""v"": 625}",
+qwen2.5vl:3b,160,45,16,256,norm1000,5,True,True,7.534846782684326,607.525,1066.25,475.0,625.0,False,,1280,1707,160,213,8.0,8.014084507042254,7476.842888,2280.175444,411.368,4621.088,,,,"{""u"": 475, ""v"": 625}",
+qwen2.5vl:3b,192,45,12,256,norm1000,0,False,False,900.2074451446533,,,,,,,,,,,,,,,,,,,,{},"Ollama vision timed out after 900s. On RDK X5, qwen2.5vl first infer can take several minutes. Retry with --timeout 900 --prep. If stuck at 'encoding image slice', run bash scripts/ollama_recover.sh"
+qwen2.5vl:3b,192,45,12,256,norm1000,1,False,False,247.46933460235596,,,,,,,,,,,,,,,,,,,,{},"No JSON found in model output: {""u"":475,""v"":382"
