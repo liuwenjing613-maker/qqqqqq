@@ -111,6 +111,7 @@ class YoloLidarFailsafeNav(Node):
         self.last_valid_front_time = 0.0
         self.max_scan_age_sec = float(cfg.get("max_scan_age_sec", 0.8))
         self.front_distance_hold_sec = float(cfg.get("front_distance_hold_sec", 0.5))
+        self.scan_stale_nav_grace_sec = float(cfg.get("scan_stale_nav_grace_sec", 1.2))
 
         self.active_cmd = Twist()
         self.active_cmd_until = 0.0
@@ -123,6 +124,7 @@ class YoloLidarFailsafeNav(Node):
         self.control_rate_hz = float(cfg.get("control_rate_hz", 20.0))
         self.cmd_hold_sec = float(cfg.get("cmd_hold_sec", 0.75))
         self.stop_on_cmd_expire = bool(cfg.get("stop_on_cmd_expire", True))
+        self.cmd_publish_immediate = bool(cfg.get("cmd_publish_immediate", True))
         self.min_drive_vx = float(cfg.get("min_drive_vx", 0.055))
         self.min_turn_wz = float(cfg.get("min_turn_wz", 0.18))
         self.wz_deadband = float(cfg.get("wz_deadband", 0.02))
@@ -215,6 +217,14 @@ class YoloLidarFailsafeNav(Node):
     def has_fresh_scan(self) -> bool:
         return self.free_space.has_scan() and (time.time() - self.last_scan_time <= self.max_scan_age_sec)
 
+    def can_navigate(self) -> bool:
+        """Fresh scan, or recent front distance still trustworthy enough to keep moving."""
+        if self.has_fresh_scan():
+            return True
+        if self.last_valid_front_distance is None:
+            return False
+        return (time.time() - self.last_valid_front_time) <= self.scan_stale_nav_grace_sec
+
     def get_effective_front_distance(self) -> Optional[float]:
         now = time.time()
         if self.latest_front_distance is not None:
@@ -228,20 +238,23 @@ class YoloLidarFailsafeNav(Node):
 
     def apply_motion_deadband(self, cmd: Twist) -> Twist:
         out = Twist()
-        out.linear.x = float(cmd.linear.x)
-        out.angular.z = float(cmd.angular.z)
+        vx = float(cmd.linear.x)
+        wz = float(cmd.angular.z)
 
-        if abs(out.linear.x) > self.vx_deadband:
-            if abs(out.linear.x) < self.min_drive_vx:
-                out.linear.x = math.copysign(self.min_drive_vx, out.linear.x)
-        else:
+        # 严格小于 deadband 才置零；等于 deadband 仍视为有运动意图
+        if abs(vx) < self.vx_deadband:
             out.linear.x = 0.0
-
-        if abs(out.angular.z) > self.wz_deadband:
-            if abs(out.angular.z) < self.min_turn_wz and abs(out.linear.x) < 1e-6:
-                out.angular.z = math.copysign(self.min_turn_wz, out.angular.z)
+        elif abs(vx) < self.min_drive_vx:
+            out.linear.x = math.copysign(self.min_drive_vx, vx)
         else:
+            out.linear.x = vx
+
+        if abs(wz) < self.wz_deadband:
             out.angular.z = 0.0
+        elif abs(wz) < self.min_turn_wz and abs(out.linear.x) < 1e-6:
+            out.angular.z = math.copysign(self.min_turn_wz, wz)
+        else:
+            out.angular.z = wz
 
         return out
 
@@ -252,6 +265,19 @@ class YoloLidarFailsafeNav(Node):
         self.active_cmd_reason = reason
         if abs(cmd.linear.x) > 1e-6 or abs(cmd.angular.z) > 1e-6:
             self.last_nonzero_cmd_time = time.time()
+
+        if not self.cmd_publish_immediate:
+            return
+
+        front = self.get_effective_front_distance()
+        if front is not None and front <= self.emergency_stop_distance:
+            stop = Twist()
+            self.cmd_pub.publish(stop)
+            self.last_cmd = stop
+            return
+
+        self.cmd_pub.publish(cmd)
+        self.last_cmd = cmd
 
     def control_timer_cb(self) -> None:
         now = time.time()
@@ -352,7 +378,7 @@ class YoloLidarFailsafeNav(Node):
             )
             return
 
-        if not self.has_fresh_scan():
+        if not self.can_navigate():
             desired_mode = "WAIT_SCAN"
         else:
             target = self.target_parser.get_target(time.time(), self.image_width, self.image_height)
@@ -374,12 +400,17 @@ class YoloLidarFailsafeNav(Node):
 
         if effective_mode == "WAIT_SCAN":
             self.publish_stop()
-            self.publish_state("WAIT_SCAN", reason="no_scan", fsm_frames=self.fsm_mode_frames)
+            stale = not self.has_fresh_scan()
+            self.publish_state(
+                "WAIT_SCAN",
+                reason="stale_scan" if stale else "no_scan",
+                fsm_frames=self.fsm_mode_frames,
+            )
             return
 
-        if not self.has_fresh_scan():
+        if not self.can_navigate():
             self.publish_stop()
-            self.publish_state("WAIT_SCAN", reason="stale_scan", fsm_frames=self.fsm_mode_frames)
+            self.publish_state("WAIT_SCAN", reason="nav_grace_expired", fsm_frames=self.fsm_mode_frames)
             return
 
         target = self.target_parser.get_target(time.time(), self.image_width, self.image_height)
@@ -491,13 +522,18 @@ class YoloLidarFailsafeNav(Node):
             )
             return
 
+        raw_vx = float(cmd.linear.x)
+        raw_wz = float(cmd.angular.z)
         self.set_active_cmd(cmd, self.cmd_hold_sec, reason="target_track")
         self.publish_point(target.get("u"), target.get("v"), "target", "TARGET_TRACK")
+        applied = self.active_cmd
         self.publish_state(
             "TARGET_TRACK",
             target=target,
             front_distance=front,
-            cmd=cmd,
+            cmd=applied,
+            cmd_raw_vx=raw_vx,
+            cmd_raw_wz=raw_wz,
             reason=servo_state,
             fsm_frames=self.fsm_mode_frames,
             desired_hold=(self.fsm_mode_frames < self.min_state_frames),
@@ -546,6 +582,7 @@ class YoloLidarFailsafeNav(Node):
 
         cmd, mode = self.compute_explore_cmd(wp, front)
         self.set_active_cmd(cmd, self.cmd_hold_sec, reason="free_space_explore")
+        applied = self.active_cmd
         self.publish_point(wp.get("u"), wp.get("v"), "free_space", "FREE_SPACE_EXPLORE")
         self.publish_state(
             "FREE_SPACE_EXPLORE",
@@ -553,7 +590,9 @@ class YoloLidarFailsafeNav(Node):
             front_distance=front,
             heading_deg=wp.get("heading_deg"),
             clearance=wp.get("clearance"),
-            cmd=cmd,
+            cmd=applied,
+            cmd_raw_vx=float(cmd.linear.x),
+            cmd_raw_wz=float(cmd.angular.z),
             reason=f"{mode}; target={target_reason}",
             fsm_frames=self.fsm_mode_frames,
             desired_hold=(self.fsm_mode_frames < self.min_state_frames),

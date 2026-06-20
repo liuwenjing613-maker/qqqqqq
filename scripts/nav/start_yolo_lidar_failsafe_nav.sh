@@ -63,14 +63,26 @@ pkill -f "hobot_usb_cam" || true
 pkill -f "ros2 launch hobot_usb_cam" || true
 sleep 2
 
+topic_is_ready() {
+  local topic="$1"
+  local per_try_sec="$2"
+  local min_msgs="${3:-1}"
+  python3 "$PROJECT_DIR/scripts/lib/wait_ros_topic.py" \
+    --topic "$topic" \
+    --timeout "$per_try_sec" \
+    --min-msgs "$min_msgs" \
+    >/dev/null 2>&1
+}
+
 wait_ros_topic() {
   local topic="$1"
   local label="${2:-$topic}"
   local tries="${3:-20}"
   local per_try_sec="${4:-5}"
+  local min_msgs="${5:-1}"
   local ok=0
   for i in $(seq 1 "$tries"); do
-    if timeout "$per_try_sec" ros2 topic echo "$topic" --once >/dev/null 2>&1; then
+    if topic_is_ready "$topic" "$per_try_sec" "$min_msgs"; then
       echo "  $label OK"
       ok=1
       break
@@ -79,6 +91,20 @@ wait_ros_topic() {
       if ! pgrep -f "hobot_usb_cam" >/dev/null 2>&1; then
         echo "  ERROR: hobot_usb_cam not running (see logs/yolo_failsafe_camera.log)"
         tail -5 logs/yolo_failsafe_camera.log 2>/dev/null || true
+        return 1
+      fi
+    fi
+    if [ "$topic" = "/image_raw" ] || [ "${topic##*/}" = "image_raw" ]; then
+      if ! pgrep -f "compressed_to_raw_image.py" >/dev/null 2>&1; then
+        echo "  ERROR: compressed_to_raw_image not running (see logs/yolo_failsafe_image_raw.log)"
+        tail -8 logs/yolo_failsafe_image_raw.log 2>/dev/null || true
+        return 1
+      fi
+    fi
+    if [ "$topic" = "/scan" ]; then
+      if ! pgrep -f "ydlidar_ros2_driver_node" >/dev/null 2>&1; then
+        echo "  ERROR: ydlidar_ros2_driver_node not running (see logs/yolo_failsafe_scan.log)"
+        tail -8 logs/yolo_failsafe_scan.log 2>/dev/null || true
         return 1
       fi
     fi
@@ -125,28 +151,39 @@ ros2 launch "$PROJECT_DIR/perception/launch/usb_cam.launch.py" \
   > logs/yolo_failsafe_camera.log 2>&1 &
 sleep 5
 
-if ! wait_ros_topic /image "camera /image" 12 5; then
+if ! wait_ros_topic /image "camera /image" 12 8 1; then
   echo "Camera failed. Last log lines:"
   tail -15 logs/yolo_failsafe_camera.log 2>/dev/null || true
   exit 1
 fi
 
-python3 src/perception/compressed_to_raw_image.py \
+python3 "$PROJECT_DIR/src/perception/compressed_to_raw_image.py" \
   --in-topic "$CAMERA_COMPRESSED_TOPIC" \
   --out-topic "$IMAGE_RAW_TOPIC" \
   --max-fps "$IMAGE_RAW_MAX_FPS" \
   > logs/yolo_failsafe_image_raw.log 2>&1 &
-sleep 3
+BRIDGE_PID=$!
+sleep 2
 
-if ! wait_ros_topic "$IMAGE_RAW_TOPIC" "$IMAGE_RAW_TOPIC" 10 5; then
-  echo "Image bridge failed. Last log lines:"
-  tail -10 logs/yolo_failsafe_image_raw.log 2>/dev/null || true
-  exit 1
+if ! wait_ros_topic "$IMAGE_RAW_TOPIC" "$IMAGE_RAW_TOPIC" 15 12 1; then
+  if ! kill -0 "$BRIDGE_PID" 2>/dev/null; then
+    echo "  ERROR: compressed_to_raw_image exited early"
+  fi
+  if grep -q "published $IMAGE_RAW_TOPIC" logs/yolo_failsafe_image_raw.log 2>/dev/null; then
+    echo "  WARN: log shows $IMAGE_RAW_TOPIC publishing; continuing anyway"
+  else
+    echo "Image bridge failed. Last log lines:"
+    tail -10 logs/yolo_failsafe_image_raw.log 2>/dev/null || true
+    exit 1
+  fi
 fi
 
 echo "[3/7] start lidar..."
+pkill -f ydlidar_ros2_driver_node 2>/dev/null || true
+sleep 0.5
+source "$PROJECT_DIR/scripts/lidar/source_ydlidar.sh"
 ros2 launch "$PROJECT_DIR/lidar/launch/tmini_plus.launch.py" > logs/yolo_failsafe_scan.log 2>&1 &
-sleep 3
+sleep 5
 
 echo "[4/7] start YOLO-World (aligned with start_yolo_live_preview.sh)..."
 pkill -f hobot_yolo_world || true
@@ -207,9 +244,13 @@ python3 ros2_bridge/cmd_vel_to_rosmaster.py \
 sleep 1
 
 echo "[7/7] wait for /scan..."
-if ! wait_ros_topic /scan "/scan" 15 5; then
-  echo "Check logs/yolo_failsafe_scan.log"
-  exit 1
+if ! wait_ros_topic /scan "/scan" 15 10 1; then
+  if grep -q "Now lidar is scanning" logs/yolo_failsafe_scan.log 2>/dev/null; then
+    echo "  WARN: /scan wait timed out but driver log OK; continuing"
+  else
+    echo "Check logs/yolo_failsafe_scan.log"
+    exit 1
+  fi
 fi
 
 echo "[P0] starting failsafe nav..."
