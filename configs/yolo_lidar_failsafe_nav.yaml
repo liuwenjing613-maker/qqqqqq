@@ -1,7 +1,7 @@
 # P0 YOLO / YOLO-World + LiDAR failsafe navigation — 唯一主配置文件
 # 相机 / YOLO / bbox bridge / 底盘 / 导航 / Foxglove 均由此文件驱动。
 # 启动: bash scripts/nav/start_yolo_lidar_failsafe_nav.sh [本文件] [instruction覆盖]
-# 板端临时覆盖: CAMERA_DEV=/dev/video1 CHASSIS_PORT=/dev/ttyUSB0 bash scripts/nav/...
+# 稳定版: bash scripts/nav/start_yolo_lidar_stable_nav.sh
 
 # ===== Topics =====
 image_topic: "/image_raw"
@@ -19,11 +19,10 @@ viz_frame_id: "laser"
 viz_markers_topic: "/failsafe_nav/markers"
 viz_debug_image_topic: "/failsafe_nav/debug_image"
 viz_rate_hz: 5.0
-# Low-latency camera: subscribe /image (MJPEG) directly, publish on frame (not /image_raw @ 2fps)
-viz_image_source: "compressed"   # compressed | raw
+viz_image_source: "compressed"
 viz_image_topic: "/image"
 viz_image_max_fps: 15.0
-viz_image_scale: 0.5              # downscale for Foxglove bandwidth (1.0 = full res)
+viz_image_scale: 0.5
 
 # ===== Image geometry =====
 camera_width: 640
@@ -34,7 +33,7 @@ image_height: 480
 camera_hfov_deg: 70.0
 camera_lidar_yaw_offset_deg: 0.0
 
-# ===== Target words (aligned with start_yolo_live_preview.sh) =====
+# ===== Target words =====
 instruction: "bottle"
 
 target_words:
@@ -51,7 +50,7 @@ publish_target_words: true
 target_words_publish_period_sec: 3.0
 
 # ===== Target parser =====
-target_min_score: 0.008
+target_min_score: 0.002
 target_stable_frames: 1
 target_lost_timeout_sec: 0.8
 target_memory_sec: 1.5
@@ -97,25 +96,33 @@ yolo_bridge:
 # ===== Chassis bridge (cmd_vel_to_rosmaster.py) =====
 chassis:
   port: "/dev/ttyUSB0"
-  max_vx: 0.08
-  max_wz: 0.35
-  watchdog_timeout: 0.5
+  max_vx: 0.06
+  max_wz: 0.24
+  watchdog_timeout: 0.8
   enable_kick_start: true
-  kick_vx: 0.055
-  kick_wz: 0.240
-  kick_duration: 0.045
-  kick_cooldown: 0.55
+  kick_vx: 0.06
+  kick_wz: 0.24
+  kick_duration: 0.25
+  kick_cooldown: 0.6
   cmd_wz_deadzone: 0.012
-  cmd_smooth_alpha: 0.55
-  max_vx_delta: 0.010
-  max_wz_delta: 0.008
+  cmd_smooth_alpha: 0.0
+  max_vx_delta: 0.07
+  max_wz_delta: 0.25
   control_rate_hz: 20.0
+  reset_on_zero: false
+  zero_reset_hold_sec: 0.4
+  debug: true
 
 # ===== LiDAR basic =====
 lidar_min_range: 0.08
 lidar_max_range: 6.0
 lidar_front_deg: 25.0
 lidar_target_window_deg: 8.0
+
+# ===== LiDAR freshness =====
+max_scan_age_sec: 0.8
+front_distance_hold_sec: 0.5
+bad_wp_limit: 3
 
 # ===== Safety distances, m =====
 emergency_stop_distance: 0.35
@@ -124,18 +131,33 @@ slow_distance: 0.70
 normal_distance: 1.2
 arrive_distance: 0.38
 
-# ===== Target visual servo =====
-target_max_vx: 0.045
-target_mid_vx: 0.035
-target_slow_vx: 0.020
-target_min_vx: 0.012
+# ===== Stable chassis motion compensation =====
+control_rate_hz: 20.0
+decision_rate_hz: 4.0
+cmd_hold_sec: 0.75
+stop_on_cmd_expire: true
 
-target_kp_turn: 0.22
-target_max_wz: 0.14
-target_wz_deadzone: 0.06
-target_cmd_wz_deadzone: 0.015
-target_turn_threshold: 0.20
+min_drive_vx: 0.03
+min_turn_wz: 0.18
+vx_deadband: 0.01
+wz_deadband: 0.02
+
+# ===== Target visual servo =====
+target_max_vx: 0.05
+target_mid_vx: 0.04
+target_slow_vx: 0.025
+target_min_vx: 0.02
+
+target_kp_turn: 0.1
+target_max_wz: 0.20
+target_wz_deadzone: 0.02
+target_cmd_wz_deadzone: 0.02
+target_turn_threshold: 0.18
 target_forward_turn_scale: 0.45
+
+target_reacquire_wz: 0.18
+target_reacquire_hold_sec: 0.6
+target_lost_to_explore_sec: 1.5
 
 # ===== Free-space waypoint =====
 free_space_enabled: true
@@ -156,24 +178,28 @@ free_space_center_weight: 0.30
 free_space_consistency_weight: 0.10
 
 # ===== Explore control =====
-explore_vx: 0.040
-explore_slow_vx: 0.020
-explore_kp_turn: 0.20
-explore_max_wz: 0.12
-explore_turn_only_threshold: 0.22
-explore_forward_turn_scale: 0.55
+explore_vx: 0.03 
+explore_slow_vx: 0.025
+explore_kp_turn: 0.1
+explore_max_wz: 0.20
+explore_turn_only_threshold: 0.18
+explore_forward_turn_scale: 0.45
 
-target_burst_sec: 0.25
-target_observe_sec: 0.20
-explore_burst_sec: 0.30
-explore_observe_sec: 0.10
+# 旧 burst 参数保留兼容，控制环不再使用
+target_burst_sec: 0.80
+target_observe_sec: 0.05
+explore_burst_sec: 0.80
+explore_observe_sec: 0.05
 
 # ===== Blocked / scan recovery =====
-scan_wz: 0.12
-scan_burst_sec: 0.25
-scan_observe_sec: 0.20
+scan_wz: 0.24
+blocked_rotate_wz: 0.18
+blocked_rotate_hold_sec: 1.2
+blocked_rotate_min_switch_sec: 1.2
+scan_burst_sec: 0.80
+scan_observe_sec: 0.05
 blocked_rotate_alternate: true
-blocked_front_distance: 0.35
+blocked_front_distance: 0.40
 
 # ===== Arrive =====
 center_arrive_px: 80
@@ -181,11 +207,11 @@ arrive_required_count: 3
 min_forward_bursts_before_arrive: 2
 
 # ===== FSM =====
-min_state_frames: 10
+min_state_frames: 6
+bad_wp_grace_frames: 3
+no_target_grace_frames: 3
 
 # ===== Runtime =====
-control_rate_hz: 20.0
-decision_rate_hz: 5.0
 max_steps: 1500
 save_debug: true
 debug_dir: "data/images/yolo_lidar_failsafe_debug"

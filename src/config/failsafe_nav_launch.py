@@ -97,20 +97,23 @@ def load_launch_config(path: str | None = None) -> Dict[str, Any]:
         "bridge_voter_window": _as_int(yolo_bridge.get("voter_window_size", 10), "yolo_bridge.voter_window_size"),
         "bridge_voter_min_votes": _as_int(yolo_bridge.get("voter_min_votes", 3), "yolo_bridge.voter_min_votes"),
         "bridge_voter_lost_hold": _as_int(yolo_bridge.get("voter_lost_hold_frames", 3), "yolo_bridge.voter_lost_hold_frames"),
-        "chassis_port": str(chassis.get("port", "/dev/ttyUSB0")),
-        "chassis_max_vx": _as_float(chassis.get("max_vx", 0.08), "chassis.max_vx"),
+        "chassis_port": str(chassis.get("port", "/dev/ttyUSB1")),
+        "chassis_max_vx": _as_float(chassis.get("max_vx", 0.09), "chassis.max_vx"),
         "chassis_max_wz": _as_float(chassis.get("max_wz", 0.35), "chassis.max_wz"),
-        "chassis_watchdog_timeout": _as_float(chassis.get("watchdog_timeout", 0.5), "chassis.watchdog_timeout"),
+        "chassis_watchdog_timeout": _as_float(chassis.get("watchdog_timeout", 0.8), "chassis.watchdog_timeout"),
         "chassis_enable_kick_start": _as_bool(chassis.get("enable_kick_start", True)),
-        "chassis_kick_vx": _as_float(chassis.get("kick_vx", 0.055), "chassis.kick_vx"),
+        "chassis_kick_vx": _as_float(chassis.get("kick_vx", 0.08), "chassis.kick_vx"),
         "chassis_kick_wz": _as_float(chassis.get("kick_wz", 0.24), "chassis.kick_wz"),
-        "chassis_kick_duration": _as_float(chassis.get("kick_duration", 0.045), "chassis.kick_duration"),
-        "chassis_kick_cooldown": _as_float(chassis.get("kick_cooldown", 0.55), "chassis.kick_cooldown"),
+        "chassis_kick_duration": _as_float(chassis.get("kick_duration", 0.25), "chassis.kick_duration"),
+        "chassis_kick_cooldown": _as_float(chassis.get("kick_cooldown", 0.6), "chassis.kick_cooldown"),
         "chassis_cmd_wz_deadzone": _as_float(chassis.get("cmd_wz_deadzone", 0.012), "chassis.cmd_wz_deadzone"),
-        "chassis_cmd_smooth_alpha": _as_float(chassis.get("cmd_smooth_alpha", 0.55), "chassis.cmd_smooth_alpha"),
-        "chassis_max_vx_delta": _as_float(chassis.get("max_vx_delta", 0.010), "chassis.max_vx_delta"),
-        "chassis_max_wz_delta": _as_float(chassis.get("max_wz_delta", 0.008), "chassis.max_wz_delta"),
+        "chassis_cmd_smooth_alpha": _as_float(chassis.get("cmd_smooth_alpha", 0.0), "chassis.cmd_smooth_alpha"),
+        "chassis_max_vx_delta": _as_float(chassis.get("max_vx_delta", 0.09), "chassis.max_vx_delta"),
+        "chassis_max_wz_delta": _as_float(chassis.get("max_wz_delta", 0.35), "chassis.max_wz_delta"),
         "chassis_control_rate_hz": _as_float(chassis.get("control_rate_hz", 20.0), "chassis.control_rate_hz"),
+        "chassis_reset_on_zero": _as_bool(chassis.get("reset_on_zero", False)),
+        "chassis_zero_reset_hold_sec": _as_float(chassis.get("zero_reset_hold_sec", 0.4), "chassis.zero_reset_hold_sec"),
+        "chassis_debug": _as_bool(chassis.get("debug", True)),
     }
 
 
@@ -146,6 +149,9 @@ def shell_export(cfg: Dict[str, Any]) -> str:
         "CHASSIS_MAX_VX_DELTA": cfg["chassis_max_vx_delta"],
         "CHASSIS_MAX_WZ_DELTA": cfg["chassis_max_wz_delta"],
         "CHASSIS_CONTROL_RATE_HZ": cfg["chassis_control_rate_hz"],
+        "CHASSIS_RESET_ON_ZERO": "1" if cfg["chassis_reset_on_zero"] else "0",
+        "CHASSIS_ZERO_RESET_HOLD_SEC": cfg["chassis_zero_reset_hold_sec"],
+        "CHASSIS_DEBUG": "1" if cfg["chassis_debug"] else "0",
     }
     lines = []
     for key, value in mapping.items():

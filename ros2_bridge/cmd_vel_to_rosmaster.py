@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-import time
 import argparse
-import threading
-
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import Twist
-
-from Rosmaster_Lib import Rosmaster
-
+import json
 import os
 import sys
+import threading
+import time
+
+import rclpy
+from geometry_msgs.msg import Twist
+from rclpy.node import Node
+from std_msgs.msg import String
+
+from Rosmaster_Lib import Rosmaster
 
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
 sys.path.append(PROJECT_ROOT)
@@ -48,6 +49,8 @@ class CmdVelToRosmaster(Node):
         max_vx_delta=0.015,
         max_wz_delta=0.02,
         control_rate_hz=20.0,
+        reset_on_zero=False,
+        zero_reset_hold_sec=0.4,
         debug=False,
     ):
         super().__init__("cmd_vel_to_rosmaster")
@@ -57,11 +60,16 @@ class CmdVelToRosmaster(Node):
         self.max_wz = float(max_wz)
         self.watchdog_timeout = float(watchdog_timeout)
         self.debug = debug
+        self.connected = False
 
         self.lock = threading.Lock()
         self.last_cmd_time = time.time()
         self.last_vx = 0.0
         self.last_wz = 0.0
+        self.last_raw_vx = 0.0
+        self.last_raw_wz = 0.0
+        self.last_sent_vx = 0.0
+        self.last_sent_wz = 0.0
 
         self.enable_kick_start = bool(enable_kick_start)
         self.kick_vx = float(kick_vx)
@@ -73,6 +81,7 @@ class CmdVelToRosmaster(Node):
         self.kick_active_until = 0.0
         self.kick_vx_target = 0.0
         self.kick_wz_target = 0.0
+        self.in_kick = False
 
         self.target_vx = 0.0
         self.target_wz = 0.0
@@ -80,14 +89,28 @@ class CmdVelToRosmaster(Node):
             alpha=cmd_smooth_alpha,
             max_vx_delta=max_vx_delta,
             max_wz_delta=max_wz_delta,
+            reset_on_zero=reset_on_zero,
+            zero_reset_hold_sec=zero_reset_hold_sec,
         )
+
+        self.sent_cmd_pub = self.create_publisher(Twist, "/cmd_vel_sent", 10)
+        self.state_pub = self.create_publisher(String, "/chassis_bridge_state", 10)
 
         self.get_logger().info("Initializing Rosmaster...")
         self.get_logger().info(f"Serial port: {self.port}")
 
-        self.bot = Rosmaster(com=self.port)
-        self.bot.create_receive_threading()
-        time.sleep(0.5)
+        try:
+            self.bot = Rosmaster(com=self.port)
+            self.bot.create_receive_threading()
+            time.sleep(0.5)
+            self.connected = True
+        except Exception as exc:
+            self.get_logger().error(
+                f"Rosmaster init failed on port={self.port!r}: {exc!r}. "
+                "Check CHASSIS_PORT (/dev/ttyUSB1 or /dev/myserial), cable, power, "
+                "and that no other process holds the serial port."
+            )
+            raise
 
         self.safe_stop()
 
@@ -103,15 +126,17 @@ class CmdVelToRosmaster(Node):
 
         self.watchdog_timer = self.create_timer(0.05, self.watchdog_callback)
         self.status_timer = self.create_timer(2.0, self.status_callback)
+        self.bridge_state_timer = self.create_timer(0.5, self.publish_bridge_state)
 
         self.get_logger().info("cmd_vel_to_rosmaster started.")
         self.get_logger().info("Subscribed topic: /cmd_vel")
+        self.get_logger().info("Publishing: /cmd_vel_sent, /chassis_bridge_state")
         self.get_logger().info(
             f"Safety limits: max_vx={self.max_vx:.3f} m/s, max_wz={self.max_wz:.3f} rad/s"
         )
         self.get_logger().info(
             f"Smooth: alpha={cmd_smooth_alpha:.2f} dvx={max_vx_delta:.3f} dwz={max_wz_delta:.3f} "
-            f"rate={control_rate_hz:.1f}Hz"
+            f"rate={control_rate_hz:.1f}Hz reset_on_zero={reset_on_zero}"
         )
         self.get_logger().info(
             "Kick start: "
@@ -131,11 +156,9 @@ class CmdVelToRosmaster(Node):
         wz = clamp(raw_wz, -self.max_wz, self.max_wz)
         if abs(wz) < self.cmd_wz_deadzone:
             wz = 0.0
-        send_vx = vx
-        send_wz = wz
 
         now = time.time()
-        nonzero_cmd = abs(send_vx) > 1e-4 or abs(send_wz) > 1e-4
+        nonzero_cmd = abs(vx) > 1e-4 or abs(wz) > 1e-4
         need_kick = (
             self.enable_kick_start
             and nonzero_cmd
@@ -144,33 +167,29 @@ class CmdVelToRosmaster(Node):
         )
 
         with self.lock:
-            self.target_vx = send_vx
-            self.target_wz = send_wz
+            self.last_raw_vx = raw_vx
+            self.last_raw_wz = raw_wz
+            self.target_vx = vx
+            self.target_wz = wz
             self.last_cmd_time = now
             if not nonzero_cmd:
                 self.kick_active_until = 0.0
                 self.kick_vx_target = 0.0
                 self.kick_wz_target = 0.0
-                self.smoother.reset()
             elif need_kick:
                 self.kick_active_until = now + self.kick_duration
                 self.kick_vx_target = (
-                    (1.0 if send_vx > 0 else -1.0) * abs(self.kick_vx)
-                    if abs(send_vx) > 1e-4
-                    else 0.0
+                    (1.0 if vx > 0 else -1.0) * abs(self.kick_vx) if abs(vx) > 1e-4 else 0.0
                 )
                 self.kick_wz_target = (
-                    (1.0 if send_wz > 0 else -1.0) * abs(self.kick_wz)
-                    if abs(send_wz) > 1e-4
-                    else 0.0
+                    (1.0 if wz > 0 else -1.0) * abs(self.kick_wz) if abs(wz) > 1e-4 else 0.0
                 )
                 self.last_kick_time = now
 
         if self.debug:
             self.get_logger().info(
                 f"raw cmd: linear.x={raw_vx:.3f}, angular.z={raw_wz:.3f} "
-                f"=> target: vx={send_vx:.3f}, wz={send_wz:.3f}, "
-                f"kick={need_kick}"
+                f"=> target: vx={vx:.3f}, wz={wz:.3f}, kick={need_kick}"
             )
 
     def control_timer_callback(self):
@@ -183,19 +202,49 @@ class CmdVelToRosmaster(Node):
                 raw_vx = self.kick_vx_target
                 raw_wz = self.kick_wz_target
 
+        self.in_kick = in_kick
+
         if in_kick:
-            # 启动脉冲必须直达底盘，不能被平滑器削弱到死区以下。
             out_vx, out_wz = raw_vx, raw_wz
         else:
-            # 脉冲后只做限速/低通平滑，不再做最小速度或巡航改写。
             out_vx, out_wz = self.smoother.update(raw_vx, raw_wz)
+
         out_vx = clamp(out_vx, -self.max_vx, self.max_vx)
         out_wz = clamp(out_wz, -self.max_wz, self.max_wz)
 
+        sent = Twist()
+        sent.linear.x = out_vx
+        sent.linear.y = 0.0
+        sent.angular.z = out_wz
+        self.sent_cmd_pub.publish(sent)
+
         with self.lock:
+            self.last_sent_vx = out_vx
+            self.last_sent_wz = out_wz
             self.bot.set_car_motion(out_vx, 0.0, out_wz)
             self.last_vx = out_vx
             self.last_wz = out_wz
+
+        if self.debug and (abs(out_vx) > 1e-4 or abs(out_wz) > 1e-4):
+            self.get_logger().info(
+                f"sent cmd: vx={out_vx:.3f}, wz={out_wz:.3f}, kick={in_kick}"
+            )
+
+    def publish_bridge_state(self):
+        with self.lock:
+            state = {
+                "port": self.port,
+                "connected": self.connected,
+                "last_raw_vx": self.last_raw_vx,
+                "last_raw_wz": self.last_raw_wz,
+                "last_sent_vx": self.last_sent_vx,
+                "last_sent_wz": self.last_sent_wz,
+                "kick_enabled": self.enable_kick_start,
+                "kick_active": self.in_kick,
+                "watchdog_timeout": self.watchdog_timeout,
+                "time": time.time(),
+            }
+        self.state_pub.publish(String(data=json.dumps(state, ensure_ascii=False)))
 
     def watchdog_callback(self):
         now = time.time()
@@ -209,6 +258,8 @@ class CmdVelToRosmaster(Node):
                     self.bot.set_car_motion(0.0, 0.0, 0.0)
                     self.last_vx = 0.0
                     self.last_wz = 0.0
+                    self.last_sent_vx = 0.0
+                    self.last_sent_wz = 0.0
                     self.last_cmd_time = now
                     self.get_logger().warn("Watchdog timeout, auto stop.")
 
@@ -224,7 +275,8 @@ class CmdVelToRosmaster(Node):
             motion = None
 
         self.get_logger().info(
-            f"status: battery={battery}, motion={motion}, last_cmd=(vx={self.last_vx:.3f}, wz={self.last_wz:.3f})"
+            f"status: battery={battery}, motion={motion}, "
+            f"last_sent=(vx={self.last_sent_vx:.3f}, wz={self.last_sent_wz:.3f})"
         )
 
     def safe_stop(self):
@@ -266,6 +318,12 @@ def main():
     parser.add_argument("--max-vx-delta", type=float, default=tune["max_vx_delta"])
     parser.add_argument("--max-wz-delta", type=float, default=tune["max_wz_delta"])
     parser.add_argument("--control-rate-hz", type=float, default=tune["control_rate_hz"])
+    parser.add_argument(
+        "--reset-on-zero",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument("--zero-reset-hold-sec", type=float, default=0.4)
     parser.add_argument("--debug", action="store_true")
     args, _ = parser.parse_known_args()
 
@@ -286,6 +344,8 @@ def main():
         max_vx_delta=args.max_vx_delta,
         max_wz_delta=args.max_wz_delta,
         control_rate_hz=args.control_rate_hz,
+        reset_on_zero=args.reset_on_zero,
+        zero_reset_hold_sec=args.zero_reset_hold_sec,
         debug=args.debug,
     )
 

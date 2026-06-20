@@ -6,6 +6,7 @@ import time
 import rclpy
 from rclpy.node import Node
 
+from geometry_msgs.msg import Twist
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
@@ -17,16 +18,19 @@ class FrontierPointMarkerViz(Node):
 
         self.declare_parameter("point_topic", "/failsafe_nav_point")
         self.declare_parameter("state_topic", "/failsafe_nav_state")
+        self.declare_parameter("sent_cmd_topic", "/cmd_vel_sent")
         self.declare_parameter("marker_topic", "/failsafe_nav/markers")
         self.declare_parameter("frame_id", "laser")
 
         self.point_topic = self.get_parameter("point_topic").value
         self.state_topic = self.get_parameter("state_topic").value
+        self.sent_cmd_topic = self.get_parameter("sent_cmd_topic").value
         self.marker_topic = self.get_parameter("marker_topic").value
         self.frame_id = self.get_parameter("frame_id").value
 
         self.latest_point = {}
         self.latest_state = {}
+        self.latest_sent_cmd = Twist()
 
         self.sub_point = self.create_subscription(
             String,
@@ -39,6 +43,13 @@ class FrontierPointMarkerViz(Node):
             String,
             self.state_topic,
             self.on_state,
+            10,
+        )
+
+        self.sub_sent = self.create_subscription(
+            Twist,
+            self.sent_cmd_topic,
+            self.on_sent_cmd,
             10,
         )
 
@@ -68,6 +79,9 @@ class FrontierPointMarkerViz(Node):
         except Exception:
             pass
 
+    def on_sent_cmd(self, msg: Twist):
+        self.latest_sent_cmd = msg
+
     def _make_delete_all(self):
         m = Marker()
         m.action = Marker.DELETEALL
@@ -85,6 +99,12 @@ class FrontierPointMarkerViz(Node):
 
         source = str(self.latest_point.get("source", "unknown"))
         mode = str(self.latest_state.get("mode", self.latest_state.get("fsm_state", "unknown")))
+        reason = str(self.latest_state.get("reason", ""))
+        active_reason = str(self.latest_state.get("active_cmd_reason", ""))
+        sent_vx = float(self.latest_sent_cmd.linear.x)
+        sent_wz = float(self.latest_sent_cmd.angular.z)
+        nav_vx = float(self.latest_state.get("cmd_vx", 0.0))
+        nav_wz = float(self.latest_state.get("cmd_wz", 0.0))
 
         heading_deg = self.latest_point.get("heading_deg", None)
         clearance = self.latest_point.get("clearance", None)
@@ -186,12 +206,15 @@ class FrontierPointMarkerViz(Node):
         text.color.a = 1.0
 
         text.text = (
-            "P"
-
+            f"{mode}\n"
+            f"reason: {reason[:40]}\n"
+            f"nav vx/wz: {nav_vx:.3f}/{nav_wz:.3f}\n"
+            f"sent vx/wz: {sent_vx:.3f}/{sent_wz:.3f}"
         )
-
+        if active_reason:
+            text.text += f"\nactive: {active_reason[:30]}"
         if score is not None:
-            text.text += f"score: {float(score):.2f}"
+            text.text += f"\nscore: {float(score):.2f}"
 
         arr.markers.append(text)
 

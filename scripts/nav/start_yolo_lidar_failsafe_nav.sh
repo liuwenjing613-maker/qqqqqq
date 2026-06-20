@@ -176,6 +176,15 @@ sleep 2
 
 echo "[6/7] start chassis bridge..."
 pkill -f cmd_vel_to_rosmaster.py || true
+CHASSIS_DEBUG_ARGS=()
+if [ "${CHASSIS_DEBUG:-0}" = "1" ]; then
+  CHASSIS_DEBUG_ARGS=(--debug)
+fi
+CHASSIS_RESET_ARGS=(--no-reset-on-zero)
+if [ "${CHASSIS_RESET_ON_ZERO:-0}" = "1" ]; then
+  CHASSIS_RESET_ARGS=(--reset-on-zero)
+fi
+
 python3 ros2_bridge/cmd_vel_to_rosmaster.py \
   --port "$CHASSIS_PORT" \
   --max-vx "$CHASSIS_MAX_VX" \
@@ -191,6 +200,9 @@ python3 ros2_bridge/cmd_vel_to_rosmaster.py \
   --max-vx-delta "$CHASSIS_MAX_VX_DELTA" \
   --max-wz-delta "$CHASSIS_MAX_WZ_DELTA" \
   --control-rate-hz "$CHASSIS_CONTROL_RATE_HZ" \
+  "${CHASSIS_RESET_ARGS[@]}" \
+  --zero-reset-hold-sec "$CHASSIS_ZERO_RESET_HOLD_SEC" \
+  "${CHASSIS_DEBUG_ARGS[@]}" \
   > logs/yolo_failsafe_chassis.log 2>&1 &
 sleep 1
 
@@ -220,9 +232,12 @@ echo "Watch point:"
 echo "  ros2 topic echo /failsafe_nav_point"
 echo "Watch cmd:"
 echo "  ros2 topic echo /cmd_vel"
+echo "  ros2 topic echo /cmd_vel_sent"
+echo "  ros2 topic echo /chassis_bridge_state"
 echo "Watch bbox:"
 echo "  ros2 topic echo /target_bbox_json"
 echo "Foxglove topics:"
 echo "  /scan  /failsafe_nav/markers  /failsafe_nav/debug_image"
-echo "  /failsafe_nav_state  /target_bbox_json"
-echo "See docs/FOXGLOVE_FAILSAFE_NAV.md"
+echo "  /failsafe_nav_state  /target_bbox_json  /chassis_bridge_state"
+echo "  Plot: /cmd_vel.linear.x vs /cmd_vel_sent.linear.x"
+echo "See docs/FOXGLOVE_FAILSAFE_NAV.md docs/STABLE_YOLO_LIDAR_NAV_TEST.md"

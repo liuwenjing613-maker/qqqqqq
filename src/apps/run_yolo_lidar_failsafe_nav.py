@@ -7,6 +7,7 @@ Does NOT use Qwen/Ollama.
 """
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -69,7 +70,6 @@ class YoloLidarFailsafeNav(Node):
         self.arrive_count = 0
         self.forward_burst_count = 0
         self.last_cmd = Twist()
-        self.scan_direction = 1.0
         self.last_image_time = 0.0
         self.latest_front_distance: Optional[float] = None
 
@@ -86,24 +86,51 @@ class YoloLidarFailsafeNav(Node):
         self.explore_forward_turn_scale = float(cfg.get("explore_forward_turn_scale", 0.55))
 
         self.scan_wz = float(cfg.get("scan_wz", 0.12))
+        self.blocked_rotate_wz = float(cfg.get("blocked_rotate_wz", cfg.get("scan_wz", 0.24)))
+        self.blocked_rotate_hold_sec = float(cfg.get("blocked_rotate_hold_sec", 1.2))
+        self.blocked_rotate_min_switch_sec = float(cfg.get("blocked_rotate_min_switch_sec", 1.2))
         self.blocked_rotate_alternate = bool(cfg.get("blocked_rotate_alternate", True))
+        self.blocked_rotate_until = 0.0
+        self.blocked_rotate_dir = 1.0
+        self.last_blocked_switch_time = 0.0
 
         self.center_arrive_px = float(cfg.get("center_arrive_px", 80))
         self.arrive_required_count = int(cfg.get("arrive_required_count", 3))
         self.min_forward_bursts_before_arrive = int(cfg.get("min_forward_bursts_before_arrive", 2))
         self.max_steps = int(cfg.get("max_steps", 600))
         self.min_state_frames = int(cfg.get("min_state_frames", 10))
+        self.bad_wp_grace_frames = int(cfg.get("bad_wp_grace_frames", 3))
+        self.no_target_grace_frames = int(cfg.get("no_target_grace_frames", 3))
+        self.bad_wp_limit = int(cfg.get("bad_wp_limit", 3))
+
+        self.target_reacquire_wz = float(cfg.get("target_reacquire_wz", 0.18))
+        self.target_reacquire_hold_sec = float(cfg.get("target_reacquire_hold_sec", 0.6))
+
+        self.last_scan_time = 0.0
+        self.last_valid_front_distance: Optional[float] = None
+        self.last_valid_front_time = 0.0
+        self.max_scan_age_sec = float(cfg.get("max_scan_age_sec", 0.8))
+        self.front_distance_hold_sec = float(cfg.get("front_distance_hold_sec", 0.5))
+
+        self.active_cmd = Twist()
+        self.active_cmd_until = 0.0
+        self.active_cmd_reason = "init"
+        self.last_nonzero_cmd_time = 0.0
+        self.last_decision_time = 0.0
+        self.bad_wp_count = 0
+        self.no_target_count = 0
+
+        self.control_rate_hz = float(cfg.get("control_rate_hz", 20.0))
+        self.cmd_hold_sec = float(cfg.get("cmd_hold_sec", 0.75))
+        self.stop_on_cmd_expire = bool(cfg.get("stop_on_cmd_expire", True))
+        self.min_drive_vx = float(cfg.get("min_drive_vx", 0.055))
+        self.min_turn_wz = float(cfg.get("min_turn_wz", 0.18))
+        self.wz_deadband = float(cfg.get("wz_deadband", 0.02))
+        self.vx_deadband = float(cfg.get("vx_deadband", 0.01))
 
         self.fsm_mode = "INIT"
         self.fsm_mode_frames = 0
         self._last_blocked_reason = "no_free_space"
-
-        self.target_burst_sec = float(cfg.get("target_burst_sec", 0.25))
-        self.target_observe_sec = float(cfg.get("target_observe_sec", 0.20))
-        self.explore_burst_sec = float(cfg.get("explore_burst_sec", 0.30))
-        self.explore_observe_sec = float(cfg.get("explore_observe_sec", 0.10))
-        self.scan_burst_sec = float(cfg.get("scan_burst_sec", 0.25))
-        self.scan_observe_sec = float(cfg.get("scan_observe_sec", 0.20))
 
         fs_cfg = FreeSpaceConfig(
             lidar_min_range=float(cfg.get("lidar_min_range", 0.08)),
@@ -158,6 +185,10 @@ class YoloLidarFailsafeNav(Node):
 
         decision_rate = float(cfg.get("decision_rate_hz", 5.0))
         self.timer = self.create_timer(1.0 / max(decision_rate, 1e-3), self.decision_timer_cb)
+        self.control_timer = self.create_timer(
+            1.0 / max(self.control_rate_hz, 1e-3),
+            self.control_timer_cb,
+        )
 
         if bool(cfg.get("publish_target_words", True)):
             period = float(cfg.get("target_words_publish_period_sec", 3.0))
@@ -170,12 +201,77 @@ class YoloLidarFailsafeNav(Node):
             f"bbox={self.target_bbox_topic} cmd={self.cmd_topic}"
         )
         self.get_logger().info(
+            f"control={self.control_rate_hz}Hz decision={decision_rate}Hz "
+            f"cmd_hold={self.cmd_hold_sec}s min_vx={self.min_drive_vx} min_wz={self.min_turn_wz}"
+        )
+        self.get_logger().info(
             f"min_state_frames={self.min_state_frames} emergency_stop={self.emergency_stop_distance}m"
         )
         self.get_logger().info("Qwen/Ollama is NOT used in this P0 control loop.")
 
     def _is_emergency_front(self, front: Optional[float]) -> bool:
         return front is not None and front <= self.emergency_stop_distance
+
+    def has_fresh_scan(self) -> bool:
+        return self.free_space.has_scan() and (time.time() - self.last_scan_time <= self.max_scan_age_sec)
+
+    def get_effective_front_distance(self) -> Optional[float]:
+        now = time.time()
+        if self.latest_front_distance is not None:
+            return self.latest_front_distance
+        if (
+            self.last_valid_front_distance is not None
+            and now - self.last_valid_front_time <= self.front_distance_hold_sec
+        ):
+            return self.last_valid_front_distance
+        return None
+
+    def apply_motion_deadband(self, cmd: Twist) -> Twist:
+        out = Twist()
+        out.linear.x = float(cmd.linear.x)
+        out.angular.z = float(cmd.angular.z)
+
+        if abs(out.linear.x) > self.vx_deadband:
+            if abs(out.linear.x) < self.min_drive_vx:
+                out.linear.x = math.copysign(self.min_drive_vx, out.linear.x)
+        else:
+            out.linear.x = 0.0
+
+        if abs(out.angular.z) > self.wz_deadband:
+            if abs(out.angular.z) < self.min_turn_wz and abs(out.linear.x) < 1e-6:
+                out.angular.z = math.copysign(self.min_turn_wz, out.angular.z)
+        else:
+            out.angular.z = 0.0
+
+        return out
+
+    def set_active_cmd(self, cmd: Twist, hold_sec: float, reason: str = "") -> None:
+        cmd = self.apply_motion_deadband(cmd)
+        self.active_cmd = cmd
+        self.active_cmd_until = time.time() + max(hold_sec, 0.05)
+        self.active_cmd_reason = reason
+        if abs(cmd.linear.x) > 1e-6 or abs(cmd.angular.z) > 1e-6:
+            self.last_nonzero_cmd_time = time.time()
+
+    def control_timer_cb(self) -> None:
+        now = time.time()
+        cmd = Twist()
+
+        front = self.get_effective_front_distance()
+        if front is not None and front <= self.emergency_stop_distance:
+            self.cmd_pub.publish(cmd)
+            self.last_cmd = cmd
+            return
+
+        if now <= self.active_cmd_until:
+            cmd = self.active_cmd
+        elif self.stop_on_cmd_expire:
+            cmd = Twist()
+        else:
+            cmd = self.active_cmd
+
+        self.cmd_pub.publish(cmd)
+        self.last_cmd = cmd
 
     def _resolve_effective_mode(self, desired_mode: str, immediate: bool = False) -> str:
         if immediate or self.fsm_mode in ("INIT",):
@@ -202,8 +298,21 @@ class YoloLidarFailsafeNav(Node):
             self.image_height = int(msg.height)
 
     def scan_cb(self, msg: LaserScan) -> None:
+        now = time.time()
+        self.last_scan_time = now
         self.free_space.update_scan(msg)
-        self.latest_front_distance = self.free_space.front_distance()
+        front = self.free_space.front_distance()
+        if front is not None:
+            self.latest_front_distance = front
+            self.last_valid_front_distance = front
+            self.last_valid_front_time = now
+        elif (
+            self.last_valid_front_distance is not None
+            and now - self.last_valid_front_time <= self.front_distance_hold_sec
+        ):
+            self.latest_front_distance = self.last_valid_front_distance
+        else:
+            self.latest_front_distance = None
 
     def bbox_cb(self, msg: String) -> None:
         self.target_parser.update_json(msg.data, self.image_width, self.image_height)
@@ -213,6 +322,8 @@ class YoloLidarFailsafeNav(Node):
         self.words_pub.publish(String(data=",".join(words)))
 
     def decision_timer_cb(self) -> None:
+        self.last_decision_time = time.time()
+
         if self.success:
             self.fsm_mode = "ARRIVED"
             self.publish_stop()
@@ -226,7 +337,7 @@ class YoloLidarFailsafeNav(Node):
             self.publish_state("STOPPED", reason="max_steps")
             return
 
-        front = self.latest_front_distance
+        front = self.get_effective_front_distance()
 
         if self._is_emergency_front(front):
             if self.fsm_mode == "EMERGENCY_STOP":
@@ -241,7 +352,7 @@ class YoloLidarFailsafeNav(Node):
             )
             return
 
-        if not self.free_space.has_scan():
+        if not self.has_fresh_scan():
             desired_mode = "WAIT_SCAN"
         else:
             target = self.target_parser.get_target(time.time(), self.image_width, self.image_height)
@@ -266,13 +377,13 @@ class YoloLidarFailsafeNav(Node):
             self.publish_state("WAIT_SCAN", reason="no_scan", fsm_frames=self.fsm_mode_frames)
             return
 
-        if not self.free_space.has_scan():
+        if not self.has_fresh_scan():
             self.publish_stop()
-            self.publish_state("WAIT_SCAN", reason="no_scan", fsm_frames=self.fsm_mode_frames)
+            self.publish_state("WAIT_SCAN", reason="stale_scan", fsm_frames=self.fsm_mode_frames)
             return
 
         target = self.target_parser.get_target(time.time(), self.image_width, self.image_height)
-        front = self.latest_front_distance
+        front = self.get_effective_front_distance()
 
         if effective_mode == "ARRIVED":
             self.success = True
@@ -288,6 +399,24 @@ class YoloLidarFailsafeNav(Node):
 
         if effective_mode == "TARGET_TRACK":
             if not target.get("visible", False):
+                self.no_target_count += 1
+                if self.no_target_count <= self.no_target_grace_frames:
+                    cmd = Twist()
+                    cmd.linear.x = 0.0
+                    last_u = target.get("u", self.image_width / 2.0)
+                    ex = (float(last_u) - self.image_width / 2.0) / max(float(self.image_width), 1.0)
+                    direction = -1.0 if ex > 0 else 1.0
+                    cmd.angular.z = direction * self.target_reacquire_wz
+                    self.set_active_cmd(cmd, self.target_reacquire_hold_sec, reason="target_reacquire")
+                    self.publish_state(
+                        "TARGET_REACQUIRE",
+                        target=target,
+                        front_distance=front,
+                        cmd=cmd,
+                        reason="target_lost_reacquire",
+                        fsm_frames=self.fsm_mode_frames,
+                    )
+                    return
                 self.publish_stop()
                 self.publish_state(
                     "TARGET_TRACK",
@@ -297,6 +426,7 @@ class YoloLidarFailsafeNav(Node):
                     fsm_frames=self.fsm_mode_frames,
                 )
                 return
+            self.no_target_count = 0
             self.handle_target_track(
                 target,
                 front,
@@ -308,13 +438,18 @@ class YoloLidarFailsafeNav(Node):
             target_reason = target.get("reason", "target_not_visible")
             wp = self.free_space.get_waypoint(self.image_width, self.image_height)
             if not wp.get("usable", False):
-                self.publish_stop()
-                self.publish_state(
-                    "FREE_SPACE_EXPLORE",
-                    front_distance=front,
-                    reason=f"state_hold_bad_wp; target={target_reason}",
-                )
+                self.bad_wp_count += 1
+                if self.bad_wp_count < self.bad_wp_limit:
+                    self.publish_state(
+                        "FREE_SPACE_EXPLORE",
+                        front_distance=front,
+                        reason=f"bad_wp_grace_{self.bad_wp_count}; target={target_reason}",
+                        fsm_frames=self.fsm_mode_frames,
+                    )
+                    return
+                self.do_blocked_rotate(wp.get("reason", "bad_wp_limit"))
                 return
+            self.bad_wp_count = 0
             self.handle_free_space_explore(front, target_reason)
             return
 
@@ -356,7 +491,7 @@ class YoloLidarFailsafeNav(Node):
             )
             return
 
-        self.publish_cmd_burst(cmd, self.target_burst_sec, self.target_observe_sec)
+        self.set_active_cmd(cmd, self.cmd_hold_sec, reason="target_track")
         self.publish_point(target.get("u"), target.get("v"), "target", "TARGET_TRACK")
         self.publish_state(
             "TARGET_TRACK",
@@ -366,6 +501,7 @@ class YoloLidarFailsafeNav(Node):
             reason=servo_state,
             fsm_frames=self.fsm_mode_frames,
             desired_hold=(self.fsm_mode_frames < self.min_state_frames),
+            active_cmd_reason=self.active_cmd_reason,
         )
 
     def compute_target_cmd(self, target: Dict[str, Any], front: Optional[float]):
@@ -409,7 +545,7 @@ class YoloLidarFailsafeNav(Node):
             return
 
         cmd, mode = self.compute_explore_cmd(wp, front)
-        self.publish_cmd_burst(cmd, self.explore_burst_sec, self.explore_observe_sec)
+        self.set_active_cmd(cmd, self.cmd_hold_sec, reason="free_space_explore")
         self.publish_point(wp.get("u"), wp.get("v"), "free_space", "FREE_SPACE_EXPLORE")
         self.publish_state(
             "FREE_SPACE_EXPLORE",
@@ -421,6 +557,7 @@ class YoloLidarFailsafeNav(Node):
             reason=f"{mode}; target={target_reason}",
             fsm_frames=self.fsm_mode_frames,
             desired_hold=(self.fsm_mode_frames < self.min_state_frames),
+            active_cmd_reason=self.active_cmd_reason,
         )
 
     def compute_explore_cmd(self, wp: Dict[str, Any], front: Optional[float]):
@@ -428,7 +565,7 @@ class YoloLidarFailsafeNav(Node):
 
         if front is not None and front <= self.hard_stop_distance:
             cmd.linear.x = 0.0
-            cmd.angular.z = self.scan_direction * abs(self.scan_wz)
+            cmd.angular.z = self.blocked_rotate_dir * abs(self.blocked_rotate_wz)
             return cmd, "blocked_rotate"
 
         u = float(wp.get("u", self.image_width / 2.0))
@@ -452,22 +589,31 @@ class YoloLidarFailsafeNav(Node):
         return cmd, "explore_forward"
 
     def do_blocked_rotate(self, reason: str) -> None:
+        now = time.time()
         cmd = Twist()
         cmd.linear.x = 0.0
-        cmd.angular.z = self.scan_direction * abs(self.scan_wz)
 
-        self.publish_cmd_burst(cmd, self.scan_burst_sec, self.scan_observe_sec)
+        if now >= self.blocked_rotate_until:
+            if (
+                self.blocked_rotate_alternate
+                and now - self.last_blocked_switch_time >= self.blocked_rotate_min_switch_sec
+            ):
+                self.blocked_rotate_dir *= -1.0
+                self.last_blocked_switch_time = now
+            self.blocked_rotate_until = now + self.blocked_rotate_hold_sec
 
-        if self.blocked_rotate_alternate:
-            self.scan_direction *= -1.0
+        cmd.angular.z = self.blocked_rotate_dir * abs(self.blocked_rotate_wz)
+        self.set_active_cmd(cmd, self.blocked_rotate_hold_sec, reason="blocked_rotate")
 
         self.publish_state(
             "BLOCKED_ROTATE",
-            front_distance=self.latest_front_distance,
+            front_distance=self.get_effective_front_distance(),
             cmd=cmd,
             reason=reason,
             fsm_frames=self.fsm_mode_frames,
             desired_hold=(self.fsm_mode_frames < self.min_state_frames),
+            blocked_rotate_dir=self.blocked_rotate_dir,
+            blocked_rotate_until=self.blocked_rotate_until,
         )
 
     def check_arrive(self, target: Dict[str, Any], front: Optional[float]) -> bool:
@@ -489,19 +635,9 @@ class YoloLidarFailsafeNav(Node):
         self.arrive_count += 1
         return self.arrive_count >= self.arrive_required_count
 
-    def publish_cmd_burst(self, cmd: Twist, burst_sec: float, observe_sec: float) -> None:
-        front = self.latest_front_distance
-        if front is not None and front <= self.emergency_stop_distance:
-            cmd.linear.x = 0.0
-
-        self.cmd_pub.publish(cmd)
-        self.last_cmd = cmd
-
-        time.sleep(max(0.0, burst_sec))
-        self.publish_stop()
-        time.sleep(max(0.0, observe_sec))
-
     def publish_stop(self) -> None:
+        self.active_cmd = Twist()
+        self.active_cmd_until = 0.0
         self.cmd_pub.publish(Twist())
 
     def publish_point(self, u: Any, v: Any, source: str, mode: str) -> None:
@@ -527,9 +663,10 @@ class YoloLidarFailsafeNav(Node):
             "instruction": self.instruction,
             "image_width": self.image_width,
             "image_height": self.image_height,
-            "front_distance": kwargs.pop("front_distance", self.latest_front_distance),
-            "cmd_vx": float(cmd.linear.x) if cmd is not None else 0.0,
-            "cmd_wz": float(cmd.angular.z) if cmd is not None else 0.0,
+            "front_distance": kwargs.pop("front_distance", self.get_effective_front_distance()),
+            "cmd_vx": float(cmd.linear.x) if cmd is not None else float(self.last_cmd.linear.x),
+            "cmd_wz": float(cmd.angular.z) if cmd is not None else float(self.last_cmd.angular.z),
+            "active_cmd_reason": self.active_cmd_reason,
             "time": time.time(),
         }
         data.update(_json_safe(kwargs))
