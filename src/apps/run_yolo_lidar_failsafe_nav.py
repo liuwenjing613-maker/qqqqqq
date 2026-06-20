@@ -17,6 +17,7 @@ import yaml
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import String
 
@@ -146,8 +147,8 @@ class YoloLidarFailsafeNav(Node):
         self.point_pub = self.create_publisher(String, self.point_topic, 10)
         self.words_pub = self.create_publisher(String, self.target_words_topic, 10)
 
-        self.create_subscription(Image, self.image_topic, self.image_cb, 10)
-        self.create_subscription(LaserScan, self.scan_topic, self.scan_cb, 10)
+        self.create_subscription(Image, self.image_topic, self.image_cb, qos_profile_sensor_data)
+        self.create_subscription(LaserScan, self.scan_topic, self.scan_cb, qos_profile_sensor_data)
         self.create_subscription(String, self.target_bbox_topic, self.bbox_cb, 10)
 
         decision_rate = float(cfg.get("decision_rate_hz", 5.0))

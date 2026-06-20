@@ -4,13 +4,26 @@ set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$PROJECT_DIR"
 
-if [ -f /opt/tros/humble/setup.bash ]; then
+source_ros_env() {
   set +u
-  source /opt/tros/humble/setup.bash
+  if [ -f /opt/tros/humble/setup.bash ]; then
+    source /opt/tros/humble/setup.bash
+  elif [ -f /opt/ros/humble/setup.bash ]; then
+    source /opt/ros/humble/setup.bash
+  fi
   set -u
-else
-  source /opt/ros/humble/setup.bash
-fi
+}
+
+source_stage10_env() {
+  if [ -f "$PROJECT_DIR/source_stage10.sh" ]; then
+    set +u
+    # source_stage10.sh also sources ROS setup.bash; must run under set +u
+    source "$PROJECT_DIR/source_stage10.sh"
+    set -u
+  fi
+}
+
+source_ros_env
 
 source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
 
@@ -87,7 +100,7 @@ pkill -f hobot_yolo_world || true
 sleep 1
 
 if [ -f "$PROJECT_DIR/source_stage10.sh" ]; then
-  source "$PROJECT_DIR/source_stage10.sh"
+  source_stage10_env
 fi
 
 ros2 run hobot_yolo_world hobot_yolo_world \
@@ -145,6 +158,11 @@ python3 src/apps/run_yolo_lidar_failsafe_nav.py \
   --instruction "$INSTRUCTION" \
   > logs/yolo_lidar_failsafe_nav.log 2>&1 &
 
+echo "[P0] starting Foxglove viz bridge..."
+python3 src/apps/failsafe_nav_foxglove_viz.py \
+  --config "$CONFIG" \
+  > logs/failsafe_nav_foxglove_viz.log 2>&1 &
+
 echo "[P0] started."
 echo "Watch logs:"
 echo "  tail -f logs/yolo_lidar_failsafe_nav.log"
@@ -156,3 +174,7 @@ echo "Watch cmd:"
 echo "  ros2 topic echo /cmd_vel"
 echo "Watch bbox:"
 echo "  ros2 topic echo /target_bbox_json"
+echo "Foxglove topics:"
+echo "  /scan  /failsafe_nav/markers  /failsafe_nav/debug_image"
+echo "  /failsafe_nav_state  /target_bbox_json"
+echo "See docs/FOXGLOVE_FAILSAFE_NAV.md"

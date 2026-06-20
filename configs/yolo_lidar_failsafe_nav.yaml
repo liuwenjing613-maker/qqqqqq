@@ -14,6 +14,12 @@ target_words_topic: "/target_words"
 state_topic: "/failsafe_nav_state"
 point_topic: "/failsafe_nav_point"
 
+# ===== Foxglove visualization =====
+viz_frame_id: "laser"
+viz_markers_topic: "/failsafe_nav/markers"
+viz_debug_image_topic: "/failsafe_nav/debug_image"
+viz_rate_hz: 5.0
+
 # ===== Image geometry =====
 camera_width: 640
 camera_height: 480
@@ -63,7 +69,7 @@ yolo_bridge:
 # ===== LiDAR basic =====
 lidar_min_range: 0.08
 lidar_max_range: 6.0
-lidar_front_deg: 18.0
+lidar_front_deg: 25.0
 lidar_target_window_deg: 8.0
 
 # ===== Safety distances, m =====
