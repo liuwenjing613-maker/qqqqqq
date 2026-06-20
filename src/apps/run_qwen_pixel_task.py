@@ -416,7 +416,7 @@ def main():
     if args.prep:
         import subprocess
 
-        prep = os.path.join(PROJECT_ROOT, "scripts/ollama_prep_infer.sh")
+        prep = os.path.join(PROJECT_ROOT, "scripts/qwen/ollama_prep_infer.sh")
         subprocess.run(["bash", prep, tune["model"]], check=True)
 
     qwen_client = None

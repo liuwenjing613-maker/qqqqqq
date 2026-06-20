@@ -8,13 +8,13 @@ Qwen/Ollama is **not** used in this control loop.
 
 ```bash
 cd ~/rdk_x5_vln_robot
-bash scripts/start_yolo_lidar_failsafe_nav.sh
+bash scripts/nav/start_yolo_lidar_failsafe_nav.sh
 ```
 
 Optional args:
 
 ```bash
-bash scripts/start_yolo_lidar_failsafe_nav.sh configs/yolo_lidar_failsafe_nav.yaml bottle
+bash scripts/nav/start_yolo_lidar_failsafe_nav.sh configs/yolo_lidar_failsafe_nav.yaml bottle
 ```
 
 Environment variables (aligned with `start_yolo_live_preview.sh`):
@@ -30,7 +30,7 @@ Environment variables (aligned with `start_yolo_live_preview.sh`):
 ```bash
 # Terminal 1: sensors + YOLO (or use existing live preview chain)
 # Terminal 2:
-NAV_ONLY=1 bash scripts/start_yolo_lidar_failsafe_nav.sh
+NAV_ONLY=1 bash scripts/nav/start_yolo_lidar_failsafe_nav.sh
 ```
 
 ## Unit tests
@@ -43,14 +43,14 @@ python3 tests/test_target_bbox_parser.py
 ## Fake bbox test (no YOLO)
 
 ```bash
-python3 scripts/pub_fake_bbox.py --bbox 250 140 390 420 --class-name bottle
+python3 scripts/nav/pub_fake_bbox.py --bbox 250 140 390 420 --class-name bottle
 ```
 
 Left / right bias:
 
 ```bash
-python3 scripts/pub_fake_bbox.py --bbox 80 140 220 420
-python3 scripts/pub_fake_bbox.py --bbox 420 140 560 420
+python3 scripts/nav/pub_fake_bbox.py --bbox 80 140 220 420
+python3 scripts/nav/pub_fake_bbox.py --bbox 420 140 560 420
 ```
 
 ## Debug topics

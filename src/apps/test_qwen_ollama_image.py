@@ -142,7 +142,7 @@ def main():
     _print_client_params(client, args.config)
 
     if args.prep:
-        prep = os.path.join(PROJECT_ROOT, "scripts/ollama_prep_infer.sh")
+        prep = os.path.join(PROJECT_ROOT, "scripts/qwen/ollama_prep_infer.sh")
         subprocess.run(["bash", prep, client.model], check=True)
 
     if not client.check_health():

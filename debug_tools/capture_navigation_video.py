@@ -6,7 +6,7 @@
   source /opt/tros/humble/setup.bash
   python3 ~/rdk_x5_vln_robot/debug_tools/capture_navigation_video.py
 
-  bash ~/rdk_x5_vln_robot/scripts/capture_navigation_video.sh
+  bash ~/rdk_x5_vln_robot/scripts/debug/capture_navigation_video.sh
 """
 
 import argparse

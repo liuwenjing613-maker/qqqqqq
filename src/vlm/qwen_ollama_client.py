@@ -455,7 +455,7 @@ class QwenOllamaClient:
 
     def recover_stuck_server(self) -> None:
         """Kill llama-server processes stuck on vision encoding."""
-        script = "/root/rdk_x5_vln_robot/scripts/ollama_recover.sh"
+        script = "/root/rdk_x5_vln_robot/scripts/qwen/ollama_recover.sh"
         try:
             subprocess.run(["bash", script], check=False, timeout=15)
             return
@@ -678,14 +678,14 @@ class QwenOllamaClient:
                 f"Ollama vision timed out after {self.timeout:.0f}s. "
                 "On RDK X5, qwen2.5vl first infer can take several minutes. "
                 "Retry with --timeout 900 --prep. "
-                "If stuck at 'encoding image slice', run bash scripts/ollama_recover.sh"
+                "If stuck at 'encoding image slice', run bash scripts/qwen/ollama_recover.sh"
             ) from exc
         except requests.exceptions.ConnectionError as exc:
             raise RuntimeError(
                 "Ollama connection dropped mid-request. "
                 "Most likely llama-server was killed by OOM on this 7GB board. "
-                "Run: sudo bash scripts/setup_ollama_memory.sh && "
-                "bash scripts/ollama_prep_infer.sh qwen2.5vl:3b"
+                "Run: sudo bash scripts/qwen/setup_ollama_memory.sh && "
+                "bash scripts/qwen/ollama_prep_infer.sh qwen2.5vl:3b"
             ) from exc
         dt = time.time() - t0
 

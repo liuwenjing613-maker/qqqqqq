@@ -8,7 +8,7 @@ Usage:
 
 It creates:
   debug_tools/yolo_live_browser_preview.py
-  scripts/start_yolo_live_preview.sh
+  scripts/yolo/start_yolo_live_preview.sh
 
 It does NOT modify camera, YOLO, MVP, or chassis code.
 """
@@ -518,7 +518,7 @@ START_SCRIPT = r'''#!/usr/bin/env bash
 set -euo pipefail
 
 # YOLO-World live browser preview launcher.
-# 默认会启动现有 scripts/start_yolo_diag_raw.sh，再启动浏览器预览。
+# 默认会启动现有 scripts/yolo/start_yolo_diag_raw.sh，再启动浏览器预览。
 # 不控制底盘，不发布 /cmd_vel。
 
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -568,7 +568,7 @@ if [ "$RUN_YOLO_CHAIN" = "1" ]; then
   SHOW_ALL_BOXES="$SHOW_ALL_BOXES" \
   RAW_MIN_SCORE="$RAW_MIN_SCORE" \
   SAVE_INTERVAL="${SAVE_INTERVAL:-30}" \
-  bash "$PROJECT_DIR/scripts/start_yolo_diag_raw.sh" \
+  bash "$PROJECT_DIR/scripts/yolo/start_yolo_diag_raw.sh" \
     > "$PROJECT_DIR/logs/live_preview_yolo_chain.log" 2>&1 &
   CHAIN_PID="$!"
   echo "[live_preview] yolo chain pid=$CHAIN_PID"
@@ -633,13 +633,13 @@ def main():
 
     print("")
     print("安装完成。推荐运行：")
-    print("  TARGET_WORDS='bottle,water bottle,cup' TARGET_CLASSES='bottle,cup' bash scripts/start_yolo_live_preview.sh")
+    print("  TARGET_WORDS='bottle,water bottle,cup' TARGET_CLASSES='bottle,cup' bash scripts/yolo/start_yolo_live_preview.sh")
     print("")
     print("浏览器打开：")
     print("  http://<开发板IP>:8088")
     print("")
     print("如果你已经手动启动了 camera + hobot_yolo_world，只想开网页预览：")
-    print("  RUN_YOLO_CHAIN=0 bash scripts/start_yolo_live_preview.sh")
+    print("  RUN_YOLO_CHAIN=0 bash scripts/yolo/start_yolo_live_preview.sh")
 
 
 if __name__ == "__main__":

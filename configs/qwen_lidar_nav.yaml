@@ -30,7 +30,7 @@ qwen_warmup_timeout_sec: 900.0
 # 首帧直接 infer，不再单独 warmup 丢弃结果（第一次看图即 step=1 导航）
 qwen_warmup_on_first_frame: false
 recover_on_timeout: true
-recover_script: "/root/rdk_x5_vln_robot/scripts/ollama_recover.sh"
+recover_script: "/root/rdk_x5_vln_robot/scripts/qwen/ollama_recover.sh"
 timeout_backoff_sec: 8.0
 
 # Qwen 单次推理已经 7~8 秒，不要额外等太久

@@ -58,7 +58,7 @@ class RunQwenLidarNav(Node):
         self.recover_on_timeout = bool(cfg.get("recover_on_timeout", True))
         self.recover_script = os.path.expanduser(str(cfg.get(
             "recover_script",
-            os.path.join(PROJECT_ROOT, "scripts/ollama_recover.sh"),
+            os.path.join(PROJECT_ROOT, "scripts/qwen/ollama_recover.sh"),
         )))
 
         self.image_topic = cfg["image_topic"]
