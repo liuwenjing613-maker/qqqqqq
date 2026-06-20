@@ -14,6 +14,7 @@ import json
 import math
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -24,8 +25,8 @@ import yaml
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Point
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import Image
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
+from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import ColorRGBA, String
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -171,6 +172,14 @@ class FailsafeNavFoxgloveViz(Node):
         self.point_topic = cfg.get("point_topic", "/failsafe_nav_point")
         self.bbox_topic = cfg.get("target_bbox_topic", "/target_bbox_json")
         self.image_topic = cfg.get("image_topic", "/image_raw")
+        viz_source = str(cfg.get("viz_image_source", "compressed")).strip().lower()
+        self.viz_image_source = viz_source if viz_source in ("compressed", "raw") else "compressed"
+        self.viz_image_topic = cfg.get(
+            "viz_image_topic",
+            "/image" if self.viz_image_source == "compressed" else self.image_topic,
+        )
+        self.viz_image_max_fps = float(cfg.get("viz_image_max_fps", 15.0))
+        self.viz_image_scale = float(cfg.get("viz_image_scale", 0.5))
         self.markers_topic = cfg.get("viz_markers_topic", "/failsafe_nav/markers")
         self.debug_image_topic = cfg.get("viz_debug_image_topic", "/failsafe_nav/debug_image")
 
@@ -181,19 +190,38 @@ class FailsafeNavFoxgloveViz(Node):
         self.latest_bbox: Dict[str, Any] = {}
         self.image_width = int(cfg.get("image_width", 640))
         self.image_height = int(cfg.get("image_height", 480))
+        self._last_image_pub_time = 0.0
+        self._last_image_header = None
 
+        viz_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
         self.marker_pub = self.create_publisher(MarkerArray, self.markers_topic, 10)
-        self.image_pub = self.create_publisher(Image, self.debug_image_topic, 10)
+        self.image_pub = self.create_publisher(Image, self.debug_image_topic, viz_qos)
 
         self.create_subscription(String, self.state_topic, self.state_cb, 10)
         self.create_subscription(String, self.point_topic, self.point_cb, 10)
         self.create_subscription(String, self.bbox_topic, self.bbox_cb, 10)
-        self.create_subscription(Image, self.image_topic, self.image_cb, qos_profile_sensor_data)
+        if self.viz_image_source == "compressed":
+            self.create_subscription(
+                CompressedImage,
+                self.viz_image_topic,
+                self.compressed_image_cb,
+                viz_qos,
+            )
+        else:
+            self.create_subscription(Image, self.viz_image_topic, self.image_cb, qos_profile_sensor_data)
 
-        hz = float(cfg.get("viz_rate_hz", 5.0))
-        self.create_timer(1.0 / max(hz, 1.0), self.publish_all)
+        marker_hz = float(cfg.get("viz_rate_hz", 5.0))
+        self.create_timer(1.0 / max(marker_hz, 1.0), self.publish_markers)
 
         self.get_logger().info("===== failsafe_nav_foxglove_viz =====")
+        self.get_logger().info(
+            f"viz_image source={self.viz_image_source} topic={self.viz_image_topic} "
+            f"max_fps={self.viz_image_max_fps} scale={self.viz_image_scale}"
+        )
         self.get_logger().info(f"markers={self.markers_topic} debug_image={self.debug_image_topic}")
         self.get_logger().info(f"frame_id={self.frame_id}")
 
@@ -220,16 +248,55 @@ class FailsafeNavFoxgloveViz(Node):
             self.image_width = int(msg.width)
             self.image_height = int(msg.height)
         try:
-            self.latest_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as exc:
             self.get_logger().warn(f"cv_bridge failed: {exc}")
+            return
+        self._on_new_frame(frame, msg.header)
 
-    def publish_all(self):
+    def compressed_image_cb(self, msg: CompressedImage):
+        now = time.time()
+        if self.viz_image_max_fps > 0.0:
+            min_interval = 1.0 / self.viz_image_max_fps
+            if now - self._last_image_pub_time < min_interval:
+                return
+        try:
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        except Exception as exc:
+            self.get_logger().warn(f"mjpeg decode failed: {exc}")
+            return
+        if frame is None:
+            return
+        self._on_new_frame(frame, msg.header)
+
+    def _on_new_frame(self, frame: np.ndarray, header) -> None:
+        h, w = frame.shape[:2]
+        self.image_width = int(w)
+        self.image_height = int(h)
+        self.latest_frame = frame
+        self._last_image_header = header
+        self._publish_debug_image()
+
+    def _publish_debug_image(self) -> None:
+        debug = self._build_debug_image()
+        if debug is None:
+            return
+        if 0.0 < self.viz_image_scale < 1.0:
+            debug = cv2.resize(
+                debug,
+                (max(1, int(debug.shape[1] * self.viz_image_scale)), max(1, int(debug.shape[0] * self.viz_image_scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+        out = self.bridge.cv2_to_imgmsg(debug, encoding="bgr8")
+        if self._last_image_header is not None:
+            out.header = self._last_image_header
+        self.image_pub.publish(out)
+        self._last_image_pub_time = time.time()
+
+    def publish_markers(self):
         stamp = self.get_clock().now().to_msg()
         self.marker_pub.publish(self._build_markers(stamp))
-        debug = self._build_debug_image()
-        if debug is not None:
-            self.image_pub.publish(self.bridge.cv2_to_imgmsg(debug, encoding="bgr8"))
 
     def _build_markers(self, stamp) -> MarkerArray:
         arr = MarkerArray()

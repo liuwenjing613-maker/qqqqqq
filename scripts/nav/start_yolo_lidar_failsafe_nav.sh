@@ -25,29 +25,31 @@ source_stage10_env() {
 
 source_ros_env
 
-source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
-
 CONFIG="${1:-configs/yolo_lidar_failsafe_nav.yaml}"
-INSTRUCTION="${2:-bottle}"
+USER_INSTRUCTION="${2:-}"
 NAV_ONLY="${NAV_ONLY:-0}"
+_CAMERA_OVERRIDE="${CAMERA_DEV:-}"
+_CHASSIS_OVERRIDE="${CHASSIS_PORT:-}"
 
-CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
-CHASSIS_PORT="${CHASSIS_PORT:-/dev/ttyUSB0}"
-
-TARGET_WORDS="${TARGET_WORDS:-bottle,water bottle,cup}"
-TARGET_CLASSES="${TARGET_CLASSES:-bottle,cup}"
-DET_TOPIC="${DET_TOPIC:-/hobot_yolo_world}"
-YOLO_BRIDGE_MIN_SCORE="${YOLO_BRIDGE_MIN_SCORE:-0.002}"
-YOLO_BRIDGE_MAX_AREA_RATIO="${YOLO_BRIDGE_MAX_AREA_RATIO:-0.24}"
+eval "$(python3 "$PROJECT_DIR/src/config/failsafe_nav_launch.py" --config "$CONFIG" --shell-export)"
+if [ -n "$USER_INSTRUCTION" ]; then
+  export INSTRUCTION="$USER_INSTRUCTION"
+fi
+if [ -n "$_CAMERA_OVERRIDE" ]; then
+  export CAMERA_DEV="$_CAMERA_OVERRIDE"
+fi
+if [ -n "$_CHASSIS_OVERRIDE" ]; then
+  export CHASSIS_PORT="$_CHASSIS_OVERRIDE"
+fi
 
 mkdir -p logs data/images/yolo_lidar_failsafe_debug
 
 echo "===== P0 YOLO + LiDAR Failsafe Navigation ====="
 echo "PROJECT_DIR=$PROJECT_DIR"
 echo "CONFIG=$CONFIG INSTRUCTION=$INSTRUCTION NAV_ONLY=$NAV_ONLY"
-echo "FSM: min_state_frames=10 (yaml), emergency -> EMERGENCY_STOP immediate"
-echo "TARGET_WORDS=$TARGET_WORDS TARGET_CLASSES=$TARGET_CLASSES"
-echo "SCORE_THRESHOLD (node)=$SCORE_THRESHOLD"
+echo "FSM: min_state_frames from yaml, emergency -> EMERGENCY_STOP immediate"
+echo "CAMERA_DEV=$CAMERA_DEV CHASSIS_PORT=$CHASSIS_PORT"
+echo "TARGET_WORDS=$TARGET_WORDS TARGET_CLASSES=$TARGET_CLASSES SCORE_THRESHOLD=$SCORE_THRESHOLD"
 
 echo "[P0] stopping old nav/qwen/preview processes..."
 pkill -f run_qwen_lidar_nav.py || true
@@ -130,13 +132,13 @@ if ! wait_ros_topic /image "camera /image" 12 5; then
 fi
 
 python3 src/perception/compressed_to_raw_image.py \
-  --in-topic /image \
-  --out-topic /image_raw \
-  --max-fps 2 \
+  --in-topic "$CAMERA_COMPRESSED_TOPIC" \
+  --out-topic "$IMAGE_RAW_TOPIC" \
+  --max-fps "$IMAGE_RAW_MAX_FPS" \
   > logs/yolo_failsafe_image_raw.log 2>&1 &
 sleep 3
 
-if ! wait_ros_topic /image_raw "/image_raw" 10 5; then
+if ! wait_ros_topic "$IMAGE_RAW_TOPIC" "$IMAGE_RAW_TOPIC" 10 5; then
   echo "Image bridge failed. Last log lines:"
   tail -10 logs/yolo_failsafe_image_raw.log 2>/dev/null || true
   exit 1
@@ -156,22 +158,19 @@ fi
 
 ros2 run hobot_yolo_world hobot_yolo_world \
   --ros-args \
-  -p feed_type:=1 \
-  -p ros_img_sub_topic_name:=/image_raw \
+  -p feed_type:="$YOLO_FEED_TYPE" \
+  -p ros_img_sub_topic_name:="$YOLO_IMAGE_TOPIC" \
   -p ros_string_sub_topic_name:=/target_words \
   -p ai_msg_pub_topic_name:="$DET_TOPIC" \
   -p texts:="$TARGET_WORDS" \
   -p score_threshold:="$SCORE_THRESHOLD" \
-  -p iou_threshold:=0.45 \
+  -p iou_threshold:="$YOLO_IOU_THRESHOLD" \
   > logs/yolo_failsafe_yolo_world.log 2>&1 &
 sleep 4
 
 echo "[5/7] start yolo_world_to_bbox_json bridge..."
 python3 src/perception/yolo_world_to_bbox_json.py \
-  --det-topic "$DET_TOPIC" \
-  --target-classes "$TARGET_CLASSES" \
-  --min-score "$YOLO_BRIDGE_MIN_SCORE" \
-  --max-area-ratio "$YOLO_BRIDGE_MAX_AREA_RATIO" \
+  --config "$CONFIG" \
   > logs/yolo_failsafe_bbox_bridge.log 2>&1 &
 sleep 2
 
@@ -179,9 +178,19 @@ echo "[6/7] start chassis bridge..."
 pkill -f cmd_vel_to_rosmaster.py || true
 python3 ros2_bridge/cmd_vel_to_rosmaster.py \
   --port "$CHASSIS_PORT" \
-  --max-vx 0.08 \
-  --max-wz 0.35 \
-  --watchdog-timeout 0.5 \
+  --max-vx "$CHASSIS_MAX_VX" \
+  --max-wz "$CHASSIS_MAX_WZ" \
+  --watchdog-timeout "$CHASSIS_WATCHDOG_TIMEOUT" \
+  $( [ "$CHASSIS_ENABLE_KICK_START" = "1" ] && echo "--enable-kick-start" || echo "--no-enable-kick-start" ) \
+  --kick-vx "$CHASSIS_KICK_VX" \
+  --kick-wz "$CHASSIS_KICK_WZ" \
+  --kick-duration "$CHASSIS_KICK_DURATION" \
+  --kick-cooldown "$CHASSIS_KICK_COOLDOWN" \
+  --cmd-wz-deadzone "$CHASSIS_CMD_WZ_DEADZONE" \
+  --cmd-smooth-alpha "$CHASSIS_CMD_SMOOTH_ALPHA" \
+  --max-vx-delta "$CHASSIS_MAX_VX_DELTA" \
+  --max-wz-delta "$CHASSIS_MAX_WZ_DELTA" \
+  --control-rate-hz "$CHASSIS_CONTROL_RATE_HZ" \
   > logs/yolo_failsafe_chassis.log 2>&1 &
 sleep 1
 

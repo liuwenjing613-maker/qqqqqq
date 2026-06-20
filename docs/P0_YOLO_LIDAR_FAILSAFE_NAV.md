@@ -11,19 +11,36 @@ cd ~/rdk_x5_vln_robot
 bash scripts/nav/start_yolo_lidar_failsafe_nav.sh
 ```
 
-Optional args:
+## Configuration (single file)
+
+All P0 stack parameters live in [`configs/yolo_lidar_failsafe_nav.yaml`](../configs/yolo_lidar_failsafe_nav.yaml):
+
+| Section | Controls |
+|---------|----------|
+| `target_words` / `instruction` | YOLO texts + nav instruction |
+| `camera` | device, `/image` → `/image_raw` bridge fps |
+| `yolo_world` | `hobot_yolo_world` score / IoU / topics |
+| `yolo_bridge` | bbox JSON bridge + multi-frame voter |
+| `chassis` | serial port, limits, kick-start, smoother |
+| top-level fields | LiDAR safety, FSM, visual servo, free-space, Foxglove |
+
+Inspect resolved launch env:
+
+```bash
+python3 src/config/failsafe_nav_launch.py --config configs/yolo_lidar_failsafe_nav.yaml --json
+```
+
+Optional **environment overrides** (board debug only):
+
+- `CAMERA_DEV=/dev/video1`
+- `CHASSIS_PORT=/dev/ttyUSB0`
+- `NAV_ONLY=1` — only start nav node (sensors/YOLO already running)
+
+Second script argument overrides `instruction` in yaml:
 
 ```bash
 bash scripts/nav/start_yolo_lidar_failsafe_nav.sh configs/yolo_lidar_failsafe_nav.yaml bottle
 ```
-
-Environment variables (aligned with `start_yolo_live_preview.sh`):
-
-- `TARGET_WORDS=bottle,water bottle,cup`
-- `TARGET_CLASSES=bottle,cup`
-- `NAV_ONLY=1` — only start nav node (sensors/YOLO already running)
-- `CHASSIS_PORT=/dev/ttyUSB0`
-- `CAMERA_DEV=/dev/video0`
 
 ## Nav only (step-by-step debug)
 

@@ -84,6 +84,31 @@ viz_frame_id: "laser"
 viz_markers_topic: "/failsafe_nav/markers"
 viz_debug_image_topic: "/failsafe_nav/debug_image"
 viz_rate_hz: 5.0
+viz_image_source: "compressed"
+viz_image_topic: "/image"
+viz_image_max_fps: 15.0
+viz_image_scale: 0.5
+```
+
+## 7. 降低摄像头延迟
+
+默认 viz **直接订阅 `/image`（相机 MJPEG）**，收到帧即发布 `/failsafe_nav/debug_image`（最高 15fps），**不再走 `/image_raw`（算法桥接仅 2fps）**。
+
+可调参数（[`configs/yolo_lidar_failsafe_nav.yaml`](../configs/yolo_lidar_failsafe_nav.yaml)）：
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `viz_image_source` | `compressed` | `compressed`=低延迟；`raw`=用 `/image_raw` |
+| `viz_image_max_fps` | `15` | Foxglove 图像最高帧率 |
+| `viz_image_scale` | `0.5` | 缩小后再发（减带宽）；要更清晰设 `1.0` |
+
+Foxglove Image 面板仍订阅 **`/failsafe_nav/debug_image`**（带检测框叠加）。不要直接看 `/image_raw`。
+
+修改后重启 viz：
+
+```bash
+pkill -f failsafe_nav_foxglove_viz
+python3 src/apps/failsafe_nav_foxglove_viz.py --config configs/yolo_lidar_failsafe_nav.yaml
 ```
 
 ## 7. 已有 JSON topic 直接看（无需 viz bridge）

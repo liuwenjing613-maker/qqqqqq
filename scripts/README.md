@@ -30,7 +30,7 @@ bash scripts/lidar/check_lidar.sh
 ### P0 YOLO + LiDAR Failsafe 导航
 
 ```bash
-# 全栈（雷达 + YOLO + bbox bridge + nav）
+# 全栈；参数见 configs/yolo_lidar_failsafe_nav.yaml
 bash scripts/nav/start_yolo_lidar_failsafe_nav.sh
 
 # 仅 nav（需自行保证 /scan 与 /target_bbox_json 有数据）

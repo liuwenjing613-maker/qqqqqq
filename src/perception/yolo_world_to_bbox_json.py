@@ -11,6 +11,7 @@ import sys
 import time
 from pathlib import Path
 
+import yaml
 import rclpy
 from ai_msgs.msg import PerceptionTargets
 from cv_bridge import CvBridge
@@ -53,6 +54,12 @@ class YoloWorldToBBoxJson(Node):
         sync_max_delta_sec=0.5,
         sync_buffer_len=80,
         publish_rate_hz=10.0,
+        voter_window_size=10,
+        voter_min_votes=3,
+        voter_lost_hold_frames=3,
+        voter_iou_threshold=0.20,
+        voter_center_dist_threshold=0.18,
+        voter_smooth_alpha=0.65,
     ):
         super().__init__("yolo_world_to_bbox_json")
 
@@ -78,12 +85,12 @@ class YoloWorldToBBoxJson(Node):
         self.publish_count = 0
 
         self.target_voter = MultiFrameTargetVoter(
-            window_size=10,
-            min_votes=3,
-            lost_hold_frames=3,
-            iou_threshold=0.20,
-            center_dist_threshold=0.18,
-            smooth_alpha=0.65,
+            window_size=int(voter_window_size),
+            min_votes=int(voter_min_votes),
+            lost_hold_frames=int(voter_lost_hold_frames),
+            iou_threshold=float(voter_iou_threshold),
+            center_dist_threshold=float(voter_center_dist_threshold),
+            smooth_alpha=float(voter_smooth_alpha),
             image_width=self.image_width,
             image_height=self.image_height,
         )
@@ -211,6 +218,7 @@ class YoloWorldToBBoxJson(Node):
 
 def main():
     parser = argparse.ArgumentParser(description="Bridge /hobot_yolo_world -> /target_bbox_json")
+    parser.add_argument("--config", default=None, help="configs/yolo_lidar_failsafe_nav.yaml (recommended)")
     parser.add_argument("--image-topic", default="/image_raw")
     parser.add_argument("--det-topic", default="/hobot_yolo_world")
     parser.add_argument("--out-topic", default="/target_bbox_json")
@@ -223,22 +231,76 @@ def main():
     parser.add_argument("--require-red-verify", action="store_true")
     parser.add_argument("--sync-max-delta-sec", type=float, default=0.5)
     parser.add_argument("--publish-rate-hz", type=float, default=10.0)
+    parser.add_argument("--voter-window-size", type=int, default=10)
+    parser.add_argument("--voter-min-votes", type=int, default=3)
+    parser.add_argument("--voter-lost-hold-frames", type=int, default=3)
+    parser.add_argument("--voter-iou-threshold", type=float, default=0.20)
+    parser.add_argument("--voter-center-dist-threshold", type=float, default=0.18)
+    parser.add_argument("--voter-smooth-alpha", type=float, default=0.65)
     args = parser.parse_args()
+
+    if args.config:
+        from src.config.failsafe_nav_launch import load_launch_config
+
+        launch_cfg = load_launch_config(args.config)
+        with open(launch_cfg["config_path"], "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+        bridge = raw.get("yolo_bridge", {}) if isinstance(raw.get("yolo_bridge"), dict) else {}
+
+        image_topic = str(bridge.get("image_topic", launch_cfg["image_raw_topic"]))
+        det_topic = str(bridge.get("det_topic", launch_cfg["yolo_det_topic"]))
+        out_topic = str(bridge.get("out_topic", launch_cfg["bridge_out_topic"]))
+        target_classes = str(bridge.get("target_classes", launch_cfg["target_classes"]))
+        min_score = float(bridge.get("min_score", launch_cfg["bridge_min_score"]))
+        max_area_ratio = float(bridge.get("max_area_ratio", launch_cfg["bridge_max_area_ratio"]))
+        min_red_ratio = float(bridge.get("min_red_ratio", launch_cfg["bridge_min_red_ratio"]))
+        require_red_verify = bool(bridge.get("require_red_verify", launch_cfg["bridge_require_red_verify"]))
+        sync_max_delta_sec = float(bridge.get("sync_max_delta_sec", launch_cfg["bridge_sync_max_delta_sec"]))
+        publish_rate_hz = float(bridge.get("publish_rate_hz", launch_cfg["bridge_publish_rate_hz"]))
+        voter_window_size = int(bridge.get("voter_window_size", launch_cfg["bridge_voter_window"]))
+        voter_min_votes = int(bridge.get("voter_min_votes", launch_cfg["bridge_voter_min_votes"]))
+        voter_lost_hold_frames = int(bridge.get("voter_lost_hold_frames", launch_cfg["bridge_voter_lost_hold"]))
+        voter_iou_threshold = float(bridge.get("voter_iou_threshold", 0.20))
+        voter_center_dist_threshold = float(bridge.get("voter_center_dist_threshold", 0.18))
+        voter_smooth_alpha = float(bridge.get("voter_smooth_alpha", 0.65))
+    else:
+        image_topic = args.image_topic
+        det_topic = args.det_topic
+        out_topic = args.out_topic
+        target_classes = args.target_classes
+        min_score = args.min_score
+        max_area_ratio = args.max_area_ratio
+        min_red_ratio = args.min_red_ratio
+        require_red_verify = args.require_red_verify
+        sync_max_delta_sec = args.sync_max_delta_sec
+        publish_rate_hz = args.publish_rate_hz
+        voter_window_size = args.voter_window_size
+        voter_min_votes = args.voter_min_votes
+        voter_lost_hold_frames = args.voter_lost_hold_frames
+        voter_iou_threshold = args.voter_iou_threshold
+        voter_center_dist_threshold = args.voter_center_dist_threshold
+        voter_smooth_alpha = args.voter_smooth_alpha
 
     rclpy.init()
     node = YoloWorldToBBoxJson(
-        image_topic=args.image_topic,
-        det_topic=args.det_topic,
-        out_topic=args.out_topic,
-        target_classes=args.target_classes,
+        image_topic=image_topic,
+        det_topic=det_topic,
+        out_topic=out_topic,
+        target_classes=target_classes,
         image_width=args.image_width,
         image_height=args.image_height,
-        min_score=args.min_score,
-        min_red_ratio=args.min_red_ratio,
-        max_area_ratio=args.max_area_ratio,
-        require_red_verify=args.require_red_verify,
-        sync_max_delta_sec=args.sync_max_delta_sec,
-        publish_rate_hz=args.publish_rate_hz,
+        min_score=min_score,
+        min_red_ratio=min_red_ratio,
+        max_area_ratio=max_area_ratio,
+        require_red_verify=require_red_verify,
+        sync_max_delta_sec=sync_max_delta_sec,
+        publish_rate_hz=publish_rate_hz,
+        voter_window_size=voter_window_size,
+        voter_min_votes=voter_min_votes,
+        voter_lost_hold_frames=voter_lost_hold_frames,
+        voter_iou_threshold=voter_iou_threshold,
+        voter_center_dist_threshold=voter_center_dist_threshold,
+        voter_smooth_alpha=voter_smooth_alpha,
     )
 
     try:
