@@ -16,7 +16,7 @@ python3 src/apps/failsafe_nav_foxglove_viz.py \
 |-------|------|---------------|------|
 | `/scan` | LaserScan | **3D** | 原始雷达点云 |
 | `/failsafe_nav/markers` | MarkerArray | **3D** | 安全圈、前方距离、free-space 射线、目标方向、状态文字 |
-| `/failsafe_nav/debug_image` | Image | **Image** | 相机图 + bbox + 导航点 + mode 文字 |
+| `/failsafe_nav/debug_image` | Image | **Image** | 相机图 + bbox + 导航点十字 + **u/v 坐标** + mode 文字 |
 | `/failsafe_nav_state` | String(JSON) | Raw Messages / Plot | 完整状态 JSON |
 | `/failsafe_nav_point` | String(JSON) | Raw Messages | 当前跟踪/探索像素点 |
 | `/target_bbox_json` | String(JSON) | Raw Messages | YOLO 检测框 |
@@ -47,10 +47,10 @@ python3 src/apps/failsafe_nav_foxglove_viz.py \
 
 ### 面板 B：Image（推荐）
 - Add panel → Image
-- Topic: `/failsafe_nav/debug_image`
-- 叠加了：YOLO bbox（紫框）、导航点十字（橙=target / 蓝=free_space）、mode 文字
+- **Topic 必须选** `/failsafe_nav/debug_image`（不是 `/image_raw`）
+- 叠加了：YOLO **绿色检测框**、框旁 **u/v**、导航点十字（橙=target / 蓝=free_space）
 
-备选原始相机：`/image_raw`（无叠加）
+备选原始相机：`/image_raw`（无框、无叠加）
 
 ### 面板 C：State JSON
 - Add panel → Raw Messages

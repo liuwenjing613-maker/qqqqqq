@@ -10,5 +10,5 @@ python "$PROJECT_DIR/gimbal/gimbal_tune.py" \
     --yaw-id 2 \
     --yaw 65 \
     --pitch-id 3 \
-    --pitch 30 \
+    --pitch 20 \
     --port /dev/ttyUSB0

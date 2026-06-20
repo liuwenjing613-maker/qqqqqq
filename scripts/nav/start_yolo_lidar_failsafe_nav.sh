@@ -45,6 +45,7 @@ mkdir -p logs data/images/yolo_lidar_failsafe_debug
 echo "===== P0 YOLO + LiDAR Failsafe Navigation ====="
 echo "PROJECT_DIR=$PROJECT_DIR"
 echo "CONFIG=$CONFIG INSTRUCTION=$INSTRUCTION NAV_ONLY=$NAV_ONLY"
+echo "FSM: min_state_frames=10 (yaml), emergency -> EMERGENCY_STOP immediate"
 echo "TARGET_WORDS=$TARGET_WORDS TARGET_CLASSES=$TARGET_CLASSES"
 echo "SCORE_THRESHOLD (node)=$SCORE_THRESHOLD"
 
@@ -55,6 +56,39 @@ pkill -f yolo_world_to_bbox_json.py || true
 pkill -f yolo_live_browser_preview.py || true
 pkill -f test_qwen_ollama_image.py || true
 pkill -f bench_qwen_ollama.py || true
+pkill -f compressed_to_raw_image.py || true
+pkill -f "hobot_usb_cam" || true
+pkill -f "ros2 launch hobot_usb_cam" || true
+sleep 2
+
+wait_ros_topic() {
+  local topic="$1"
+  local label="${2:-$topic}"
+  local tries="${3:-20}"
+  local per_try_sec="${4:-5}"
+  local ok=0
+  for i in $(seq 1 "$tries"); do
+    if timeout "$per_try_sec" ros2 topic echo "$topic" --once >/dev/null 2>&1; then
+      echo "  $label OK"
+      ok=1
+      break
+    fi
+    if [ "$label" = "/image" ] || [ "$label" = "camera /image" ]; then
+      if ! pgrep -f "hobot_usb_cam" >/dev/null 2>&1; then
+        echo "  ERROR: hobot_usb_cam not running (see logs/yolo_failsafe_camera.log)"
+        tail -5 logs/yolo_failsafe_camera.log 2>/dev/null || true
+        return 1
+      fi
+    fi
+    echo "  waiting $label... ($i/$tries)"
+    sleep 1
+  done
+  if [ "$ok" -ne 1 ]; then
+    echo "ERROR: $label not available after $tries attempts."
+    return 1
+  fi
+  return 0
+}
 
 if [ "$NAV_ONLY" = "1" ]; then
   echo "[P0] NAV_ONLY=1: starting failsafe nav only (assume sensors/YOLO already running)"
@@ -75,21 +109,38 @@ timeout 1 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
   >/dev/null 2>&1 || true
 
 echo "[2/7] start camera + image bridge..."
-pkill -f compressed_to_raw_image.py || true
-ros2 launch hobot_usb_cam hobot_usb_cam.launch.py \
+echo "  CAMERA_DEV=$CAMERA_DEV"
+if [ ! -e "$CAMERA_DEV" ]; then
+  echo "ERROR: camera device not found: $CAMERA_DEV"
+  echo "  try: ls -l /dev/video*"
+  echo "  or:  CAMERA_DEV=/dev/video1 bash scripts/nav/start_yolo_lidar_failsafe_nav.sh"
+  exit 1
+fi
+
+# Use project launch (1280x720 MJPEG) — direct 640x480 launch may crash on some boards.
+ros2 launch "$PROJECT_DIR/perception/launch/usb_cam.launch.py" \
   usb_video_device:="$CAMERA_DEV" \
-  usb_image_width:=640 \
-  usb_image_height:=480 \
-  usb_framerate:=10 \
   > logs/yolo_failsafe_camera.log 2>&1 &
-sleep 3
+sleep 5
+
+if ! wait_ros_topic /image "camera /image" 12 5; then
+  echo "Camera failed. Last log lines:"
+  tail -15 logs/yolo_failsafe_camera.log 2>/dev/null || true
+  exit 1
+fi
 
 python3 src/perception/compressed_to_raw_image.py \
   --in-topic /image \
   --out-topic /image_raw \
   --max-fps 2 \
   > logs/yolo_failsafe_image_raw.log 2>&1 &
-sleep 2
+sleep 3
+
+if ! wait_ros_topic /image_raw "/image_raw" 10 5; then
+  echo "Image bridge failed. Last log lines:"
+  tail -10 logs/yolo_failsafe_image_raw.log 2>/dev/null || true
+  exit 1
+fi
 
 echo "[3/7] start lidar..."
 ros2 launch "$PROJECT_DIR/lidar/launch/tmini_plus.launch.py" > logs/yolo_failsafe_scan.log 2>&1 &
@@ -134,23 +185,11 @@ python3 ros2_bridge/cmd_vel_to_rosmaster.py \
   > logs/yolo_failsafe_chassis.log 2>&1 &
 sleep 1
 
-echo "[7/7] wait for /image_raw and /scan..."
-for topic in /image_raw /scan; do
-  ok=0
-  for i in $(seq 1 15); do
-    if timeout 3 ros2 topic echo "$topic" --once >/dev/null 2>&1; then
-      echo "  $topic OK"
-      ok=1
-      break
-    fi
-    echo "  waiting $topic... ($i/15)"
-    sleep 2
-  done
-  if [ "$ok" -ne 1 ]; then
-    echo "ERROR: $topic not available. Check logs/."
-    exit 1
-  fi
-done
+echo "[7/7] wait for /scan..."
+if ! wait_ros_topic /scan "/scan" 15 5; then
+  echo "Check logs/yolo_failsafe_scan.log"
+  exit 1
+fi
 
 echo "[P0] starting failsafe nav..."
 python3 src/apps/run_yolo_lidar_failsafe_nav.py \

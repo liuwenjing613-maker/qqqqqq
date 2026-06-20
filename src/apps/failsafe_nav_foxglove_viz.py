@@ -52,6 +52,110 @@ def _polar_xy(heading_deg: float, dist: float):
     return dist * math.cos(rad), dist * math.sin(rad)
 
 
+def _draw_text_outline(
+    img: np.ndarray,
+    text: str,
+    org: tuple,
+    font_scale: float = 0.5,
+    color=(255, 255, 255),
+    outline=(0, 0, 0),
+    thickness: int = 1,
+) -> None:
+    cv2.putText(img, text, org, cv2.FONT_HERSHEY_SIMPLEX, font_scale, outline, thickness + 2, cv2.LINE_AA)
+    cv2.putText(img, text, org, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
+
+
+def _scale_pair(val: float, ref_size: Optional[int], img_size: int) -> float:
+    if ref_size and ref_size > 0 and img_size > 0 and ref_size != img_size:
+        return val * (float(img_size) / float(ref_size))
+    return val
+
+
+def _bbox_to_xyxy(raw, img_w: int, img_h: int) -> Optional[tuple]:
+    """Accept xyxy or xywh, return clamped (x1, y1, x2, y2)."""
+    if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        return None
+    a, b, c, d = [float(v) for v in raw]
+    if c > a and d > b and c <= img_w * 1.05 and d <= img_h * 1.05:
+        x1, y1, x2, y2 = int(a), int(b), int(c), int(d)
+    else:
+        x1, y1 = int(a), int(b)
+        x2, y2 = int(a + c), int(b + d)
+    x1 = max(0, min(x1, img_w - 1))
+    y1 = max(0, min(y1, img_h - 1))
+    x2 = max(0, min(x2, img_w - 1))
+    y2 = max(0, min(y2, img_h - 1))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def _pick_target_for_draw(latest_bbox: Dict[str, Any], latest_state: Dict[str, Any]) -> Dict[str, Any]:
+    candidates = []
+    if latest_bbox:
+        candidates.append(latest_bbox)
+    target = latest_state.get("target") if isinstance(latest_state, dict) else None
+    if isinstance(target, dict):
+        candidates.append(target)
+    for item in candidates:
+        if not item:
+            continue
+        if item.get("bbox") or item.get("u") is not None or item.get("cx") is not None:
+            if item.get("visible") is False and not item.get("bbox"):
+                continue
+            return item
+    return {}
+
+
+def _draw_target_bbox(
+    vis: np.ndarray,
+    target: Dict[str, Any],
+    img_w: int,
+    img_h: int,
+) -> None:
+    if not target:
+        return
+
+    ref_w = target.get("image_width") or target.get("ref_width")
+    ref_h = target.get("image_height") or target.get("ref_height")
+
+    raw_bbox = target.get("bbox")
+    if raw_bbox:
+        scaled = [
+            _scale_pair(float(raw_bbox[0]), int(ref_w) if ref_w else None, img_w),
+            _scale_pair(float(raw_bbox[1]), int(ref_h) if ref_h else None, img_h),
+            _scale_pair(float(raw_bbox[2]), int(ref_w) if ref_w else None, img_w),
+            _scale_pair(float(raw_bbox[3]), int(ref_h) if ref_h else None, img_h),
+        ]
+        rect = _bbox_to_xyxy(scaled, img_w, img_h)
+    else:
+        rect = None
+
+    u_raw = target.get("u", target.get("cx"))
+    v_raw = target.get("v", target.get("cy"))
+    u = int(_scale_pair(float(u_raw), int(ref_w) if ref_w else None, img_w)) if u_raw is not None else None
+    v = int(_scale_pair(float(v_raw), int(ref_h) if ref_h else None, img_h)) if v_raw is not None else None
+
+    color = (0, 255, 0)
+    if rect:
+        x1, y1, x2, y2 = rect
+        cv2.rectangle(vis, (x1, y1), (x2, y2), color, 3)
+        if u is None:
+            u = (x1 + x2) // 2
+        if v is None:
+            v = (y1 + y2) // 2
+        cls = str(target.get("class_name") or target.get("class") or "")
+        score = float(target.get("score", 0.0))
+        label = f"{cls} {score:.3f}".strip()
+        if label:
+            _draw_text_outline(vis, label, (x1, max(22, y1 - 8)), 0.55, color)
+    elif u is not None and v is not None:
+        cv2.drawMarker(vis, (u, v), color, cv2.MARKER_TILTED_CROSS, 20, 2)
+
+    if u is not None and v is not None:
+        _draw_text_outline(vis, f"u={u} v={v}", (u + 10, min(img_h - 8, v + 24)), 0.5, color)
+
+
 class FailsafeNavFoxgloveViz(Node):
     def __init__(self, cfg: Dict[str, Any]):
         super().__init__("failsafe_nav_foxglove_viz")
@@ -266,14 +370,9 @@ class FailsafeNavFoxgloveViz(Node):
         vis = self.latest_frame.copy()
         h, w = vis.shape[:2]
 
-        # bbox
-        bbox = self.latest_bbox
-        if bbox.get("visible", False) and isinstance(bbox.get("bbox"), (list, tuple)) and len(bbox["bbox"]) == 4:
-            x1, y1, x2, y2 = [int(v) for v in bbox["bbox"]]
-            if x2 > x1 and y2 > y1:
-                cv2.rectangle(vis, (x1, y1), (x2, y2), (255, 0, 255), 2)
-                label = f"{bbox.get('class_name', '')} {float(bbox.get('score', 0)):.3f}"
-                cv2.putText(vis, label, (x1, max(16, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+        # YOLO target bbox (green box + u/v), same style as live preview
+        draw_target = _pick_target_for_draw(self.latest_bbox, self.latest_state)
+        _draw_target_bbox(vis, draw_target, w, h)
 
         # active nav point
         pt = self.latest_point
@@ -282,7 +381,9 @@ class FailsafeNavFoxgloveViz(Node):
             color = (255, 180, 0) if pt.get("source") == "target" else (0, 180, 255)
             cv2.drawMarker(vis, (u, v), color, cv2.MARKER_CROSS, 24, 2)
             cv2.circle(vis, (u, v), 10, color, 1)
-            cv2.putText(vis, str(pt.get("source", "point")), (u + 8, v - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+            source = str(pt.get("source", "point"))
+            _draw_text_outline(vis, source, (u + 10, max(18, v - 22)), 0.45, color)
+            _draw_text_outline(vis, f"u={u} v={v}", (u + 10, max(18, v - 4)), 0.45, color)
 
         # state overlay
         st = self.latest_state
@@ -294,6 +395,10 @@ class FailsafeNavFoxgloveViz(Node):
             f"front={front_s}  vx={float(st.get('cmd_vx', 0)):.3f}  wz={float(st.get('cmd_wz', 0)):.3f}",
             f"reason={str(st.get('reason', ''))[:50]}",
         ]
+        if pt.get("u") is not None and pt.get("v") is not None:
+            lines.append(
+                f"nav u={int(float(pt['u']))} v={int(float(pt['v']))}  src={pt.get('source', '?')}"
+            )
         wp = st.get("waypoint") if isinstance(st.get("waypoint"), dict) else {}
         if wp:
             lines.append(
@@ -301,8 +406,7 @@ class FailsafeNavFoxgloveViz(Node):
             )
         y0 = 22
         for i, line in enumerate(lines):
-            cv2.putText(vis, line, (8, y0 + i * 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
-            cv2.putText(vis, line, (8, y0 + i * 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 40, 0), 1)
+            _draw_text_outline(vis, line, (8, y0 + i * 20), 0.55, (0, 255, 0))
 
         cv2.line(vis, (w // 2, 0), (w // 2, h), (80, 80, 80), 1)
         return vis

@@ -92,6 +92,11 @@ class YoloLidarFailsafeNav(Node):
         self.arrive_required_count = int(cfg.get("arrive_required_count", 3))
         self.min_forward_bursts_before_arrive = int(cfg.get("min_forward_bursts_before_arrive", 2))
         self.max_steps = int(cfg.get("max_steps", 600))
+        self.min_state_frames = int(cfg.get("min_state_frames", 10))
+
+        self.fsm_mode = "INIT"
+        self.fsm_mode_frames = 0
+        self._last_blocked_reason = "no_free_space"
 
         self.target_burst_sec = float(cfg.get("target_burst_sec", 0.25))
         self.target_observe_sec = float(cfg.get("target_observe_sec", 0.20))
@@ -164,7 +169,31 @@ class YoloLidarFailsafeNav(Node):
             f"topics image={self.image_topic} scan={self.scan_topic} "
             f"bbox={self.target_bbox_topic} cmd={self.cmd_topic}"
         )
+        self.get_logger().info(
+            f"min_state_frames={self.min_state_frames} emergency_stop={self.emergency_stop_distance}m"
+        )
         self.get_logger().info("Qwen/Ollama is NOT used in this P0 control loop.")
+
+    def _is_emergency_front(self, front: Optional[float]) -> bool:
+        return front is not None and front <= self.emergency_stop_distance
+
+    def _resolve_effective_mode(self, desired_mode: str, immediate: bool = False) -> str:
+        if immediate or self.fsm_mode in ("INIT",):
+            self.fsm_mode = desired_mode
+            self.fsm_mode_frames = 1
+            return self.fsm_mode
+
+        if desired_mode == self.fsm_mode:
+            self.fsm_mode_frames += 1
+            return self.fsm_mode
+
+        if self.fsm_mode_frames < self.min_state_frames:
+            self.fsm_mode_frames += 1
+            return self.fsm_mode
+
+        self.fsm_mode = desired_mode
+        self.fsm_mode_frames = 1
+        return self.fsm_mode
 
     def image_cb(self, msg: Image) -> None:
         self.last_image_time = time.time()
@@ -185,37 +214,67 @@ class YoloLidarFailsafeNav(Node):
 
     def decision_timer_cb(self) -> None:
         if self.success:
+            self.fsm_mode = "ARRIVED"
             self.publish_stop()
             self.publish_state("ARRIVED", reason="success_hold")
             return
 
         self.step_count += 1
         if self.step_count > self.max_steps:
+            self.fsm_mode = "STOPPED"
             self.publish_stop()
             self.publish_state("STOPPED", reason="max_steps")
             return
 
-        if not self.free_space.has_scan():
+        front = self.latest_front_distance
+
+        if self._is_emergency_front(front):
+            if self.fsm_mode == "EMERGENCY_STOP":
+                self.fsm_mode_frames += 1
+            else:
+                self._resolve_effective_mode("EMERGENCY_STOP", immediate=True)
             self.publish_stop()
-            self.publish_state("WAIT_SCAN", reason="no_scan")
+            self.publish_state(
+                "EMERGENCY_STOP",
+                front_distance=front,
+                reason="emergency_front_too_close",
+            )
             return
 
-        front = self.latest_front_distance
-        if front is not None and front <= self.emergency_stop_distance:
-            self.do_blocked_rotate("emergency_front_too_close")
+        if not self.free_space.has_scan():
+            desired_mode = "WAIT_SCAN"
+        else:
+            target = self.target_parser.get_target(time.time(), self.image_width, self.image_height)
+            if target.get("visible", False):
+                if self.check_arrive(target, front):
+                    desired_mode = "ARRIVED"
+                else:
+                    desired_mode = "TARGET_TRACK"
+            else:
+                wp = self.free_space.get_waypoint(self.image_width, self.image_height)
+                if not wp.get("usable", False):
+                    desired_mode = "BLOCKED_ROTATE"
+                    self._last_blocked_reason = str(wp.get("reason", "no_free_space"))
+                else:
+                    desired_mode = "FREE_SPACE_EXPLORE"
+
+        immediate = desired_mode in ("WAIT_SCAN", "STOPPED")
+        effective_mode = self._resolve_effective_mode(desired_mode, immediate=immediate)
+
+        if effective_mode == "WAIT_SCAN":
+            self.publish_stop()
+            self.publish_state("WAIT_SCAN", reason="no_scan", fsm_frames=self.fsm_mode_frames)
+            return
+
+        if not self.free_space.has_scan():
+            self.publish_stop()
+            self.publish_state("WAIT_SCAN", reason="no_scan", fsm_frames=self.fsm_mode_frames)
             return
 
         target = self.target_parser.get_target(time.time(), self.image_width, self.image_height)
+        front = self.latest_front_distance
 
-        if target.get("visible", False):
-            self.handle_target_track(target, front)
-        else:
-            self.handle_free_space_explore(front, target.get("reason", "target_not_visible"))
-
-    def handle_target_track(self, target: Dict[str, Any], front: Optional[float]) -> None:
-        cmd, servo_state = self.compute_target_cmd(target, front)
-
-        if self.check_arrive(target, front):
+        if effective_mode == "ARRIVED":
             self.success = True
             self.publish_stop()
             self.publish_state(
@@ -223,6 +282,77 @@ class YoloLidarFailsafeNav(Node):
                 target=target,
                 front_distance=front,
                 reason="target_center_and_close",
+                fsm_frames=self.fsm_mode_frames,
+            )
+            return
+
+        if effective_mode == "TARGET_TRACK":
+            if not target.get("visible", False):
+                self.publish_stop()
+                self.publish_state(
+                    "TARGET_TRACK",
+                    target=target,
+                    front_distance=front,
+                    reason="state_hold_no_target",
+                    fsm_frames=self.fsm_mode_frames,
+                )
+                return
+            self.handle_target_track(
+                target,
+                front,
+                allow_arrive=(desired_mode == "ARRIVED" and self.fsm_mode_frames >= self.min_state_frames),
+            )
+            return
+
+        if effective_mode == "FREE_SPACE_EXPLORE":
+            target_reason = target.get("reason", "target_not_visible")
+            wp = self.free_space.get_waypoint(self.image_width, self.image_height)
+            if not wp.get("usable", False):
+                self.publish_stop()
+                self.publish_state(
+                    "FREE_SPACE_EXPLORE",
+                    front_distance=front,
+                    reason=f"state_hold_bad_wp; target={target_reason}",
+                )
+                return
+            self.handle_free_space_explore(front, target_reason)
+            return
+
+        if effective_mode == "BLOCKED_ROTATE":
+            self.do_blocked_rotate(self._last_blocked_reason)
+            return
+
+        if effective_mode == "EMERGENCY_STOP":
+            self.publish_stop()
+            self.publish_state(
+                "EMERGENCY_STOP",
+                front_distance=front,
+                reason="emergency_front_too_close",
+                fsm_frames=self.fsm_mode_frames,
+            )
+            return
+
+        self.publish_stop()
+        self.publish_state("UNKNOWN", reason=f"unhandled_mode={effective_mode}")
+
+    def handle_target_track(
+        self,
+        target: Dict[str, Any],
+        front: Optional[float],
+        allow_arrive: bool = True,
+    ) -> None:
+        cmd, servo_state = self.compute_target_cmd(target, front)
+
+        if allow_arrive and self.check_arrive(target, front):
+            self.success = True
+            self.fsm_mode = "ARRIVED"
+            self.publish_stop()
+            self.publish_state(
+                "ARRIVED",
+                target=target,
+                front_distance=front,
+                reason="target_center_and_close",
+                fsm_frames=self.fsm_mode_frames,
             )
             return
 
@@ -234,6 +364,8 @@ class YoloLidarFailsafeNav(Node):
             front_distance=front,
             cmd=cmd,
             reason=servo_state,
+            fsm_frames=self.fsm_mode_frames,
+            desired_hold=(self.fsm_mode_frames < self.min_state_frames),
         )
 
     def compute_target_cmd(self, target: Dict[str, Any], front: Optional[float]):
@@ -287,6 +419,8 @@ class YoloLidarFailsafeNav(Node):
             clearance=wp.get("clearance"),
             cmd=cmd,
             reason=f"{mode}; target={target_reason}",
+            fsm_frames=self.fsm_mode_frames,
+            desired_hold=(self.fsm_mode_frames < self.min_state_frames),
         )
 
     def compute_explore_cmd(self, wp: Dict[str, Any], front: Optional[float]):
@@ -332,6 +466,8 @@ class YoloLidarFailsafeNav(Node):
             front_distance=self.latest_front_distance,
             cmd=cmd,
             reason=reason,
+            fsm_frames=self.fsm_mode_frames,
+            desired_hold=(self.fsm_mode_frames < self.min_state_frames),
         )
 
     def check_arrive(self, target: Dict[str, Any], front: Optional[float]) -> bool:
@@ -385,6 +521,9 @@ class YoloLidarFailsafeNav(Node):
         data = {
             "step": self.step_count,
             "mode": mode,
+            "fsm_mode": self.fsm_mode,
+            "fsm_frames": self.fsm_mode_frames,
+            "min_state_frames": self.min_state_frames,
             "instruction": self.instruction,
             "image_width": self.image_width,
             "image_height": self.image_height,

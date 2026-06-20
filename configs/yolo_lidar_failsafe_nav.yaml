@@ -73,10 +73,10 @@ lidar_front_deg: 25.0
 lidar_target_window_deg: 8.0
 
 # ===== Safety distances, m =====
-emergency_stop_distance: 0.22
-hard_stop_distance: 0.32
-slow_distance: 0.55
-normal_distance: 0.90
+emergency_stop_distance: 0.35
+hard_stop_distance: 0.45
+slow_distance: 0.70
+normal_distance: 1.2
 arrive_distance: 0.38
 
 # ===== Target visual servo =====
@@ -135,9 +135,12 @@ center_arrive_px: 80
 arrive_required_count: 3
 min_forward_bursts_before_arrive: 2
 
+# ===== FSM =====
+min_state_frames: 10
+
 # ===== Runtime =====
 control_rate_hz: 20.0
 decision_rate_hz: 5.0
-max_steps: 600
+max_steps: 1500
 save_debug: true
 debug_dir: "data/images/yolo_lidar_failsafe_debug"
