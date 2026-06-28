@@ -49,6 +49,33 @@ class FreeSpaceWaypointProvider:
     def has_scan(self) -> bool:
         return self.scan is not None
 
+    def scan_age(self, now: Optional[float] = None) -> Optional[float]:
+        if self.scan is None:
+            return None
+        return max(0.0, float(now if now is not None else time.time()) - self.last_update_time)
+
+    def sector_clearance(
+        self,
+        heading_deg: float,
+        window_deg: Optional[float] = None,
+        method: str = "min",
+    ) -> Optional[float]:
+        win = float(window_deg if window_deg is not None else self.cfg.window_deg)
+        return self._window_clearance(heading_deg, win, method=method)
+
+    def front_min_distance(self, front_deg: Optional[float] = None) -> Optional[float]:
+        """Safety: minimum range in front sector. Never use percentile for emergency."""
+        if self.scan is None:
+            return None
+        deg = float(front_deg if front_deg is not None else self.cfg.lidar_front_deg)
+        return self._window_clearance(0.0, deg, method="min")
+
+    def left_clearance(self, heading_deg: float = 45.0, window_deg: Optional[float] = None) -> Optional[float]:
+        return self.sector_clearance(heading_deg, window_deg, method="min")
+
+    def right_clearance(self, heading_deg: float = -45.0, window_deg: Optional[float] = None) -> Optional[float]:
+        return self.sector_clearance(heading_deg, window_deg, method="min")
+
     def front_distance(self) -> Optional[float]:
         if self.scan is None:
             return None

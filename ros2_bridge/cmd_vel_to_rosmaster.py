@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
 import sys
 import threading
 import time
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Quaternion, TransformStamped, Twist
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import String
+from tf2_ros import TransformBroadcaster
 
 from Rosmaster_Lib import Rosmaster
 
@@ -22,6 +25,15 @@ from src.control.cmd_smoother import CmdSmoother
 
 def clamp(value, min_value, max_value):
     return max(min_value, min(max_value, value))
+
+
+def yaw_to_quaternion(yaw: float) -> Quaternion:
+    q = Quaternion()
+    q.x = 0.0
+    q.y = 0.0
+    q.z = math.sin(yaw / 2.0)
+    q.w = math.cos(yaw / 2.0)
+    return q
 
 
 class CmdVelToRosmaster(Node):
@@ -52,10 +64,20 @@ class CmdVelToRosmaster(Node):
         reset_on_zero=False,
         zero_reset_hold_sec=0.4,
         debug=False,
+        publish_odom=True,
+        odom_topic="/odom",
+        odom_frame="odom",
+        base_frame="base_link",
+        odom_rate_hz=30.0,
     ):
         super().__init__("cmd_vel_to_rosmaster")
 
         self.port = port
+        self.publish_odom = bool(publish_odom)
+        self.odom_topic = str(odom_topic)
+        self.odom_frame = str(odom_frame)
+        self.base_frame = str(base_frame)
+        self.odom_rate_hz = float(odom_rate_hz)
         self.max_vx = float(max_vx)
         self.max_wz = float(max_wz)
         self.watchdog_timeout = float(watchdog_timeout)
@@ -96,6 +118,15 @@ class CmdVelToRosmaster(Node):
         self.sent_cmd_pub = self.create_publisher(Twist, "/cmd_vel_sent", 10)
         self.state_pub = self.create_publisher(String, "/chassis_bridge_state", 10)
 
+        self.odom_pub = None
+        self.tf_broadcaster = None
+        self.odom_timer = None
+        self.odom_lock = threading.Lock()
+        self.odom_x = 0.0
+        self.odom_y = 0.0
+        self.odom_yaw = 0.0
+        self.last_odom_time = None
+
         self.get_logger().info("Initializing Rosmaster...")
         self.get_logger().info(f"Serial port: {self.port}")
 
@@ -128,9 +159,18 @@ class CmdVelToRosmaster(Node):
         self.status_timer = self.create_timer(2.0, self.status_callback)
         self.bridge_state_timer = self.create_timer(0.5, self.publish_bridge_state)
 
+        if self.publish_odom:
+            self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
+            self.tf_broadcaster = TransformBroadcaster(self)
+            odom_period = 1.0 / max(1.0, self.odom_rate_hz)
+            self.odom_timer = self.create_timer(odom_period, self.odom_timer_callback)
+
         self.get_logger().info("cmd_vel_to_rosmaster started.")
         self.get_logger().info("Subscribed topic: /cmd_vel")
-        self.get_logger().info("Publishing: /cmd_vel_sent, /chassis_bridge_state")
+        publish_topics = "/cmd_vel_sent, /chassis_bridge_state"
+        if self.publish_odom:
+            publish_topics += f", {self.odom_topic} (TF {self.odom_frame}->{self.base_frame})"
+        self.get_logger().info(f"Publishing: {publish_topics}")
         self.get_logger().info(
             f"Safety limits: max_vx={self.max_vx:.3f} m/s, max_wz={self.max_wz:.3f} rad/s"
         )
@@ -144,6 +184,73 @@ class CmdVelToRosmaster(Node):
             f"kick_wz={self.kick_wz:.3f}, duration={self.kick_duration:.3f}s, "
             f"cooldown={self.kick_cooldown:.3f}s, cmd_wz_deadzone={self.cmd_wz_deadzone:.3f}"
         )
+        if self.publish_odom:
+            self.get_logger().info(
+                f"Odom: topic={self.odom_topic}, frames={self.odom_frame}->{self.base_frame}, "
+                f"rate={self.odom_rate_hz:.1f}Hz, source=get_motion_data()"
+            )
+
+    def odom_timer_callback(self):
+        if not self.publish_odom or self.odom_pub is None or self.tf_broadcaster is None:
+            return
+
+        now = time.time()
+        try:
+            motion = self.bot.get_motion_data()
+            vx = float(motion[0])
+            vy = float(motion[1])
+            wz = float(motion[2])
+        except Exception as exc:
+            self.get_logger().warning(
+                f"get_motion_data failed, skip odom publish: {exc!r}"
+            )
+            return
+
+        with self.odom_lock:
+            if self.last_odom_time is not None:
+                dt = now - self.last_odom_time
+                if dt > 0.0:
+                    cos_yaw = math.cos(self.odom_yaw)
+                    sin_yaw = math.sin(self.odom_yaw)
+                    self.odom_x += (vx * cos_yaw - vy * sin_yaw) * dt
+                    self.odom_y += (vx * sin_yaw + vy * cos_yaw) * dt
+                    self.odom_yaw += wz * dt
+                    self.odom_yaw = math.atan2(
+                        math.sin(self.odom_yaw), math.cos(self.odom_yaw)
+                    )
+            self.last_odom_time = now
+            x = self.odom_x
+            y = self.odom_y
+            yaw = self.odom_yaw
+
+        stamp = self.get_clock().now().to_msg()
+        orientation = yaw_to_quaternion(yaw)
+
+        odom = Odometry()
+        odom.header.stamp = stamp
+        odom.header.frame_id = self.odom_frame
+        odom.child_frame_id = self.base_frame
+        odom.pose.pose.position.x = x
+        odom.pose.pose.position.y = y
+        odom.pose.pose.position.z = 0.0
+        odom.pose.pose.orientation = orientation
+        odom.twist.twist.linear.x = vx
+        odom.twist.twist.linear.y = vy
+        odom.twist.twist.linear.z = 0.0
+        odom.twist.twist.angular.x = 0.0
+        odom.twist.twist.angular.y = 0.0
+        odom.twist.twist.angular.z = wz
+        self.odom_pub.publish(odom)
+
+        transform = TransformStamped()
+        transform.header.stamp = stamp
+        transform.header.frame_id = self.odom_frame
+        transform.child_frame_id = self.base_frame
+        transform.transform.translation.x = x
+        transform.transform.translation.y = y
+        transform.transform.translation.z = 0.0
+        transform.transform.rotation = orientation
+        self.tf_broadcaster.sendTransform(transform)
 
     def _is_stopped(self):
         return abs(self.last_vx) < 1e-4 and abs(self.last_wz) < 1e-4
@@ -325,6 +432,15 @@ def main():
     )
     parser.add_argument("--zero-reset-hold-sec", type=float, default=0.4)
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument(
+        "--publish-odom",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--odom-topic", default="/odom")
+    parser.add_argument("--odom-frame", default="odom")
+    parser.add_argument("--base-frame", default="base_link")
+    parser.add_argument("--odom-rate-hz", type=float, default=30.0)
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -347,6 +463,11 @@ def main():
         reset_on_zero=args.reset_on_zero,
         zero_reset_hold_sec=args.zero_reset_hold_sec,
         debug=args.debug,
+        publish_odom=args.publish_odom,
+        odom_topic=args.odom_topic,
+        odom_frame=args.odom_frame,
+        base_frame=args.base_frame,
+        odom_rate_hz=args.odom_rate_hz,
     )
 
     try:

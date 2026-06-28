@@ -1,7 +1,5 @@
 # P0 YOLO / YOLO-World + LiDAR failsafe navigation — 唯一主配置文件
-# 相机 / YOLO / bbox bridge / 底盘 / 导航 / Foxglove 均由此文件驱动。
-# 启动: bash scripts/nav/start_yolo_lidar_failsafe_nav.sh [本文件] [instruction覆盖]
-# 稳定版: bash scripts/nav/start_yolo_lidar_stable_nav.sh
+# 分层: Sensor -> Safety 20Hz -> Behavior/Planner 5Hz -> Controller 20Hz -> Chassis
 
 # ===== Topics =====
 image_topic: "/image_raw"
@@ -93,7 +91,7 @@ yolo_bridge:
   voter_center_dist_threshold: 0.18
   voter_smooth_alpha: 0.65
 
-# ===== Chassis bridge (cmd_vel_to_rosmaster.py) =====
+# ===== Chassis bridge (cmd_vel_to_rosmaster.py) — kick 启动脉冲保持不变 =====
 chassis:
   port: "/dev/ttyUSB0"
   max_vx: 0.06
@@ -119,51 +117,51 @@ lidar_max_range: 6.0
 lidar_front_deg: 25.0
 lidar_target_window_deg: 8.0
 
-# ===== LiDAR freshness =====
-max_scan_age_sec: 1.0
-front_distance_hold_sec: 0.5
-scan_stale_nav_grace_sec: 1.2
+# ===== LiDAR freshness (Safety Layer) =====
+max_scan_age_sec: 0.35
+front_distance_hold_sec: 0.0
 bad_wp_limit: 3
 
-# ===== Safety distances, m =====
-emergency_stop_distance: 0.35
-hard_stop_distance: 0.45
-slow_distance: 0.70
+# ===== Safety distances, m — 使用 front_min (min 扇区) =====
+emergency_stop_distance: 0.50
+hard_stop_distance: 0.65
+slow_distance: 0.90
 normal_distance: 1.2
 arrive_distance: 0.38
 
-# ===== Responsive but stable control timing =====
-# decision 8Hz ≈ 125ms 反应；control 30Hz 持续下发；cmd_hold 略大于决策周期避免空档
-control_rate_hz: 30.0
-decision_rate_hz: 8.0
-cmd_hold_sec: 0.40
-stop_on_cmd_expire: true
-cmd_publish_immediate: true
+# ===== Layer timing =====
+control_rate_hz: 20.0
+decision_rate_hz: 5.0
 
-# 探索要慢速(≈0.01)时：min_drive_vx 勿大于 explore_vx，且 vx_deadband 必须严格小于 explore_vx
+# ===== Controller limits =====
+max_cmd_vx: 0.01
+max_cmd_wz: 0.24
+wz_slow_vx_threshold: 0.10
+wz_zero_vx_threshold: 0.16
+wz_slow_vx_scale: 0.5
+
 min_drive_vx: 0.01
 min_turn_wz: 0.12
-vx_deadband: 0.005
+vx_deadband: 0.003
 wz_deadband: 0.015
 
-# ===== Target visual servo =====
-target_max_vx: 0.03
-target_mid_vx: 0.04
-target_slow_vx: 0.025
-target_min_vx: 0.02
+# ===== Target visual servo (Behavior / Planner) =====
+target_max_vx: 0.01
+target_mid_vx: 0.01
+target_slow_vx: 0.008
+target_min_vx: 0.008
 
-target_kp_turn: 0.1
+target_kp_turn: 0.10
 target_max_wz: 0.20
 target_wz_deadzone: 0.02
 target_cmd_wz_deadzone: 0.02
 target_turn_threshold: 0.18
 target_forward_turn_scale: 0.45
 
-target_reacquire_wz: 0.18
-target_reacquire_hold_sec: 0.35
+target_reacquire_wz: 0.16
 target_lost_to_explore_sec: 1.5
 
-# ===== Free-space waypoint =====
+# ===== Free-space waypoint (Local Planner) =====
 free_space_enabled: true
 free_space_sector_deg: 70.0
 free_space_step_deg: 5.0
@@ -182,27 +180,17 @@ free_space_center_weight: 0.30
 free_space_consistency_weight: 0.10
 
 # ===== Explore control =====
-explore_vx: 0.005
-explore_slow_vx: 0.004
-explore_kp_turn: 0.1
+explore_vx: 0.01
+explore_slow_vx: 0.008
+explore_kp_turn: 0.10
 explore_max_wz: 0.15
 explore_turn_only_threshold: 0.18
 explore_forward_turn_scale: 0.45
 
-# 旧 burst 参数保留兼容，控制环不再使用
-target_burst_sec: 0.80
-target_observe_sec: 0.05
-explore_burst_sec: 0.80
-explore_observe_sec: 0.05
-
-# ===== Blocked / scan recovery =====
-scan_wz: 0.24
-blocked_rotate_wz: 0.18
-blocked_rotate_hold_sec: 1.2
-blocked_rotate_min_switch_sec: 1.2
-scan_burst_sec: 0.80
-scan_observe_sec: 0.05
-blocked_rotate_alternate: true
+# ===== Blocked recovery =====
+scan_wz: 0.16
+blocked_rotate_wz: 0.16
+recovery_side_deg: 45.0
 blocked_front_distance: 0.40
 
 # ===== Arrive =====
@@ -211,7 +199,7 @@ arrive_required_count: 3
 min_forward_bursts_before_arrive: 2
 
 # ===== FSM =====
-min_state_frames: 3
+min_state_frames: 2
 bad_wp_grace_frames: 2
 no_target_grace_frames: 2
 
