@@ -66,57 +66,118 @@ maybe_convert_png() {
   local png="${MAP_DIR}/${MAP_NAME}.png"
 
   if [ ! -f "$pgm" ]; then
-    return 0
+    return 1
   fi
 
-  python3 - "$pgm" "$png" <<'PY' || true
+  if python3 - "$pgm" "$png" <<'PY'
 import sys
 from pathlib import Path
 
 pgm = Path(sys.argv[1])
 png = Path(sys.argv[2])
 if not pgm.is_file():
-    sys.exit(0)
+    sys.exit(1)
 try:
     from PIL import Image
 except ImportError:
-    print("[info] Pillow not installed; skip PNG preview")
-    sys.exit(0)
+    print("[WARN] Pillow not installed; skip PNG preview", file=sys.stderr)
+    sys.exit(1)
 
 img = Image.open(pgm)
 img.save(png)
 print(f"[info] Wrote {png}")
 PY
-
-  if [ -f "$png" ]; then
+  then
     log "Preview PNG:"
     ls -lh "$png"
+    return 0
   fi
+
+  log "WARN: PNG preview conversion failed. See above for details."
+  return 1
 }
 
 save_map() {
+  local MAP_OUT="${MAP_DIR}/${MAP_NAME}"
+  local MAP_TMP
+  local save_start_epoch
+  local saver_rc=0
+  local pub_count
+  local file_epoch
+
   if [ "$SAVED" = "1" ]; then
     return 0
   fi
 
-  log "Saving map to ${MAP_DIR}/${MAP_NAME} ..."
+  source_ros
+  save_start_epoch="$(date +%s)"
+  MAP_TMP="${MAP_OUT}.tmp_$(date +%Y%m%d_%H%M%S)"
 
-  if ros2 topic list 2>/dev/null | grep -qx "/map"; then
-    ros2 run nav2_map_server map_saver_cli -f "${MAP_DIR}/${MAP_NAME}" \
-      > "${LOG_DIR}/map_saver.log" 2>&1
+  log "Saving map to ${MAP_OUT} ..."
 
-    if [ -f "${MAP_DIR}/${MAP_NAME}.yaml" ] && [ -f "${MAP_DIR}/${MAP_NAME}.pgm" ]; then
-      log "Map saved:"
-      ls -lh "${MAP_DIR}/${MAP_NAME}.yaml" "${MAP_DIR}/${MAP_NAME}.pgm"
-      maybe_convert_png
-      SAVED=1
-    else
-      log "WARN: map_saver_cli ran but map file not found. See ${LOG_DIR}/map_saver.log"
-      tail -80 "${LOG_DIR}/map_saver.log" 2>/dev/null || true
-    fi
-  else
-    log "WARN: /map does not exist, skip map saving."
+  if ! ros2 topic list 2>/dev/null | grep -qx "/map"; then
+    log "ERROR: /map does not exist, skip map saving."
+    return 1
   fi
+
+  {
+    echo "===== /map topic info ====="
+    ros2 topic info /map -v 2>&1 || true
+    echo
+  } > "${LOG_DIR}/map_saver.log"
+
+  pub_count="$(ros2 topic info /map -v 2>/dev/null | awk '/Publisher count:/{print $3; exit}')"
+  if [ "${pub_count:-0}" = "0" ]; then
+    log "ERROR: /map has no publisher; slam_toolbox may have exited."
+    return 1
+  fi
+
+  set +e
+  timeout 30 ros2 run nav2_map_server map_saver_cli \
+    -t /map \
+    -f "$MAP_TMP" \
+    --ros-args \
+    -p save_map_timeout:=20.0 \
+    >> "${LOG_DIR}/map_saver.log" 2>&1
+  saver_rc=$?
+  set -u
+
+  if [ "$saver_rc" -ne 0 ]; then
+    log "ERROR: map_saver_cli failed with exit code ${saver_rc}. See ${LOG_DIR}/map_saver.log"
+    tail -40 "${LOG_DIR}/map_saver.log" 2>/dev/null || true
+    rm -f "${MAP_TMP}.pgm" "${MAP_TMP}.yaml" 2>/dev/null || true
+    return 1
+  fi
+
+  if [ ! -f "${MAP_TMP}.pgm" ] || [ ! -f "${MAP_TMP}.yaml" ]; then
+    log "ERROR: map_saver_cli exited 0 but temp map files not found: ${MAP_TMP}.pgm/.yaml"
+    tail -40 "${LOG_DIR}/map_saver.log" 2>/dev/null || true
+    rm -f "${MAP_TMP}.pgm" "${MAP_TMP}.yaml" 2>/dev/null || true
+    return 1
+  fi
+
+  file_epoch="$(stat -c %Y "${MAP_TMP}.pgm" 2>/dev/null || echo 0)"
+  if [ "$file_epoch" -lt "$save_start_epoch" ]; then
+    log "ERROR: temp map file mtime (${file_epoch}) is older than save start (${save_start_epoch})."
+    rm -f "${MAP_TMP}.pgm" "${MAP_TMP}.yaml" 2>/dev/null || true
+    return 1
+  fi
+
+  file_epoch="$(stat -c %Y "${MAP_TMP}.yaml" 2>/dev/null || echo 0)"
+  if [ "$file_epoch" -lt "$save_start_epoch" ]; then
+    log "ERROR: temp map yaml mtime (${file_epoch}) is older than save start (${save_start_epoch})."
+    rm -f "${MAP_TMP}.pgm" "${MAP_TMP}.yaml" 2>/dev/null || true
+    return 1
+  fi
+
+  mv "${MAP_TMP}.pgm" "${MAP_OUT}.pgm"
+  mv "${MAP_TMP}.yaml" "${MAP_OUT}.yaml"
+
+  log "Map saved:"
+  ls -lh "${MAP_OUT}.yaml" "${MAP_OUT}.pgm"
+  SAVED=1
+  maybe_convert_png || true
+  return 0
 }
 
 stop_live_stack() {
@@ -168,7 +229,11 @@ cleanup() {
   stop_joystick_nodes
 
   # 2) Save map while SLAM stack is still alive (live_stack runs under setsid).
-  save_map
+  if save_map; then
+    log "OK: map saved."
+  else
+    log "ERROR: map save failed. Old map files were not overwritten."
+  fi
 
   # 3) Stop robot motion, then tear down SLAM stack.
   zero_cmd

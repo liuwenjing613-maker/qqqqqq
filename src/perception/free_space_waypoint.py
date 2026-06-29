@@ -32,6 +32,7 @@ class FreeSpaceConfig:
     clearance_weight: float = 0.60
     center_weight: float = 0.30
     consistency_weight: float = 0.10
+    target_window_deg: float = 8.0
 
 
 class FreeSpaceWaypointProvider:
@@ -75,6 +76,15 @@ class FreeSpaceWaypointProvider:
 
     def right_clearance(self, heading_deg: float = -45.0, window_deg: Optional[float] = None) -> Optional[float]:
         return self.sector_clearance(heading_deg, window_deg, method="min")
+
+    def pixel_u_to_heading_deg(self, u: float, image_width: int) -> float:
+        u_ratio = float(u) / max(float(image_width), 1.0)
+        return (u_ratio - 0.5) * self.cfg.camera_hfov_deg
+
+    def target_distance_at_u(self, u: float, image_width: int) -> Optional[float]:
+        """Lidar range in a narrow window around the image column of the target."""
+        heading = self.pixel_u_to_heading_deg(u, image_width)
+        return self.sector_clearance(heading, self.cfg.target_window_deg, method="min")
 
     def front_distance(self) -> Optional[float]:
         if self.scan is None:

@@ -7,6 +7,8 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/project_dir.sh"
 cd "$PROJECT_DIR"
+source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
+source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
 
 LOG_DIR="${PROJECT_DIR}/logs/slam_live"
 SLAM_CONFIG="${PROJECT_DIR}/configs/slam_toolbox.yaml"
@@ -55,11 +57,9 @@ cleanup() {
   pkill -f "sync_slam_toolbox_node" 2>/dev/null || true
   pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
-  pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
-  pkill -f "foxglove_bridge" 2>/dev/null || true
+  cleanup_lidar_slam_nav_processes
   pkill -f "ydlidar_ros2_driver_node" 2>/dev/null || true
   pkill -f "start_lidar_only.sh" 2>/dev/null || true
-  pkill -f "simple_scan_filter.py" 2>/dev/null || true
 }
 
 # Do not trap INT: when started under setsid from run_joy_mapping_all.sh,
@@ -184,15 +184,11 @@ main() {
 
   log "Stopping old SLAM-related processes..."
   publish_zero_cmd
-  pkill -f "async_slam_toolbox_node" 2>/dev/null || true
-  pkill -f "sync_slam_toolbox_node" 2>/dev/null || true
+  cleanup_lidar_slam_nav_processes
   pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
-  pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
-  pkill -f "foxglove_bridge" 2>/dev/null || true
   pkill -f "ydlidar_ros2_driver_node" 2>/dev/null || true
   pkill -f "start_lidar_only.sh" 2>/dev/null || true
-  pkill -f "simple_scan_filter.py" 2>/dev/null || true
   sleep 1
 
   log "[1/6] LiDAR -> /scan"
@@ -228,13 +224,17 @@ main() {
   run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"
   sleep 4
 
-  log "[3/6] Static TF base_link -> laser"
+  log "[3/6] Static TF base_link -> ${LASER_FRAME}"
   start_background static_tf \
     ros2 run tf2_ros static_transform_publisher \
-    --x 0.10 --y 0.0 --z 0.12 \
-    --roll 0.0 --pitch 0.0 --yaw 0.0 \
+    --x "${LASER_X}" \
+    --y "${LASER_Y}" \
+    --z "${LASER_Z}" \
+    --roll "${LASER_ROLL}" \
+    --pitch "${LASER_PITCH}" \
+    --yaw "${LASER_YAW}" \
     --frame-id base_link \
-    --child-frame-id laser
+    --child-frame-id "${LASER_FRAME}"
   sleep 2
 
   log "[4/6] slam_toolbox online_async (scan_topic=/scan_filtered)"

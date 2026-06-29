@@ -42,6 +42,10 @@ run_chassis_bridge() {
     --odom-rate-hz 30.0 \
     --odom-vxy-deadzone 0.003 \
     --odom-wz-deadzone 0.015 \
+    --odom-vx-scale "${CHASSIS_ODOM_VX_SCALE:-1.0}" \
+    --odom-vy-scale "${CHASSIS_ODOM_VY_SCALE:-1.0}" \
+    --base-yaw-offset "${CHASSIS_BASE_YAW_OFFSET:-0.0}" \
+    --odom-wz-scale "${CHASSIS_ODOM_WZ_SCALE:-1.0}" \
     $( [ "${CHASSIS_DEBUG:-0}" = "1" ] && echo "--debug" ) \
     > "${log_file}" 2>&1 &
 }

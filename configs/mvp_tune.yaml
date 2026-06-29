@@ -4,15 +4,15 @@
 # =============================================================================
 
 # -----------------------------
-# YOLO 低分检测
+# YOLO 低分检测（cup 召回优先；误检时可略升 yolo_min_score）
 # -----------------------------
-yolo_min_score: 0.008
+yolo_min_score: 0.003
 det_stale_sec: 1.2
 sync_max_delta_sec: 0.5
 
-# YOLO-World green bottle 不做红色强校验；这里仅保留兼容字段
+# YOLO-World cup 检测；不做红色强校验
 min_red_ratio: 0.045
-max_area_ratio: 0.24
+max_area_ratio: 0.40
 
 # -----------------------------
 # 视觉伺服巡航速度

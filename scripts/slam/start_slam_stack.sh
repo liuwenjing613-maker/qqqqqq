@@ -4,6 +4,8 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/project_dir.sh"
 cd "$PROJECT_DIR"
+source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
+source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
 
 LOG_DIR="${PROJECT_DIR}/logs/slam_stack"
 MAP_DIR="${PROJECT_DIR}/maps"
@@ -42,12 +44,10 @@ kill_stack_processes() {
       kill "$pid" 2>/dev/null || true
     fi
   done
-  pkill -f "async_slam_toolbox_node" 2>/dev/null || true
+  cleanup_lidar_slam_nav_processes
   pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
-  pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
   pkill -f "ydlidar_ros2_driver_node" 2>/dev/null || true
-  pkill -f "foxglove_bridge" 2>/dev/null || true
 }
 
 cleanup() {
@@ -127,8 +127,10 @@ preflight_checks() {
 post_start_checks() {
   log "Post-start health checks..."
   wait_for_topic_msgs /scan 20
+  wait_for_topic_msgs /scan_filtered 20
   wait_for_topic_msgs /odom 20
   check_topic_hz /scan "LiDAR /scan"
+  check_topic_hz /scan_filtered "Filtered /scan_filtered"
   check_topic_hz /odom "Odometry /odom"
   check_tf_chain
   wait_for_topic_msgs /map 30
@@ -145,34 +147,50 @@ main() {
   kill_stack_processes
   sleep 0.5
 
-  log "[1/5] LiDAR driver -> /scan"
+  log "[1/6] LiDAR driver -> /scan"
   start_background lidar bash "${PROJECT_DIR}/scripts/lidar/start_lidar_only.sh"
   sleep 3
 
-  log "[2/5] Chassis PWM bridge (no /odom)"
+  log "[2/6] Scan filter /scan -> /scan_filtered"
+  start_background scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
+    --in-topic /scan \
+    --out-topic /scan_filtered \
+    --min-range 0.18 \
+    --max-range "${SCAN_FILTER_MAX_RANGE:-4.0}" \
+    --isolated-window "${SCAN_FILTER_ISOLATED_WINDOW:-2}" \
+    --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
+    --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
+    --stats-every 50
+  sleep 2
+
+  log "[3/6] Chassis PWM bridge + /odom"
   source "${PROJECT_DIR}/scripts/lib/load_mvp_tune.sh"
   source "${PROJECT_DIR}/scripts/lib/run_chassis_bridge.sh"
   export CHASSIS_PORT="${CHASSIS_DEV}"
   run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"
   sleep 2
 
-  log "[3/5] Static TF base_link -> laser"
+  log "[4/6] Static TF base_link -> ${LASER_FRAME}"
   start_background static_tf \
     ros2 run tf2_ros static_transform_publisher \
-    --x 0.10 --y 0.0 --z 0.12 \
-    --roll 0.0 --pitch 0.0 --yaw 0.0 \
+    --x "${LASER_X}" \
+    --y "${LASER_Y}" \
+    --z "${LASER_Z}" \
+    --roll "${LASER_ROLL}" \
+    --pitch "${LASER_PITCH}" \
+    --yaw "${LASER_YAW}" \
     --frame-id base_link \
-    --child-frame-id laser
+    --child-frame-id "${LASER_FRAME}"
   sleep 1
 
-  log "[4/5] slam_toolbox -> /map"
+  log "[5/6] slam_toolbox -> /map"
   start_background slam_toolbox \
     ros2 launch slam_toolbox online_async_launch.py \
     use_sim_time:=false \
     slam_params_file:="${SLAM_CONFIG}"
   sleep 4
 
-  log "[5/5] foxglove_bridge -> ws://<host>:${FOXGLOVE_PORT}"
+  log "[6/6] foxglove_bridge -> ws://<host>:${FOXGLOVE_PORT}"
   start_background foxglove \
     ros2 launch foxglove_bridge foxglove_bridge_launch.xml "port:=${FOXGLOVE_PORT}"
   sleep 2

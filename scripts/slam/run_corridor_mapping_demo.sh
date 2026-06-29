@@ -4,6 +4,8 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/project_dir.sh"
 cd "$PROJECT_DIR"
+source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
+source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
 
 LOG_DIR="${PROJECT_DIR}/logs/slam_demo"
 MAP_DIR="${PROJECT_DIR}/maps"
@@ -91,7 +93,7 @@ slam_toolbox:
     odom_frame: odom
     map_frame: map
     base_frame: base_link
-    scan_topic: /scan
+    scan_topic: /scan_filtered
     mode: mapping
     resolution: 0.05
     max_laser_range: 6.0
@@ -293,34 +295,49 @@ main() {
   preflight_checks
 
   log "Stopping previous demo-related processes (YOLO/Qwen untouched)..."
-  pkill -f "async_slam_toolbox_node" 2>/dev/null || true
+  cleanup_lidar_slam_nav_processes
   pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
-  pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
   sleep 0.5
 
-  log "[1/4] LiDAR driver via scripts/lidar/start_lidar_only.sh"
+  log "[1/5] LiDAR driver via scripts/lidar/start_lidar_only.sh"
   start_background lidar bash "${PROJECT_DIR}/scripts/lidar/start_lidar_only.sh"
   sleep 3
   cp -f "${PROJECT_DIR}/logs/lidar_driver.log" "${LOG_DIR}/lidar_driver.log" 2>/dev/null || true
 
-  log "[2/4] Chassis PWM bridge (no /odom)"
+  log "[2/5] Scan filter /scan -> /scan_filtered"
+  start_background scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
+    --in-topic /scan \
+    --out-topic /scan_filtered \
+    --min-range 0.18 \
+    --max-range "${SCAN_FILTER_MAX_RANGE:-4.0}" \
+    --isolated-window "${SCAN_FILTER_ISOLATED_WINDOW:-2}" \
+    --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
+    --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
+    --stats-every 50
+  sleep 2
+
+  log "[3/5] Chassis PWM bridge + /odom"
   source "${PROJECT_DIR}/scripts/lib/load_mvp_tune.sh"
   source "${PROJECT_DIR}/scripts/lib/run_chassis_bridge.sh"
   export CHASSIS_PORT="${CHASSIS_DEV}"
   run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"
   sleep 2
 
-  log "[3/4] Static TF base_link -> laser"
+  log "[4/5] Static TF base_link -> ${LASER_FRAME}"
   start_background static_tf \
     ros2 run tf2_ros static_transform_publisher \
-    --x 0.10 --y 0.0 --z 0.12 \
-    --roll 0.0 --pitch 0.0 --yaw 0.0 \
+    --x "${LASER_X}" \
+    --y "${LASER_Y}" \
+    --z "${LASER_Z}" \
+    --roll "${LASER_ROLL}" \
+    --pitch "${LASER_PITCH}" \
+    --yaw "${LASER_YAW}" \
     --frame-id base_link \
-    --child-frame-id laser
+    --child-frame-id "${LASER_FRAME}"
   sleep 1
 
-  log "[4/4] slam_toolbox online_async"
+  log "[5/5] slam_toolbox online_async"
   start_background slam_toolbox \
     ros2 launch slam_toolbox online_async_launch.py \
     use_sim_time:=false \

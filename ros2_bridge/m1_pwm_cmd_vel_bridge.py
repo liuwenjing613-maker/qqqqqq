@@ -109,6 +109,10 @@ class M1PwmCmdVelBridge(Node):
         odom_rate_hz: float = 30.0,
         odom_vxy_deadzone: float = 0.003,
         odom_wz_deadzone: float = 0.015,
+        odom_vx_scale: float | None = None,
+        odom_vy_scale: float | None = None,
+        odom_wz_scale: float | None = None,
+        base_yaw_offset: float | None = None,
     ):
         super().__init__("m1_pwm_cmd_vel_bridge")
 
@@ -119,6 +123,18 @@ class M1PwmCmdVelBridge(Node):
         self.odom_rate_hz = float(odom_rate_hz)
         self.odom_vxy_deadzone = float(odom_vxy_deadzone)
         self.odom_wz_deadzone = float(odom_wz_deadzone)
+        if odom_vx_scale is None:
+            odom_vx_scale = float(os.environ.get("CHASSIS_ODOM_VX_SCALE", "1.0"))
+        if odom_vy_scale is None:
+            odom_vy_scale = float(os.environ.get("CHASSIS_ODOM_VY_SCALE", "1.0"))
+        if odom_wz_scale is None:
+            odom_wz_scale = float(os.environ.get("CHASSIS_ODOM_WZ_SCALE", "1.0"))
+        if base_yaw_offset is None:
+            base_yaw_offset = float(os.environ.get("CHASSIS_BASE_YAW_OFFSET", "0.0"))
+        self.odom_vx_scale = float(odom_vx_scale)
+        self.odom_vy_scale = float(odom_vy_scale)
+        self.odom_wz_scale = float(odom_wz_scale)
+        self.base_yaw_offset = float(base_yaw_offset)
 
         self.port = str(port)
         self.max_vx = float(max_vx)
@@ -193,6 +209,11 @@ class M1PwmCmdVelBridge(Node):
             self.get_logger().info(
                 f"Publishing odom topic={self.odom_topic}, "
                 f"TF {self.odom_frame}->{self.base_frame}, source=get_motion_data()"
+            )
+            self.get_logger().info(f"odom_wz_scale={self.odom_wz_scale}")
+            self.get_logger().info(
+                f"base_link yaw offset={self.base_yaw_offset:.4f} rad "
+                f"({math.degrees(self.base_yaw_offset):.1f} deg)"
             )
         else:
             self.get_logger().info("m1_pwm_cmd_vel_bridge started (drive_mode=pwm, no /odom)")
@@ -297,6 +318,9 @@ class M1PwmCmdVelBridge(Node):
                 vy = 0.0
             if abs(wz) < self.odom_wz_deadzone:
                 wz = 0.0
+            vx *= self.odom_vx_scale
+            vy *= self.odom_vy_scale
+            wz *= self.odom_wz_scale
         except Exception as exc:
             self.get_logger().warning(
                 f"get_motion_data failed, skip odom publish: {exc!r}"
@@ -320,10 +344,15 @@ class M1PwmCmdVelBridge(Node):
             self.last_odom_time = now
             x = self.odom_x
             y = self.odom_y
-            yaw = self.odom_yaw
+            raw_yaw = self.odom_yaw
+
+        published_yaw = math.atan2(
+            math.sin(raw_yaw + self.base_yaw_offset),
+            math.cos(raw_yaw + self.base_yaw_offset),
+        )
 
         stamp = self.get_clock().now().to_msg()
-        orientation = yaw_to_quaternion(yaw)
+        orientation = yaw_to_quaternion(published_yaw)
 
         odom = Odometry()
         odom.header.stamp = stamp
@@ -445,6 +474,30 @@ def main() -> None:
     parser.add_argument("--odom-rate-hz", type=float, default=30.0)
     parser.add_argument("--odom-vxy-deadzone", type=float, default=0.003)
     parser.add_argument("--odom-wz-deadzone", type=float, default=0.015)
+    parser.add_argument(
+        "--odom-vx-scale",
+        type=float,
+        default=float(os.environ.get("CHASSIS_ODOM_VX_SCALE", "1.0")),
+        help="Scale vx from get_motion_data() before odom integration only",
+    )
+    parser.add_argument(
+        "--odom-vy-scale",
+        type=float,
+        default=float(os.environ.get("CHASSIS_ODOM_VY_SCALE", "1.0")),
+        help="Scale vy from get_motion_data() before odom integration only",
+    )
+    parser.add_argument(
+        "--odom-wz-scale",
+        type=float,
+        default=float(os.environ.get("CHASSIS_ODOM_WZ_SCALE", "1.0")),
+        help="Scale wz from get_motion_data() before odom integration only",
+    )
+    parser.add_argument(
+        "--base-yaw-offset",
+        type=float,
+        default=float(os.environ.get("CHASSIS_BASE_YAW_OFFSET", "0.0")),
+        help="Constant yaw offset (rad) added when publishing odom->base_link TF",
+    )
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -473,6 +526,10 @@ def main() -> None:
         odom_rate_hz=args.odom_rate_hz,
         odom_vxy_deadzone=args.odom_vxy_deadzone,
         odom_wz_deadzone=args.odom_wz_deadzone,
+        odom_vx_scale=args.odom_vx_scale,
+        odom_vy_scale=args.odom_vy_scale,
+        odom_wz_scale=args.odom_wz_scale,
+        base_yaw_offset=args.base_yaw_offset,
     )
 
     try:

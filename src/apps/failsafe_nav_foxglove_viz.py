@@ -25,9 +25,9 @@ import yaml
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Point
 from rclpy.node import Node
-from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
-from std_msgs.msg import ColorRGBA, String
+from std_msgs.msg import ColorRGBA, Header, String
 from visualization_msgs.msg import Marker, MarkerArray
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -173,15 +173,24 @@ class FailsafeNavFoxgloveViz(Node):
         self.bbox_topic = cfg.get("target_bbox_topic", "/target_bbox_json")
         self.image_topic = cfg.get("image_topic", "/image_raw")
         viz_source = str(cfg.get("viz_image_source", "compressed")).strip().lower()
-        self.viz_image_source = viz_source if viz_source in ("compressed", "raw") else "compressed"
+        if viz_source not in ("compressed", "raw", "passthrough"):
+            viz_source = "compressed"
+        self.viz_image_source = viz_source
         self.viz_image_topic = cfg.get(
             "viz_image_topic",
-            "/image" if self.viz_image_source == "compressed" else self.image_topic,
+            "/image" if self.viz_image_source in ("compressed", "passthrough") else self.image_topic,
         )
         self.viz_image_max_fps = float(cfg.get("viz_image_max_fps", 15.0))
-        self.viz_image_scale = float(cfg.get("viz_image_scale", 0.5))
+        self.viz_image_max_width = int(cfg.get("viz_image_max_width", 640))
+        self.viz_image_scale = float(cfg.get("viz_image_scale", 1.0))
+        self.viz_publish_format = str(cfg.get("viz_publish_format", "jpeg")).strip().lower()
+        self.viz_jpeg_quality = int(cfg.get("viz_jpeg_quality", 80))
+        self.viz_use_wall_stamp = bool(cfg.get("viz_use_wall_stamp", True))
         self.markers_topic = cfg.get("viz_markers_topic", "/failsafe_nav/markers")
         self.debug_image_topic = cfg.get("viz_debug_image_topic", "/failsafe_nav/debug_image")
+        self.debug_compressed_topic = cfg.get(
+            "viz_debug_compressed_topic", "/failsafe_nav/debug_image/compressed"
+        )
 
         self.bridge = CvBridge()
         self.latest_frame: Optional[np.ndarray] = None
@@ -190,39 +199,64 @@ class FailsafeNavFoxgloveViz(Node):
         self.latest_bbox: Dict[str, Any] = {}
         self.image_width = int(cfg.get("image_width", 640))
         self.image_height = int(cfg.get("image_height", 480))
-        self._last_image_pub_time = 0.0
+        self._last_process_time = 0.0
         self._last_image_header = None
+        self._dropped_frames = 0
+        self._published_frames = 0
 
-        viz_qos = QoSProfile(
+        # foxglove_bridge subscribes with RELIABLE; BEST_EFFORT publishers get no data.
+        foxglove_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1,
             reliability=QoSReliabilityPolicy.RELIABLE,
         )
-        self.marker_pub = self.create_publisher(MarkerArray, self.markers_topic, 10)
-        self.image_pub = self.create_publisher(Image, self.debug_image_topic, viz_qos)
+        cam_sub_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
+        self.marker_pub = self.create_publisher(MarkerArray, self.markers_topic, foxglove_qos)
+        self.image_pub = None
+        if self.viz_publish_format != "jpeg":
+            self.image_pub = self.create_publisher(Image, self.debug_image_topic, foxglove_qos)
+        self.compressed_pub = self.create_publisher(
+            CompressedImage, self.debug_compressed_topic, foxglove_qos
+        )
 
         self.create_subscription(String, self.state_topic, self.state_cb, 10)
         self.create_subscription(String, self.point_topic, self.point_cb, 10)
         self.create_subscription(String, self.bbox_topic, self.bbox_cb, 10)
-        if self.viz_image_source == "compressed":
+        if self.viz_image_source == "passthrough":
+            self.create_subscription(
+                CompressedImage,
+                self.viz_image_topic,
+                self.passthrough_compressed_cb,
+                cam_sub_qos,
+            )
+        elif self.viz_image_source == "compressed":
             self.create_subscription(
                 CompressedImage,
                 self.viz_image_topic,
                 self.compressed_image_cb,
-                viz_qos,
+                cam_sub_qos,
             )
         else:
-            self.create_subscription(Image, self.viz_image_topic, self.image_cb, qos_profile_sensor_data)
+            self.create_subscription(Image, self.viz_image_topic, self.image_cb, cam_sub_qos)
 
         marker_hz = float(cfg.get("viz_rate_hz", 5.0))
         self.create_timer(1.0 / max(marker_hz, 1.0), self.publish_markers)
+        self.create_timer(5.0, self._log_stats)
 
         self.get_logger().info("===== failsafe_nav_foxglove_viz =====")
         self.get_logger().info(
             f"viz_image source={self.viz_image_source} topic={self.viz_image_topic} "
-            f"max_fps={self.viz_image_max_fps} scale={self.viz_image_scale}"
+            f"max_fps={self.viz_image_max_fps} max_width={self.viz_image_max_width} "
+            f"format={self.viz_publish_format} wall_stamp={self.viz_use_wall_stamp}"
         )
-        self.get_logger().info(f"markers={self.markers_topic} debug_image={self.debug_image_topic}")
+        self.get_logger().info(
+            f"markers={self.markers_topic} raw={self.debug_image_topic} "
+            f"jpeg={self.debug_compressed_topic}"
+        )
         self.get_logger().info(f"frame_id={self.frame_id}")
 
     def state_cb(self, msg: String):
@@ -243,7 +277,60 @@ class FailsafeNavFoxgloveViz(Node):
         except Exception:
             pass
 
+    def _should_process_frame(self) -> bool:
+        if self.viz_image_max_fps <= 0.0:
+            return True
+        now = time.time()
+        min_interval = 1.0 / self.viz_image_max_fps
+        if now - self._last_process_time < min_interval:
+            self._dropped_frames += 1
+            return False
+        self._last_process_time = now
+        return True
+
+    def _log_stats(self) -> None:
+        if self._published_frames or self._dropped_frames:
+            self.get_logger().info(
+                f"viz frames published={self._published_frames} dropped={self._dropped_frames}"
+            )
+            self._published_frames = 0
+            self._dropped_frames = 0
+
+    def _resize_for_viz(self, frame: np.ndarray) -> np.ndarray:
+        h, w = frame.shape[:2]
+        target_w = self.viz_image_max_width
+        if self.viz_image_scale > 0.0 and self.viz_image_scale < 1.0:
+            target_w = min(target_w, max(1, int(w * self.viz_image_scale)))
+        if target_w > 0 and w > target_w:
+            target_h = max(1, int(h * (float(target_w) / float(w))))
+            return cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        return frame
+
+    def _output_header(self, src_header):
+        out = Header()
+        if self.viz_use_wall_stamp or src_header is None:
+            out.stamp = self.get_clock().now().to_msg()
+            out.frame_id = (
+                src_header.frame_id if src_header is not None and src_header.frame_id else "usb_camera"
+            )
+            return out
+        out.stamp = src_header.stamp
+        out.frame_id = src_header.frame_id or "usb_camera"
+        return out
+
+    def passthrough_compressed_cb(self, msg: CompressedImage) -> None:
+        if not self._should_process_frame():
+            return
+        out = CompressedImage()
+        out.header = self._output_header(msg.header)
+        out.format = msg.format or "jpeg"
+        out.data = msg.data
+        self.compressed_pub.publish(out)
+        self._published_frames += 1
+
     def image_cb(self, msg: Image):
+        if not self._should_process_frame():
+            return
         if msg.width and msg.height:
             self.image_width = int(msg.width)
             self.image_height = int(msg.height)
@@ -255,11 +342,8 @@ class FailsafeNavFoxgloveViz(Node):
         self._on_new_frame(frame, msg.header)
 
     def compressed_image_cb(self, msg: CompressedImage):
-        now = time.time()
-        if self.viz_image_max_fps > 0.0:
-            min_interval = 1.0 / self.viz_image_max_fps
-            if now - self._last_image_pub_time < min_interval:
-                return
+        if not self._should_process_frame():
+            return
         try:
             np_arr = np.frombuffer(msg.data, np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -271,6 +355,7 @@ class FailsafeNavFoxgloveViz(Node):
         self._on_new_frame(frame, msg.header)
 
     def _on_new_frame(self, frame: np.ndarray, header) -> None:
+        frame = self._resize_for_viz(frame)
         h, w = frame.shape[:2]
         self.image_width = int(w)
         self.image_height = int(h)
@@ -282,17 +367,25 @@ class FailsafeNavFoxgloveViz(Node):
         debug = self._build_debug_image()
         if debug is None:
             return
-        if 0.0 < self.viz_image_scale < 1.0:
-            debug = cv2.resize(
-                debug,
-                (max(1, int(debug.shape[1] * self.viz_image_scale)), max(1, int(debug.shape[0] * self.viz_image_scale))),
-                interpolation=cv2.INTER_AREA,
+        header = self._output_header(self._last_image_header)
+        if self.viz_publish_format == "jpeg":
+            ok, encoded = cv2.imencode(
+                ".jpg", debug, [int(cv2.IMWRITE_JPEG_QUALITY), int(self.viz_jpeg_quality)]
             )
-        out = self.bridge.cv2_to_imgmsg(debug, encoding="bgr8")
-        if self._last_image_header is not None:
-            out.header = self._last_image_header
-        self.image_pub.publish(out)
-        self._last_image_pub_time = time.time()
+            if not ok:
+                return
+            out = CompressedImage()
+            out.header = header
+            out.format = "jpeg"
+            out.data = encoded.tobytes()
+            self.compressed_pub.publish(out)
+        else:
+            if self.image_pub is None:
+                return
+            out = self.bridge.cv2_to_imgmsg(debug, encoding="bgr8")
+            out.header = header
+            self.image_pub.publish(out)
+        self._published_frames += 1
 
     def publish_markers(self):
         stamp = self.get_clock().now().to_msg()
@@ -434,7 +527,9 @@ class FailsafeNavFoxgloveViz(Node):
         if self.latest_frame is None:
             return None
 
-        vis = self.latest_frame.copy()
+        vis = self.latest_frame
+        if vis is None:
+            return None
         h, w = vis.shape[:2]
 
         # YOLO target bbox (green box + u/v), same style as live preview

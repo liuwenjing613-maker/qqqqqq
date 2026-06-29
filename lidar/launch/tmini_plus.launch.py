@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Launch YDLidar T-MINI PLUS via ydlidar_ros2_driver."""
+"""Launch YDLidar T-MINI PLUS via ydlidar_ros2_driver.
+
+Static TF base_link -> laser is NOT started here.
+Use scripts/lib/lidar_frame_config.sh from shell startup scripts instead.
+"""
 
 import os
 
@@ -32,11 +36,4 @@ def generate_launch_description():
         namespace="/",
     )
 
-    tf_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="static_tf_pub_laser",
-        arguments=["0", "0", "0.02", "0", "0", "0", "1", "base_link", "laser"],
-    )
-
-    return LaunchDescription([params_declare, driver_node, tf_node])
+    return LaunchDescription([params_declare, driver_node])

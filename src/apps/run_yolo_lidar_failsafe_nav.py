@@ -76,8 +76,10 @@ class YoloLidarFailsafeNav(Node):
         self.emergency_stop_distance = float(cfg.get("emergency_stop_distance", 0.50))
         self.hard_stop_distance = float(cfg.get("hard_stop_distance", 0.65))
         self.slow_distance = float(cfg.get("slow_distance", 0.90))
-        self.arrive_distance = float(cfg.get("arrive_distance", 0.38))
-
+        self.arrive_distance = float(cfg.get("success_distance", cfg.get("arrive_distance", 0.6)))
+        self.arrive_required_count = max(1, int(cfg.get("arrive_required_count", 2)))
+        self.exit_on_success = bool(cfg.get("exit_on_success", True))
+        self.success_shutdown_delay_sec = float(cfg.get("success_shutdown_delay_sec", 0.5))
         self.explore_vx = float(cfg.get("explore_vx", 0.035))
         self.explore_slow_vx = float(cfg.get("explore_slow_vx", 0.025))
         self.explore_kp_turn = float(cfg.get("explore_kp_turn", 0.10))
@@ -89,7 +91,6 @@ class YoloLidarFailsafeNav(Node):
         self.recovery_side_deg = float(cfg.get("recovery_side_deg", 45.0))
 
         self.center_arrive_px = float(cfg.get("center_arrive_px", 80))
-        self.arrive_required_count = int(cfg.get("arrive_required_count", 3))
         self.min_forward_bursts_before_arrive = int(cfg.get("min_forward_bursts_before_arrive", 2))
         self.max_steps = int(cfg.get("max_steps", 600))
         self.min_state_frames = int(cfg.get("min_state_frames", 2))
@@ -127,6 +128,8 @@ class YoloLidarFailsafeNav(Node):
         self.no_target_count = 0
         self._control_tick = 0
         self._state_publish_div = max(1, int(round(self.control_rate_hz / max(float(cfg.get("decision_rate_hz", 5.0)), 1.0))))
+        self._decision_timer = None
+        self._success_shutdown_timer = None
 
         fs_cfg = FreeSpaceConfig(
             lidar_min_range=float(cfg.get("lidar_min_range", 0.08)),
@@ -146,6 +149,7 @@ class YoloLidarFailsafeNav(Node):
             clearance_weight=float(cfg.get("free_space_clearance_weight", 0.60)),
             center_weight=float(cfg.get("free_space_center_weight", 0.30)),
             consistency_weight=float(cfg.get("free_space_consistency_weight", 0.10)),
+            target_window_deg=float(cfg.get("lidar_target_window_deg", 8.0)),
         )
         self.free_space = FreeSpaceWaypointProvider(fs_cfg)
 
@@ -180,7 +184,7 @@ class YoloLidarFailsafeNav(Node):
         self.create_subscription(String, self.target_bbox_topic, self.bbox_cb, 10)
 
         decision_rate = float(cfg.get("decision_rate_hz", 5.0))
-        self.create_timer(1.0 / max(decision_rate, 1e-3), self.decision_timer_cb)
+        self._decision_timer = self.create_timer(1.0 / max(decision_rate, 1e-3), self.decision_timer_cb)
         self.create_timer(1.0 / max(self.control_rate_hz, 1e-3), self.control_timer_cb)
 
         if bool(cfg.get("publish_target_words", True)):
@@ -364,11 +368,64 @@ class YoloLidarFailsafeNav(Node):
         self.desired_mode = mode
         self.desired_reason = reason
 
+    def get_target_distance(self, target: Dict[str, Any]) -> Optional[float]:
+        if not target.get("visible", False):
+            return None
+        u = target.get("u")
+        if u is None:
+            return self.get_front_min()
+        return self.free_space.target_distance_at_u(float(u), self.image_width)
+
+    def _enter_success_state(
+        self,
+        target: Dict[str, Any],
+        target_distance: float,
+        front_min: Optional[float],
+    ) -> None:
+        if self.success:
+            return
+        self.success = True
+        self.fsm_mode = "ARRIVED"
+        self.set_desired_cmd(Twist(), "ARRIVED", "success_target_visible_lidar_close")
+        self.get_logger().info(
+            "SUCCESS: target visible, "
+            f"target_distance={target_distance:.2f}m <= success_distance={self.arrive_distance:.2f}m"
+        )
+        self.publish_state(
+            "ARRIVED",
+            target=target,
+            front_distance=front_min,
+            target_distance=target_distance,
+            success=True,
+            reason="success_target_visible_lidar_close",
+        )
+        if self._decision_timer is not None:
+            self._decision_timer.cancel()
+            self._decision_timer = None
+        if self.exit_on_success:
+            delay = max(0.2, self.success_shutdown_delay_sec)
+            self._success_shutdown_timer = self.create_timer(delay, self._shutdown_after_success)
+
+    def _shutdown_after_success(self) -> None:
+        if self._success_shutdown_timer is not None:
+            self._success_shutdown_timer.cancel()
+            self._success_shutdown_timer = None
+        self.set_desired_cmd(Twist(), "ARRIVED", "nav_stopped_after_success")
+        self.cmd_pub.publish(Twist())
+        self.publish_state(
+            "ARRIVED",
+            success=True,
+            nav_active=False,
+            reason="nav_stopped_after_success",
+        )
+        self.get_logger().info(
+            "Navigation stopped after success (nav node exiting). "
+            "Camera/LiDAR/YOLO/chassis/Foxglove keep running."
+        )
+        rclpy.shutdown()
+
     def decision_timer_cb(self) -> None:
         if self.success:
-            self.fsm_mode = "ARRIVED"
-            self.set_desired_cmd(Twist(), "ARRIVED", "success_hold")
-            self.publish_state("ARRIVED", reason="success_hold")
             return
 
         self.step_count += 1
@@ -411,9 +468,9 @@ class YoloLidarFailsafeNav(Node):
         effective_mode = self._resolve_effective_mode(desired_mode, immediate=immediate)
 
         if effective_mode == "ARRIVED":
-            self.success = True
-            self.set_desired_cmd(Twist(), "ARRIVED", "target_center_and_close")
-            self.publish_state("ARRIVED", target=target, front_distance=front_min)
+            target_dist = self.get_target_distance(target)
+            if target_dist is not None:
+                self._enter_success_state(target, target_dist, front_min)
             return
 
         if effective_mode == "TARGET_TRACK":
@@ -434,10 +491,10 @@ class YoloLidarFailsafeNav(Node):
 
             self.no_target_count = 0
             cmd, servo_state = self.compute_target_cmd(target, front_min)
-            if self.check_arrive(target, front_min) and desired_mode == "ARRIVED":
-                self.success = True
-                self.set_desired_cmd(Twist(), "ARRIVED", "target_center_and_close")
-                self.publish_state("ARRIVED", target=target, front_distance=front_min)
+            if self.check_arrive(target, front_min):
+                target_dist = self.get_target_distance(target)
+                if target_dist is not None:
+                    self._enter_success_state(target, target_dist, front_min)
                 return
 
             self.set_desired_cmd(cmd, "TARGET_TRACK", servo_state)
@@ -567,19 +624,17 @@ class YoloLidarFailsafeNav(Node):
         return cmd, "explore_forward"
 
     def check_arrive(self, target: Dict[str, Any], front: Optional[float]) -> bool:
-        if front is None:
-            return False
-        if front > self.arrive_distance:
+        del front
+        if not target.get("visible", False):
             self.arrive_count = 0
             return False
 
-        u = float(target.get("u", self.image_width / 2.0))
-        center_err_px = abs(u - self.image_width / 2.0)
-        if center_err_px > self.center_arrive_px:
+        target_dist = self.get_target_distance(target)
+        if target_dist is None:
             self.arrive_count = 0
             return False
-
-        if self.forward_burst_count < self.min_forward_bursts_before_arrive:
+        if target_dist > self.arrive_distance:
+            self.arrive_count = 0
             return False
 
         self.arrive_count += 1
@@ -631,6 +686,9 @@ class YoloLidarFailsafeNav(Node):
             "cmd_vx": float(safety.get("safe_cmd_vx", self.last_cmd.linear.x)),
             "cmd_wz": float(safety.get("safe_cmd_wz", self.last_cmd.angular.z)),
             "desired_reason": self.desired_reason,
+            "success": self.success,
+            "success_distance": self.arrive_distance,
+            "target_distance": kwargs.pop("target_distance", None),
             "time": time.time(),
         }
         data.update(_json_safe(kwargs))
@@ -654,7 +712,10 @@ def main():
     try:
         rclpy.spin(node)
     finally:
-        node.publish_stop()
+        if node.success:
+            node.cmd_pub.publish(Twist())
+        else:
+            node.publish_stop()
         node.destroy_node()
         rclpy.shutdown()
 

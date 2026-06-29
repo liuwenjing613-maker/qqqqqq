@@ -236,6 +236,8 @@ python3 "$PROJECT_DIR/src/apps/run_yolo_lidar_failsafe_nav.py" \
   > "$PROJECT_DIR/logs/yolo_lidar_failsafe_nav.log" 2>&1 &
 
 echo "[P0] starting Foxglove viz bridge..."
+pkill -f failsafe_nav_foxglove_viz.py 2>/dev/null || true
+sleep 0.3
 python3 "$PROJECT_DIR/src/apps/failsafe_nav_foxglove_viz.py" \
   --config "$CONFIG" \
   > "$PROJECT_DIR/logs/failsafe_nav_foxglove_viz.log" 2>&1 &
@@ -244,7 +246,7 @@ if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   pkill -f "foxglove_bridge" 2>/dev/null || true
   sleep 0.5
   echo "[P0] starting foxglove_bridge (ws://<host>:8765)..."
-  ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 \
+  bash "$PROJECT_DIR/scripts/lidar/start_foxglove.sh" \
     > "$PROJECT_DIR/logs/failsafe_foxglove_bridge.log" 2>&1 &
   sleep 2
 else
@@ -266,8 +268,11 @@ echo "Watch bbox:"
 echo "  ros2 topic echo /target_bbox_json"
 echo "Foxglove connect:"
 echo "  ws://$(hostname -I 2>/dev/null | awk '{print $1}'):8765"
+echo "Foxglove Image panel topic (low latency):"
+echo "  /failsafe_nav/debug_image/compressed"
+echo "  or raw camera: /image"
 echo "Foxglove topics:"
-echo "  /scan  /failsafe_nav/markers  /failsafe_nav/debug_image"
+echo "  /scan  /failsafe_nav/markers  /failsafe_nav/debug_image/compressed"
 echo "  /failsafe_nav_state  /target_bbox_json  /chassis_bridge_state"
 echo "  Plot: /cmd_vel.linear.x vs /cmd_vel_sent.linear.x"
 echo "See docs/FOXGLOVE_FAILSAFE_NAV.md docs/STABLE_YOLO_LIDAR_NAV_TEST.md"

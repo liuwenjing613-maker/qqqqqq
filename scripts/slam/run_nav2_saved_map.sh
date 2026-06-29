@@ -8,19 +8,13 @@ source /opt/ros/humble/setup.bash
 set -u
 
 PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
+source "${PROJECT_DIR}/scripts/lib/project_dir.sh"
+source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
+source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
+
 MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_corridor_map.yaml}"
 NAV2_PARAMS="${NAV2_PARAMS:-$PROJECT_DIR/configs/nav2_params.yaml}"
 MVP_TUNE="${MVP_TUNE:-$PROJECT_DIR/configs/mvp_tune.yaml}"
-
-# 如果你的雷达 frame_id 不是 laser，运行脚本时用：
-# LASER_FRAME=xxx bash scripts/slam/run_nav2_saved_map.sh
-LASER_FRAME="${LASER_FRAME:-laser}"
-
-# 雷达相对 base_link 的安装位置，后续需要按实物校准
-LASER_X="${LASER_X:-0.10}"
-LASER_Y="${LASER_Y:-0.0}"
-LASER_Z="${LASER_Z:-0.12}"
-LASER_YAW="${LASER_YAW:-0.0}"
 
 # 自动判断底盘串口
 if [ -n "${CHASSIS_DEV:-}" ]; then
@@ -103,7 +97,8 @@ log "LASER_FRAME=$LASER_FRAME"
 log "logs=$LOG_DIR"
 
 # 避免建图/手柄节点和导航抢 /cmd_vel 或 map->odom
-pkill -f "slam_toolbox|teleop_twist_joy|joy_node|run_joy_mapping_all|run_corridor_mapping_live_foxglove" 2>/dev/null || true
+pkill -f "teleop_twist_joy|joy_node|run_joy_mapping_all|run_corridor_mapping_live_foxglove" 2>/dev/null || true
+cleanup_lidar_slam_nav_processes
 sleep 1
 zero_cmd
 
@@ -115,28 +110,41 @@ else
   exit 1
 fi
 
-# 2. 启动 base_link -> laser 静态 TF
-start_bg static_tf ros2 run tf2_ros static_transform_publisher \
-  --x "$LASER_X" --y "$LASER_Y" --z "$LASER_Z" \
-  --roll 0.0 --pitch 0.0 --yaw "$LASER_YAW" \
-  --frame-id base_link \
-  --child-frame-id "$LASER_FRAME"
+# 2. 启动 scan filter -> /scan_filtered
+start_bg scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
+  --in-topic /scan \
+  --out-topic /scan_filtered \
+  --min-range 0.18 \
+  --max-range "${SCAN_FILTER_MAX_RANGE:-4.0}" \
+  --isolated-window "${SCAN_FILTER_ISOLATED_WINDOW:-2}" \
+  --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
+  --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
+  --stats-every 50
+sleep 2
 
-# 3. 启动 PWM 底盘桥：订阅 /cmd_vel（无 /odom）
+# 3. 启动 base_link -> laser 静态 TF
+start_bg static_tf ros2 run tf2_ros static_transform_publisher \
+  --x "${LASER_X}" --y "${LASER_Y}" --z "${LASER_Z}" \
+  --roll "${LASER_ROLL}" --pitch "${LASER_PITCH}" --yaw "${LASER_YAW}" \
+  --frame-id base_link \
+  --child-frame-id "${LASER_FRAME}"
+
+# 4. 启动 PWM 底盘桥：订阅 /cmd_vel + /odom
 source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
 source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
 export CHASSIS_PORT="$CHASSIS_DEV"
 run_chassis_bridge "$LOG_DIR/chassis_bridge.log"
 
-# 4. Foxglove 可视化
+# 5. Foxglove 可视化
 if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   start_bg foxglove ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
 else
   log "WARN: foxglove_bridge not found, skip foxglove."
 fi
 
-# 5. 等基础 topic
+# 6. 等基础 topic
 wait_topic_exists /scan 90 || exit 1
+wait_topic_exists /scan_filtered 90 || exit 1
 wait_topic_exists /odom 90 || exit 1
 wait_topic_exists /tf 40 || exit 1
 
