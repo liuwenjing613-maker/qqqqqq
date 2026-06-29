@@ -16,8 +16,8 @@ if [ -f /opt/tros/humble/setup.bash ]; then
   set -u
 fi
 
-TARGET_WORDS="${TARGET_WORDS:-cup}"
-TARGET_CLASSES="${TARGET_CLASSES:-cup}"
+TARGET_WORDS="${TARGET_WORDS:-pen}"
+TARGET_CLASSES="${TARGET_CLASSES:-pen}"
 IMAGE_TOPIC="${IMAGE_TOPIC:-/image_raw}"
 DET_TOPIC="${DET_TOPIC:-/hobot_yolo_world}"
 WEB_PORT="${WEB_PORT:-8088}"

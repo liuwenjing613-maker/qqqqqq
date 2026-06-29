@@ -39,10 +39,10 @@ camera_hfov_deg: 70.0
 camera_lidar_yaw_offset_deg: 0.0
 
 # ===== Target words =====
-instruction: "cup"
+instruction: "pen"
 
 target_words:
-  - "cup"
+  - "pen"
 
 context_words:
   - "table"
@@ -73,7 +73,7 @@ camera:
 yolo_world:
   det_topic: "/hobot_yolo_world"
   image_topic: "/image_raw"
-  score_threshold: 0.003
+  score_threshold: 0.001
   iou_threshold: 0.45
   feed_type: 1
 
@@ -82,7 +82,7 @@ yolo_bridge:
   det_topic: "/hobot_yolo_world"
   out_topic: "/target_bbox_json"
   image_topic: "/image_raw"
-  target_classes: "cup"
+  target_classes: "pen"
   min_score: 0.001
   max_area_ratio: 0.40
   min_red_ratio: 0.06
@@ -99,7 +99,7 @@ yolo_bridge:
 # ===== Chassis bridge (m1_pwm_cmd_vel_bridge.py — open-loop PWM)
 chassis:
   bridge: pwm
-  port: "/dev/ttyUSB0"
+  port: "/dev/ttyUSB1"
   max_vx: 0.1
   max_wz: 0.1
   watchdog_timeout: 0.5
@@ -199,8 +199,8 @@ blocked_front_distance: 0.40
 
 # ===== Success (到达判定) =====
 # 成功条件：目标在视野内 + 目标方向雷达距离 <= success_distance
-success_distance: 0.6
-arrive_distance: 0.6
+success_distance: 0.4
+arrive_distance: 0.4
 arrive_required_count: 2
 lidar_target_window_deg: 8.0
 exit_on_success: true
@@ -212,6 +212,6 @@ bad_wp_grace_frames: 2
 no_target_grace_frames: 2
 
 # ===== Runtime =====
-max_steps: 1500
+max_steps: 2000
 save_debug: true
 debug_dir: "data/images/yolo_lidar_failsafe_debug"

@@ -15,6 +15,7 @@ import sys
 import time
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
 from pathlib import Path
 
 import cv2
@@ -448,8 +449,12 @@ def make_handler(node: YoloLiveBrowserPreview):
     return MJPEGHandler
 
 
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 def run_http_server(node, host, port):
-    server = HTTPServer((host, port), make_handler(node))
+    server = ThreadingHTTPServer((host, port), make_handler(node))
     node.get_logger().info(f"HTTP server listening on {host}:{port}")
     try:
         server.serve_forever()
