@@ -17,7 +17,9 @@ run_chassis_bridge() {
   kill_chassis_bridge
 
   cd "${PROJECT_DIR}/ros2_bridge"
+  set +u
   source /opt/tros/humble/setup.bash
+  set -u
   python3 m1_pwm_cmd_vel_bridge.py \
     --port "${CHASSIS_PORT:-${CHASSIS_DEV:-/dev/ttyUSB0}}" \
     --max-vx "${CHASSIS_MAX_VX:-0.06}" \
@@ -33,6 +35,13 @@ run_chassis_bridge() {
     --max-pwm-delta "${CHASSIS_MAX_PWM_DELTA:-3.0}" \
     --wheel-layout "${CHASSIS_PWM_WHEEL_LAYOUT:-fl-rl-fr-rr}" \
     --motor-signs "${CHASSIS_MOTOR_SIGNS:-1,1,1,1}" \
+    --publish-odom \
+    --odom-topic /odom \
+    --odom-frame odom \
+    --base-frame base_link \
+    --odom-rate-hz 30.0 \
+    --odom-vxy-deadzone 0.003 \
+    --odom-wz-deadzone 0.015 \
     $( [ "${CHASSIS_DEBUG:-0}" = "1" ] && echo "--debug" ) \
     > "${log_file}" 2>&1 &
 }

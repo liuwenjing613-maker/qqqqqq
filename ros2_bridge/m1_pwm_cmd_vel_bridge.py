@@ -13,10 +13,12 @@ import time
 from typing import List, Sequence, Tuple
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Quaternion, TransformStamped, Twist
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from Rosmaster_Lib import Rosmaster
 from std_msgs.msg import String
+from tf2_ros import TransformBroadcaster
 
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
 sys.path.insert(0, PROJECT_ROOT)
@@ -30,6 +32,15 @@ from src.control.m1_mecanum_pwm import (
 
 def clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def yaw_to_quaternion(yaw: float) -> Quaternion:
+    q = Quaternion()
+    q.x = 0.0
+    q.y = 0.0
+    q.z = math.sin(yaw / 2.0)
+    q.w = math.cos(yaw / 2.0)
+    return q
 
 
 def parse_motor_signs(text: str) -> Tuple[int, int, int, int]:
@@ -91,8 +102,23 @@ class M1PwmCmdVelBridge(Node):
         motor_signs: str = "1,1,1,1",
         wheel_layout: str = YAHBOOM_M1_LAYOUT,
         debug: bool = False,
+        publish_odom: bool = False,
+        odom_topic: str = "/odom",
+        odom_frame: str = "odom",
+        base_frame: str = "base_link",
+        odom_rate_hz: float = 30.0,
+        odom_vxy_deadzone: float = 0.003,
+        odom_wz_deadzone: float = 0.015,
     ):
         super().__init__("m1_pwm_cmd_vel_bridge")
+
+        self.publish_odom = bool(publish_odom)
+        self.odom_topic = str(odom_topic)
+        self.odom_frame = str(odom_frame)
+        self.base_frame = str(base_frame)
+        self.odom_rate_hz = float(odom_rate_hz)
+        self.odom_vxy_deadzone = float(odom_vxy_deadzone)
+        self.odom_wz_deadzone = float(odom_wz_deadzone)
 
         self.port = str(port)
         self.max_vx = float(max_vx)
@@ -126,6 +152,15 @@ class M1PwmCmdVelBridge(Node):
 
         self.pwm_smoother = PwmSmoother(smooth_alpha, max_pwm_delta, pwm_max)
 
+        self.odom_pub = None
+        self.tf_broadcaster = None
+        self.odom_timer = None
+        self.odom_lock = threading.Lock()
+        self.odom_x = 0.0
+        self.odom_y = 0.0
+        self.odom_yaw = 0.0
+        self.last_odom_time = None
+
         self.sent_cmd_pub = self.create_publisher(Twist, "/cmd_vel_sent", 10)
         self.state_pub = self.create_publisher(String, "/chassis_bridge_state", 10)
 
@@ -147,7 +182,20 @@ class M1PwmCmdVelBridge(Node):
         self.watchdog_timer = self.create_timer(0.05, self.watchdog_callback)
         self.state_timer = self.create_timer(0.5, self.publish_bridge_state)
 
-        self.get_logger().info("m1_pwm_cmd_vel_bridge started (drive_mode=pwm, no /odom)")
+        if self.publish_odom:
+            self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
+            self.tf_broadcaster = TransformBroadcaster(self)
+            odom_period = 1.0 / max(1.0, self.odom_rate_hz)
+            self.odom_timer = self.create_timer(odom_period, self.odom_timer_callback)
+
+        if self.publish_odom:
+            self.get_logger().info("m1_pwm_cmd_vel_bridge started (drive_mode=pwm)")
+            self.get_logger().info(
+                f"Publishing odom topic={self.odom_topic}, "
+                f"TF {self.odom_frame}->{self.base_frame}, source=get_motion_data()"
+            )
+        else:
+            self.get_logger().info("m1_pwm_cmd_vel_bridge started (drive_mode=pwm, no /odom)")
         self.get_logger().info(describe_layout(self.wheel_layout))
         self.get_logger().info(
             f"limits: max_vx={self.max_vx:.3f}, max_wz={self.max_wz:.3f}, "
@@ -232,6 +280,76 @@ class M1PwmCmdVelBridge(Node):
                 f"sent pwm=({pwms[0]}, {pwms[1]}, {pwms[2]}, {pwms[3]}) "
                 f"from vx={vx:.3f} wz={wz:.3f} vx_pwm={self.vx_pwm:.1f} wz_pwm={self.wz_pwm:.1f}"
             )
+
+    def odom_timer_callback(self) -> None:
+        if not self.publish_odom or self.odom_pub is None or self.tf_broadcaster is None:
+            return
+
+        now = time.time()
+        try:
+            motion = self.bot.get_motion_data()
+            vx = float(motion[0])
+            vy = float(motion[1])
+            wz = float(motion[2])
+            if abs(vx) < self.odom_vxy_deadzone:
+                vx = 0.0
+            if abs(vy) < self.odom_vxy_deadzone:
+                vy = 0.0
+            if abs(wz) < self.odom_wz_deadzone:
+                wz = 0.0
+        except Exception as exc:
+            self.get_logger().warning(
+                f"get_motion_data failed, skip odom publish: {exc!r}"
+            )
+            return
+
+        with self.odom_lock:
+            if self.last_odom_time is not None:
+                dt = now - self.last_odom_time
+                if dt > 0.2:
+                    dt = 0.0
+                if dt > 0.0:
+                    cos_yaw = math.cos(self.odom_yaw)
+                    sin_yaw = math.sin(self.odom_yaw)
+                    self.odom_x += (vx * cos_yaw - vy * sin_yaw) * dt
+                    self.odom_y += (vx * sin_yaw + vy * cos_yaw) * dt
+                    self.odom_yaw += wz * dt
+                    self.odom_yaw = math.atan2(
+                        math.sin(self.odom_yaw), math.cos(self.odom_yaw)
+                    )
+            self.last_odom_time = now
+            x = self.odom_x
+            y = self.odom_y
+            yaw = self.odom_yaw
+
+        stamp = self.get_clock().now().to_msg()
+        orientation = yaw_to_quaternion(yaw)
+
+        odom = Odometry()
+        odom.header.stamp = stamp
+        odom.header.frame_id = self.odom_frame
+        odom.child_frame_id = self.base_frame
+        odom.pose.pose.position.x = x
+        odom.pose.pose.position.y = y
+        odom.pose.pose.position.z = 0.0
+        odom.pose.pose.orientation = orientation
+        odom.twist.twist.linear.x = vx
+        odom.twist.twist.linear.y = vy
+        odom.twist.twist.linear.z = 0.0
+        odom.twist.twist.angular.x = 0.0
+        odom.twist.twist.angular.y = 0.0
+        odom.twist.twist.angular.z = wz
+        self.odom_pub.publish(odom)
+
+        transform = TransformStamped()
+        transform.header.stamp = stamp
+        transform.header.frame_id = self.odom_frame
+        transform.child_frame_id = self.base_frame
+        transform.transform.translation.x = x
+        transform.transform.translation.y = y
+        transform.transform.translation.z = 0.0
+        transform.transform.rotation = orientation
+        self.tf_broadcaster.sendTransform(transform)
 
     def watchdog_callback(self) -> None:
         now = time.time()
@@ -320,6 +438,13 @@ def main() -> None:
         help="Default fl-rl-fr-rr matches Yahboom board: M1=FL M2=RL M3=FR M4=RR",
     )
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--publish-odom", action="store_true", default=False)
+    parser.add_argument("--odom-topic", default="/odom")
+    parser.add_argument("--odom-frame", default="odom")
+    parser.add_argument("--base-frame", default="base_link")
+    parser.add_argument("--odom-rate-hz", type=float, default=30.0)
+    parser.add_argument("--odom-vxy-deadzone", type=float, default=0.003)
+    parser.add_argument("--odom-wz-deadzone", type=float, default=0.015)
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -341,6 +466,13 @@ def main() -> None:
         motor_signs=args.motor_signs,
         wheel_layout=args.wheel_layout,
         debug=args.debug,
+        publish_odom=args.publish_odom,
+        odom_topic=args.odom_topic,
+        odom_frame=args.odom_frame,
+        base_frame=args.base_frame,
+        odom_rate_hz=args.odom_rate_hz,
+        odom_vxy_deadzone=args.odom_vxy_deadzone,
+        odom_wz_deadzone=args.odom_wz_deadzone,
     )
 
     try:

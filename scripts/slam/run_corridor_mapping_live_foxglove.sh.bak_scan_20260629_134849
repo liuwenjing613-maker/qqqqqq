@@ -59,7 +59,6 @@ cleanup() {
   pkill -f "foxglove_bridge" 2>/dev/null || true
   pkill -f "ydlidar_ros2_driver_node" 2>/dev/null || true
   pkill -f "start_lidar_only.sh" 2>/dev/null || true
-  pkill -f "simple_scan_filter.py" 2>/dev/null || true
 }
 
 # Do not trap INT: when started under setsid from run_joy_mapping_all.sh,
@@ -82,7 +81,7 @@ slam_toolbox:
     odom_frame: odom
     map_frame: map
     base_frame: base_link
-    scan_topic: /scan_filtered
+    scan_topic: /scan
 
     mode: mapping
     resolution: 0.05
@@ -114,23 +113,6 @@ start_background() {
   sleep 0.5
 }
 
-wait_topic_exists() {
-  local topic="$1"
-  local timeout_sec="${2:-60}"
-
-  log "Waiting for ${topic} ..."
-  for _ in $(seq 1 "$timeout_sec"); do
-    if ros2 topic list 2>/dev/null | grep -qx "$topic"; then
-      log "OK: ${topic}"
-      return 0
-    fi
-    sleep 1
-  done
-
-  log "FAIL: timeout waiting for ${topic}"
-  return 1
-}
-
 show_status() {
   echo ""
   echo "========== ROS TOPICS =========="
@@ -155,7 +137,6 @@ show_status() {
   echo ""
   echo "========== Logs if something is missing =========="
   echo "LiDAR log:         ${LOG_DIR}/lidar.log"
-  echo "Scan filter log:   ${LOG_DIR}/scan_filter.log"
   echo "Chassis log:       ${LOG_DIR}/chassis_bridge.log"
   echo "SLAM log:          ${LOG_DIR}/slam_toolbox.log"
   echo "Foxglove log:      ${LOG_DIR}/foxglove_bridge.log"
@@ -192,39 +173,20 @@ main() {
   pkill -f "foxglove_bridge" 2>/dev/null || true
   pkill -f "ydlidar_ros2_driver_node" 2>/dev/null || true
   pkill -f "start_lidar_only.sh" 2>/dev/null || true
-  pkill -f "simple_scan_filter.py" 2>/dev/null || true
   sleep 1
 
-  log "[1/6] LiDAR -> /scan"
+  log "[1/5] LiDAR -> /scan"
   start_background lidar bash "${PROJECT_DIR}/scripts/lidar/start_lidar_only.sh"
   sleep 6
 
-  wait_topic_exists /scan 30 || {
-    log "FAIL: /scan not found"
-    exit 1
-  }
-
-  log "[scan_filter] Start /scan -> /scan_filtered"
-  start_background scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
-    --in-topic /scan \
-    --out-topic /scan_filtered \
-    --min-range 0.18 \
-    --max-range 4.0
-  sleep 2
-
-  wait_topic_exists /scan_filtered 30 || {
-    log "FAIL: /scan_filtered not found"
-    exit 1
-  }
-
-  log "[2/6] Chassis PWM bridge + /odom"
+  log "[2/5] Chassis PWM bridge (no /odom)"
   source "${PROJECT_DIR}/scripts/lib/load_mvp_tune.sh"
   source "${PROJECT_DIR}/scripts/lib/run_chassis_bridge.sh"
   export CHASSIS_PORT="${CHASSIS_DEV}"
   run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"
   sleep 4
 
-  log "[3/6] Static TF base_link -> laser"
+  log "[3/5] Static TF base_link -> laser"
   start_background static_tf \
     ros2 run tf2_ros static_transform_publisher \
     --x 0.10 --y 0.0 --z 0.12 \
@@ -233,7 +195,7 @@ main() {
     --child-frame-id laser
   sleep 2
 
-  log "[4/6] slam_toolbox online_async (scan_topic=/scan_filtered)"
+  log "[4/5] slam_toolbox online_async"
   start_background slam_toolbox \
     ros2 launch slam_toolbox online_async_launch.py \
     use_sim_time:=false \
@@ -241,13 +203,13 @@ main() {
   sleep 8
 
   if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
-    log "[5/6] foxglove_bridge port ${FOXGLOVE_PORT}"
+    log "[5/5] foxglove_bridge port ${FOXGLOVE_PORT}"
     start_background foxglove_bridge \
       ros2 launch foxglove_bridge foxglove_bridge_launch.xml "port:=${FOXGLOVE_PORT}"
     FOXGLOVE_STARTED=1
     sleep 3
   else
-    log "[5/6] foxglove_bridge not installed, skipping"
+    log "[5/5] foxglove_bridge not installed, skipping"
   fi
 
   show_status
