@@ -15,12 +15,12 @@ run_chassis_bridge() {
   fi
 
   kill_chassis_bridge
+  mkdir -p "$(dirname "$log_file")"
 
-  cd "${PROJECT_DIR}/ros2_bridge"
   set +u
   source /opt/tros/humble/setup.bash
   set -u
-  python3 m1_pwm_cmd_vel_bridge.py \
+  python3 "${PROJECT_DIR}/ros2_bridge/m1_pwm_cmd_vel_bridge.py" \
     --port "${CHASSIS_PORT:-${CHASSIS_DEV:-/dev/ttyUSB0}}" \
     --max-vx "${CHASSIS_MAX_VX:-0.06}" \
     --max-wz "${CHASSIS_MAX_WZ:-0.06}" \

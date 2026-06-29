@@ -46,7 +46,6 @@ log() {
 }
 
 stop_joystick_nodes() {
-  pkill -f "simple_scan_filter.py" 2>/dev/null || true
   pkill -f "teleop_twist_joy" 2>/dev/null || true
   pkill -f "joy_node" 2>/dev/null || true
   pkill -f "game_controller_node" 2>/dev/null || true

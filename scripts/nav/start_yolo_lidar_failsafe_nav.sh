@@ -122,10 +122,10 @@ wait_ros_topic() {
 
 if [ "$NAV_ONLY" = "1" ]; then
   echo "[P0] NAV_ONLY=1: starting failsafe nav only (assume sensors/YOLO already running)"
-  python3 src/apps/run_yolo_lidar_failsafe_nav.py \
+  python3 "$PROJECT_DIR/src/apps/run_yolo_lidar_failsafe_nav.py" \
     --config "$CONFIG" \
     --instruction "$INSTRUCTION" \
-    > logs/yolo_lidar_failsafe_nav.log 2>&1 &
+    > "$PROJECT_DIR/logs/yolo_lidar_failsafe_nav.log" 2>&1 &
   echo "[P0] started nav pid=$!"
   echo "  tail -f logs/yolo_lidar_failsafe_nav.log"
   exit 0
@@ -216,6 +216,7 @@ sleep 2
 echo "[6/7] start chassis bridge (PWM)..."
 source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
 run_chassis_bridge "$PROJECT_DIR/logs/yolo_failsafe_chassis.log"
+cd "$PROJECT_DIR"
 sleep 1
 
 echo "[7/7] wait for /scan..."
@@ -229,15 +230,26 @@ if ! wait_ros_topic /scan "/scan" 15 10 1; then
 fi
 
 echo "[P0] starting failsafe nav..."
-python3 src/apps/run_yolo_lidar_failsafe_nav.py \
+python3 "$PROJECT_DIR/src/apps/run_yolo_lidar_failsafe_nav.py" \
   --config "$CONFIG" \
   --instruction "$INSTRUCTION" \
-  > logs/yolo_lidar_failsafe_nav.log 2>&1 &
+  > "$PROJECT_DIR/logs/yolo_lidar_failsafe_nav.log" 2>&1 &
 
 echo "[P0] starting Foxglove viz bridge..."
-python3 src/apps/failsafe_nav_foxglove_viz.py \
+python3 "$PROJECT_DIR/src/apps/failsafe_nav_foxglove_viz.py" \
   --config "$CONFIG" \
-  > logs/failsafe_nav_foxglove_viz.log 2>&1 &
+  > "$PROJECT_DIR/logs/failsafe_nav_foxglove_viz.log" 2>&1 &
+
+if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
+  pkill -f "foxglove_bridge" 2>/dev/null || true
+  sleep 0.5
+  echo "[P0] starting foxglove_bridge (ws://<host>:8765)..."
+  ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 \
+    > "$PROJECT_DIR/logs/failsafe_foxglove_bridge.log" 2>&1 &
+  sleep 2
+else
+  echo "[WARN] foxglove_bridge not installed; run: bash scripts/lidar/start_foxglove.sh"
+fi
 
 echo "[P0] started."
 echo "Watch logs:"
@@ -252,6 +264,8 @@ echo "  ros2 topic echo /cmd_vel_sent"
 echo "  ros2 topic echo /chassis_bridge_state"
 echo "Watch bbox:"
 echo "  ros2 topic echo /target_bbox_json"
+echo "Foxglove connect:"
+echo "  ws://$(hostname -I 2>/dev/null | awk '{print $1}'):8765"
 echo "Foxglove topics:"
 echo "  /scan  /failsafe_nav/markers  /failsafe_nav/debug_image"
 echo "  /failsafe_nav_state  /target_bbox_json  /chassis_bridge_state"

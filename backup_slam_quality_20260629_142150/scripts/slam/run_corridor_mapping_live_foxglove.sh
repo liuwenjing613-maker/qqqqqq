@@ -86,7 +86,7 @@ slam_toolbox:
 
     mode: mapping
     resolution: 0.05
-    max_laser_range: 4.0
+    max_laser_range: 6.0
 
     minimum_time_interval: 0.1
     transform_timeout: 1.0
@@ -209,11 +209,7 @@ main() {
     --in-topic /scan \
     --out-topic /scan_filtered \
     --min-range 0.18 \
-    --max-range "${SCAN_FILTER_MAX_RANGE:-4.0}" \
-    --isolated-window "${SCAN_FILTER_ISOLATED_WINDOW:-2}" \
-    --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
-    --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
-    --stats-every 50
+    --max-range 4.0
   sleep 2
 
   wait_topic_exists /scan_filtered 30 || {
