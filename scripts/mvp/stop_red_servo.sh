@@ -49,6 +49,7 @@ echo "[INFO] 清理可能残留的相关进程..."
 pkill -f "red_target_servo_ros.py" 2>/dev/null || true
 pkill -f "red_target_servo_compressed_ros.py" 2>/dev/null || true
 pkill -f "red_target_servo_auto_ros.py" 2>/dev/null || true
+pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
 pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
 pkill -f "hobot_usb_cam" 2>/dev/null || true
 

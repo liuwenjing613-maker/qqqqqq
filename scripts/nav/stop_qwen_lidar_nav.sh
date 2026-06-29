@@ -11,6 +11,7 @@ echo "[STOP] kill qwen lidar related processes..."
 pkill -f run_qwen_lidar_nav.py || true
 pkill -f run_qwen_pixel_task.py || true
 pkill -f compressed_to_raw_image.py || true
+pkill -f m1_pwm_cmd_vel_bridge.py || true
 pkill -f cmd_vel_to_rosmaster.py || true
 
 echo "[STOP] done."

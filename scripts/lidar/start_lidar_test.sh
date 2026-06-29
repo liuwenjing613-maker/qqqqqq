@@ -30,20 +30,9 @@ echo "[1/4] start lidar driver -> /scan"
 bash scripts/lidar/start_lidar_only.sh
 sleep 2
 
-echo "[2/4] start chassis bridge: $CMD_TOPIC -> M1"
-cd "$PROJECT_DIR/ros2_bridge"
-source "$PROJECT_DIR/scripts/lidar/source_ydlidar.sh"
-python3 cmd_vel_to_rosmaster.py \
-  --mvp-tune-config "$MVP_TUNE_FILE" \
-  --port "$CHASSIS_PORT" \
-  --max-vx 0.08 \
-  --max-wz 0.35 \
-  --cmd-smooth-alpha "$CMD_SMOOTH_ALPHA" \
-  --max-vx-delta "$MAX_VX_DELTA" \
-  --max-wz-delta "$MAX_WZ_DELTA" \
-  --control-rate-hz "$CONTROL_RATE_HZ" \
-  --debug \
-  > "$PROJECT_DIR/logs/lidar_test_chassis_bridge.log" 2>&1 &
+echo "[2/4] start chassis bridge (PWM): $CMD_TOPIC -> M1"
+source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
+run_chassis_bridge "$PROJECT_DIR/logs/lidar_test_chassis_bridge.log"
 sleep 2
 
 echo "[3/4] check /scan topic..."

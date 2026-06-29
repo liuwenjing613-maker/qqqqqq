@@ -57,7 +57,7 @@ ros2 launch ~/rdk_x5_vln_robot/perception/launch/usb_cam.launch.py usb_video_dev
 ```bash
 cd ~/rdk_x5_vln_robot/ros2_bridge
 source /opt/tros/humble/setup.bash
-python3 cmd_vel_to_rosmaster.py --port /dev/ttyUSB0 --max-vx 0.08 --max-wz 0.35 --debug
+python3 m1_pwm_cmd_vel_bridge.py --port /dev/ttyUSB0 --max-vx 0.06 --max-wz 0.06 --wheel-layout fl-rl-fr-rr --debug
 
 ### 终端3：启动红色视觉伺服
 ```bash

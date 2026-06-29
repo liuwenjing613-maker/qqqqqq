@@ -23,7 +23,10 @@ max_wz: 0.055
 kp_turn: 0.10
 
 wz_deadzone: 0.08
+cmd_vx_deadzone: 0.003
 cmd_wz_deadzone: 0.012
+odom_vxy_deadzone: 0.003
+odom_wz_deadzone: 0.015
 forward_turn_scale: 0.60
 turn_threshold: 0.30
 forward_threshold: 0.18
@@ -62,8 +65,20 @@ recovery_observe_frames: 6
 # 确认方法: python3 v0/test_rosmaster_connection.py --port <端口>  正确时 battery>0
 # 常见设备: /dev/ttyUSB0  /dev/ttyUSB1  /dev/myserial  /dev/rosmaster
 chassis_port: /dev/ttyUSB1
-chassis_max_vx: 0.070
-chassis_max_wz: 0.260
+chassis_max_vx: 0.06
+chassis_max_wz: 0.06
+
+# PWM 底盘桥 (m1_pwm_cmd_vel_bridge.py)
+chassis_pwm_wheel_layout: fl-rl-fr-rr
+chassis_motor_signs: "1,1,1,1"
+chassis_vx_pwm_deadband: 6.0
+chassis_wz_pwm_deadband: 8.0
+chassis_pwm_max: 30.0
+chassis_vx_pwm_gain: 180.0
+chassis_wz_pwm_gain: 120.0
+chassis_pwm_smooth_alpha: 0.35
+chassis_max_pwm_delta: 3.0
+chassis_watchdog_timeout: 0.5
 
 # -----------------------------
 # 启动脉冲
@@ -83,3 +98,17 @@ cmd_smooth_alpha: 0.55
 max_vx_delta: 0.010
 max_wz_delta: 0.008
 control_rate_hz: 20
+
+# -----------------------------
+# M1 MCU sanitize (底盘桥启动时也会执行)
+# -----------------------------
+sanitize_on_start: true
+sanitize_pid_kp: 1.2
+sanitize_pid_ki: 0.05
+sanitize_pid_kd: 0.02
+sanitize_speed_limit_vx: 0.0
+sanitize_speed_limit_wz: 0.0
+sanitize_imu_adjust: false
+sanitize_yaw_pid_zero: true
+sanitize_write_flash: false
+sanitize_settle_sec: 0.8

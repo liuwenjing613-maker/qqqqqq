@@ -53,6 +53,7 @@ cleanup() {
 
   pkill -f "async_slam_toolbox_node" 2>/dev/null || true
   pkill -f "sync_slam_toolbox_node" 2>/dev/null || true
+  pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
   pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
   pkill -f "foxglove_bridge" 2>/dev/null || true
@@ -63,6 +64,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 ensure_slam_config() {
+  if [ -f "$SLAM_CONFIG" ]; then
+    log "SLAM config OK: $SLAM_CONFIG"
+    return 0
+  fi
+
   mkdir -p "$(dirname "$SLAM_CONFIG")"
 
   cat > "$SLAM_CONFIG" <<'YAML'
@@ -159,6 +165,7 @@ main() {
   publish_zero_cmd
   pkill -f "async_slam_toolbox_node" 2>/dev/null || true
   pkill -f "sync_slam_toolbox_node" 2>/dev/null || true
+  pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
   pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
   pkill -f "foxglove_bridge" 2>/dev/null || true
@@ -170,16 +177,11 @@ main() {
   start_background lidar bash "${PROJECT_DIR}/scripts/lidar/start_lidar_only.sh"
   sleep 6
 
-  log "[2/5] Chassis bridge -> /odom"
-  start_background chassis_bridge \
-    python3 "${PROJECT_DIR}/ros2_bridge/cmd_vel_to_rosmaster.py" \
-    --mvp-tune-config "${PROJECT_DIR}/configs/mvp_tune.yaml" \
-    --port "${CHASSIS_DEV}" \
-    --publish-odom \
-    --odom-topic /odom \
-    --odom-frame odom \
-    --base-frame base_link \
-    --odom-rate-hz 30.0
+  log "[2/5] Chassis PWM bridge (no /odom)"
+  source "${PROJECT_DIR}/scripts/lib/load_mvp_tune.sh"
+  source "${PROJECT_DIR}/scripts/lib/run_chassis_bridge.sh"
+  export CHASSIS_PORT="${CHASSIS_DEV}"
+  run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"
   sleep 4
 
   log "[3/5] Static TF base_link -> laser"

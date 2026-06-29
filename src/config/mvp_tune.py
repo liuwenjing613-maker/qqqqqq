@@ -28,6 +28,14 @@ def _as_int(value, name: str) -> int:
         raise ValueError(f"invalid int for {name}: {value!r}") from exc
 
 
+def _as_bool(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 def load_mvp_tune(path: str | None = None) -> Dict[str, Any]:
     tune_path = os.path.expanduser(path or DEFAULT_TUNE_PATH)
     with open(tune_path, "r", encoding="utf-8") as f:
@@ -87,8 +95,18 @@ def load_mvp_tune(path: str | None = None) -> Dict[str, Any]:
         "recovery_pulse_frames": _as_int(raw.get("recovery_pulse_frames", 2), "recovery_pulse_frames"),
         "recovery_observe_frames": _as_int(raw.get("recovery_observe_frames", 6), "recovery_observe_frames"),
         "chassis_port": str(raw.get("chassis_port", "/dev/ttyUSB1")),
-        "chassis_max_vx": _as_float(raw.get("chassis_max_vx", 0.08), "chassis_max_vx"),
-        "chassis_max_wz": _as_float(raw.get("chassis_max_wz", 0.12), "chassis_max_wz"),
+        "chassis_max_vx": _as_float(raw.get("chassis_max_vx", 0.06), "chassis_max_vx"),
+        "chassis_max_wz": _as_float(raw.get("chassis_max_wz", 0.06), "chassis_max_wz"),
+        "chassis_pwm_wheel_layout": str(raw.get("chassis_pwm_wheel_layout", "fl-rl-fr-rr")),
+        "chassis_motor_signs": str(raw.get("chassis_motor_signs", "1,1,1,1")),
+        "chassis_vx_pwm_deadband": _as_float(raw.get("chassis_vx_pwm_deadband", 6.0), "chassis_vx_pwm_deadband"),
+        "chassis_wz_pwm_deadband": _as_float(raw.get("chassis_wz_pwm_deadband", 8.0), "chassis_wz_pwm_deadband"),
+        "chassis_pwm_max": _as_float(raw.get("chassis_pwm_max", 30.0), "chassis_pwm_max"),
+        "chassis_vx_pwm_gain": _as_float(raw.get("chassis_vx_pwm_gain", 180.0), "chassis_vx_pwm_gain"),
+        "chassis_wz_pwm_gain": _as_float(raw.get("chassis_wz_pwm_gain", 120.0), "chassis_wz_pwm_gain"),
+        "chassis_pwm_smooth_alpha": _as_float(raw.get("chassis_pwm_smooth_alpha", 0.35), "chassis_pwm_smooth_alpha"),
+        "chassis_max_pwm_delta": _as_float(raw.get("chassis_max_pwm_delta", 3.0), "chassis_max_pwm_delta"),
+        "chassis_watchdog_timeout": _as_float(raw.get("chassis_watchdog_timeout", 0.5), "chassis_watchdog_timeout"),
         "enable_kick_start": enable_kick_start,
         "kick_vx": _as_float(raw.get("kick_vx", 0.05), "kick_vx"),
         "kick_wz": _as_float(raw.get("kick_wz", 0.24), "kick_wz"),
@@ -98,6 +116,16 @@ def load_mvp_tune(path: str | None = None) -> Dict[str, Any]:
         "max_vx_delta": _as_float(raw.get("max_vx_delta", 0.012), "max_vx_delta"),
         "max_wz_delta": _as_float(raw.get("max_wz_delta", 0.015), "max_wz_delta"),
         "control_rate_hz": _as_float(raw.get("control_rate_hz", 20.0), "control_rate_hz"),
+        "sanitize_on_start": _as_bool(raw.get("sanitize_on_start", True)),
+        "sanitize_pid_kp": _as_float(raw.get("sanitize_pid_kp", 1.2), "sanitize_pid_kp"),
+        "sanitize_pid_ki": _as_float(raw.get("sanitize_pid_ki", 0.05), "sanitize_pid_ki"),
+        "sanitize_pid_kd": _as_float(raw.get("sanitize_pid_kd", 0.02), "sanitize_pid_kd"),
+        "sanitize_speed_limit_vx": _as_float(raw.get("sanitize_speed_limit_vx", 0.0), "sanitize_speed_limit_vx"),
+        "sanitize_speed_limit_wz": _as_float(raw.get("sanitize_speed_limit_wz", 0.0), "sanitize_speed_limit_wz"),
+        "sanitize_imu_adjust": _as_bool(raw.get("sanitize_imu_adjust", False)),
+        "sanitize_yaw_pid_zero": _as_bool(raw.get("sanitize_yaw_pid_zero", True)),
+        "sanitize_write_flash": _as_bool(raw.get("sanitize_write_flash", False)),
+        "sanitize_settle_sec": _as_float(raw.get("sanitize_settle_sec", 0.8), "sanitize_settle_sec"),
         "min_drive_vx": max(min_drive_floor, max_vx * min_drive_ratio),
         "min_cruise_wz": _as_float(
             raw.get("min_cruise_wz", raw.get("max_wz", 0.16)),
@@ -126,6 +154,16 @@ def shell_export(tune: Dict[str, Any]) -> str:
         "CHASSIS_PORT": tune["chassis_port"],
         "CHASSIS_MAX_VX": tune["chassis_max_vx"],
         "CHASSIS_MAX_WZ": tune["chassis_max_wz"],
+        "CHASSIS_PWM_WHEEL_LAYOUT": tune["chassis_pwm_wheel_layout"],
+        "CHASSIS_MOTOR_SIGNS": tune["chassis_motor_signs"],
+        "CHASSIS_VX_PWM_DEADBAND": tune["chassis_vx_pwm_deadband"],
+        "CHASSIS_WZ_PWM_DEADBAND": tune["chassis_wz_pwm_deadband"],
+        "CHASSIS_PWM_MAX": tune["chassis_pwm_max"],
+        "CHASSIS_VX_PWM_GAIN": tune["chassis_vx_pwm_gain"],
+        "CHASSIS_WZ_PWM_GAIN": tune["chassis_wz_pwm_gain"],
+        "CHASSIS_PWM_SMOOTH_ALPHA": tune["chassis_pwm_smooth_alpha"],
+        "CHASSIS_MAX_PWM_DELTA": tune["chassis_max_pwm_delta"],
+        "CHASSIS_WATCHDOG_TIMEOUT": tune["chassis_watchdog_timeout"],
         "KICK_VX": tune["kick_vx"],
         "KICK_WZ": tune["kick_wz"],
         "KICK_DURATION": tune["kick_duration"],

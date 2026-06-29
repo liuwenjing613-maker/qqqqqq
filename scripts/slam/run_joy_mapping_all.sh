@@ -40,8 +40,9 @@ log() {
 
 zero_cmd() {
   source_ros
-  timeout 2 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
-    "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" \
+  # Publish zero for a short burst. A single zero can be overwritten by joy autorepeat.
+  timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \
     >/dev/null 2>&1 || true
 }
 
@@ -88,7 +89,11 @@ save_map() {
 
 cleanup() {
   echo
-  log "Ctrl+C/exit detected: stop robot, save map, cleanup..."
+  log "Ctrl+C/exit detected: stop joystick, stop robot, save map, cleanup..."
+  # Stop command publishers first; otherwise teleop/joy can overwrite the zero command while saving.
+  pkill -f "teleop_twist_joy" 2>/dev/null || true
+  pkill -f "joy_node" 2>/dev/null || true
+  pkill -f "game_controller_node" 2>/dev/null || true
   zero_cmd
   save_map
   kill_children
@@ -168,26 +173,26 @@ main() {
   log "[1/3] Start SLAM + Foxglove live stack"
   start_bg live_stack bash scripts/slam/run_corridor_mapping_live_foxglove.sh
 
-  wait_topic_exists /scan 90 || true
-  wait_topic_exists /odom 90 || true
-  wait_topic_exists /map 90 || true
-  wait_topic_exists /tf 40 || true
+  wait_topic_exists /scan 90 || { log "FAIL: /scan not found"; exit 1; }
+  wait_topic_exists /odom 90 || { log "FAIL: /odom not found"; exit 1; }
+  wait_topic_exists /map 90 || { log "FAIL: /map not found"; exit 1; }
+  wait_topic_exists /tf 40 || { log "FAIL: /tf not found"; exit 1; }
 
   log "[2/3] Start joystick /joy"
   start_bg joy_node ros2 run joy joy_node --ros-args \
     -p dev:=/dev/input/js0 \
-    -p deadzone:=0.08 \
+    -p deadzone:=0.15 \
     -p autorepeat_rate:=20.0
 
-  wait_topic_exists /joy 30 || true
+  wait_topic_exists /joy 30 || { log "FAIL: /joy not found"; exit 1; }
 
   log "[3/3] Start teleop /joy -> /cmd_vel"
   start_bg teleop ros2 run teleop_twist_joy teleop_node --ros-args \
     -p require_enable_button:=false \
     -p axis_linear.x:=1 \
-    -p scale_linear.x:=0.025 \
+    -p scale_linear.x:=0.06 \
     -p axis_angular.yaw:=0 \
-    -p scale_angular.yaw:=0.12
+    -p scale_angular.yaw:=0.24
 
   sleep 2
   show_status

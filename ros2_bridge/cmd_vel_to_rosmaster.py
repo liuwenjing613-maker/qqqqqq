@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import time
+from typing import Any, Dict
 
 import rclpy
 from geometry_msgs.msg import Quaternion, TransformStamped, Twist
@@ -21,6 +22,7 @@ sys.path.append(PROJECT_ROOT)
 
 from src.config.mvp_tune import load_mvp_tune
 from src.control.cmd_smoother import CmdSmoother
+from src.control.m1_rosmaster_extensions import apply_m1_runtime_sanitize
 
 
 def clamp(value, min_value, max_value):
@@ -56,7 +58,10 @@ class CmdVelToRosmaster(Node):
         kick_wz=0.24,
         kick_duration=0.18,
         kick_cooldown=1.0,
+        cmd_vx_deadzone=0.003,
         cmd_wz_deadzone=0.01,
+        odom_vxy_deadzone=0.003,
+        odom_wz_deadzone=0.015,
         cmd_smooth_alpha=0.4,
         max_vx_delta=0.015,
         max_wz_delta=0.02,
@@ -69,6 +74,16 @@ class CmdVelToRosmaster(Node):
         odom_frame="odom",
         base_frame="base_link",
         odom_rate_hz=30.0,
+        sanitize_on_start=True,
+        sanitize_pid_kp=1.2,
+        sanitize_pid_ki=0.05,
+        sanitize_pid_kd=0.02,
+        sanitize_speed_limit_vx=0.0,
+        sanitize_speed_limit_wz=0.0,
+        sanitize_imu_adjust=False,
+        sanitize_yaw_pid_zero=True,
+        sanitize_write_flash=False,
+        sanitize_settle_sec=0.8,
     ):
         super().__init__("cmd_vel_to_rosmaster")
 
@@ -98,7 +113,10 @@ class CmdVelToRosmaster(Node):
         self.kick_wz = float(kick_wz)
         self.kick_duration = float(kick_duration)
         self.kick_cooldown = float(kick_cooldown)
+        self.cmd_vx_deadzone = float(cmd_vx_deadzone)
         self.cmd_wz_deadzone = float(cmd_wz_deadzone)
+        self.odom_vxy_deadzone = float(odom_vxy_deadzone)
+        self.odom_wz_deadzone = float(odom_wz_deadzone)
         self.last_kick_time = 0.0
         self.kick_active_until = 0.0
         self.kick_vx_target = 0.0
@@ -126,6 +144,8 @@ class CmdVelToRosmaster(Node):
         self.odom_y = 0.0
         self.odom_yaw = 0.0
         self.last_odom_time = None
+        self.sanitize_on_start = bool(sanitize_on_start)
+        self.sanitize_status: Dict[str, Any] = {}
 
         self.get_logger().info("Initializing Rosmaster...")
         self.get_logger().info(f"Serial port: {self.port}")
@@ -142,6 +162,27 @@ class CmdVelToRosmaster(Node):
                 "and that no other process holds the serial port."
             )
             raise
+
+        if self.sanitize_on_start:
+            self.sanitize_status = apply_m1_runtime_sanitize(
+                self.bot,
+                pid_kp=sanitize_pid_kp,
+                pid_ki=sanitize_pid_ki,
+                pid_kd=sanitize_pid_kd,
+                speed_limit_vx=sanitize_speed_limit_vx,
+                speed_limit_wz=sanitize_speed_limit_wz,
+                imu_adjust=sanitize_imu_adjust,
+                yaw_pid_zero=sanitize_yaw_pid_zero,
+                write_flash=sanitize_write_flash,
+                settle_sec=sanitize_settle_sec,
+                log=self.get_logger().info,
+            )
+            if not self.sanitize_status.get("all_ok", False):
+                self.get_logger().warn(
+                    "M1 runtime sanitize completed with errors; check speed_limit/imu_adjust steps."
+                )
+        else:
+            self.get_logger().info("M1 runtime sanitize skipped (sanitize_on_start=false)")
 
         self.safe_stop()
 
@@ -182,7 +223,8 @@ class CmdVelToRosmaster(Node):
             "Kick start: "
             f"enable={self.enable_kick_start}, kick_vx={self.kick_vx:.3f}, "
             f"kick_wz={self.kick_wz:.3f}, duration={self.kick_duration:.3f}s, "
-            f"cooldown={self.kick_cooldown:.3f}s, cmd_wz_deadzone={self.cmd_wz_deadzone:.3f}"
+            f"cooldown={self.kick_cooldown:.3f}s, "
+            f"cmd_vx_deadzone={self.cmd_vx_deadzone:.3f}, cmd_wz_deadzone={self.cmd_wz_deadzone:.3f}"
         )
         if self.publish_odom:
             self.get_logger().info(
@@ -200,6 +242,13 @@ class CmdVelToRosmaster(Node):
             vx = float(motion[0])
             vy = float(motion[1])
             wz = float(motion[2])
+            # Suppress tiny stationary noise; otherwise SLAM slowly drifts while the robot is still.
+            if abs(vx) < self.odom_vxy_deadzone:
+                vx = 0.0
+            if abs(vy) < self.odom_vxy_deadzone:
+                vy = 0.0
+            if abs(wz) < self.odom_wz_deadzone:
+                wz = 0.0
         except Exception as exc:
             self.get_logger().warning(
                 f"get_motion_data failed, skip odom publish: {exc!r}"
@@ -209,6 +258,9 @@ class CmdVelToRosmaster(Node):
         with self.odom_lock:
             if self.last_odom_time is not None:
                 dt = now - self.last_odom_time
+                if dt > 0.2:
+                    # Ignore long scheduling gaps to avoid one bad jump in odom.
+                    dt = 0.0
                 if dt > 0.0:
                     cos_yaw = math.cos(self.odom_yaw)
                     sin_yaw = math.sin(self.odom_yaw)
@@ -261,6 +313,8 @@ class CmdVelToRosmaster(Node):
 
         vx = clamp(raw_vx, -self.max_vx, self.max_vx)
         wz = clamp(raw_wz, -self.max_wz, self.max_wz)
+        if abs(vx) < self.cmd_vx_deadzone:
+            vx = 0.0
         if abs(wz) < self.cmd_wz_deadzone:
             wz = 0.0
 
@@ -346,9 +400,18 @@ class CmdVelToRosmaster(Node):
                 "last_raw_wz": self.last_raw_wz,
                 "last_sent_vx": self.last_sent_vx,
                 "last_sent_wz": self.last_sent_wz,
+                "cmd_vx_deadzone": self.cmd_vx_deadzone,
+                "cmd_wz_deadzone": self.cmd_wz_deadzone,
                 "kick_enabled": self.enable_kick_start,
                 "kick_active": self.in_kick,
                 "watchdog_timeout": self.watchdog_timeout,
+                "sanitize_on_start": self.sanitize_on_start,
+                "sanitize_all_ok": self.sanitize_status.get("all_ok"),
+                "sanitize_steps": {
+                    k: v.get("ok")
+                    for k, v in self.sanitize_status.items()
+                    if isinstance(v, dict) and "ok" in v
+                },
                 "time": time.time(),
             }
         self.state_pub.publish(String(data=json.dumps(state, ensure_ascii=False)))
@@ -420,7 +483,10 @@ def main():
     parser.add_argument("--kick-wz", type=float, default=tune["kick_wz"])
     parser.add_argument("--kick-duration", type=float, default=tune["kick_duration"])
     parser.add_argument("--kick-cooldown", type=float, default=tune["kick_cooldown"])
+    parser.add_argument("--cmd-vx-deadzone", type=float, default=tune.get("cmd_vx_deadzone", 0.003))
     parser.add_argument("--cmd-wz-deadzone", type=float, default=tune["cmd_wz_deadzone"])
+    parser.add_argument("--odom-vxy-deadzone", type=float, default=tune.get("odom_vxy_deadzone", 0.003))
+    parser.add_argument("--odom-wz-deadzone", type=float, default=tune.get("odom_wz_deadzone", 0.015))
     parser.add_argument("--cmd-smooth-alpha", type=float, default=tune["cmd_smooth_alpha"])
     parser.add_argument("--max-vx-delta", type=float, default=tune["max_vx_delta"])
     parser.add_argument("--max-wz-delta", type=float, default=tune["max_wz_delta"])
@@ -441,6 +507,40 @@ def main():
     parser.add_argument("--odom-frame", default="odom")
     parser.add_argument("--base-frame", default="base_link")
     parser.add_argument("--odom-rate-hz", type=float, default=30.0)
+    parser.add_argument(
+        "--sanitize-on-start",
+        action=argparse.BooleanOptionalAction,
+        default=bool(tune.get("sanitize_on_start", True)),
+    )
+    parser.add_argument("--sanitize-pid-kp", type=float, default=tune.get("sanitize_pid_kp", 1.2))
+    parser.add_argument("--sanitize-pid-ki", type=float, default=tune.get("sanitize_pid_ki", 0.05))
+    parser.add_argument("--sanitize-pid-kd", type=float, default=tune.get("sanitize_pid_kd", 0.02))
+    parser.add_argument(
+        "--sanitize-speed-limit-vx",
+        type=float,
+        default=tune.get("sanitize_speed_limit_vx", 0.0),
+    )
+    parser.add_argument(
+        "--sanitize-speed-limit-wz",
+        type=float,
+        default=tune.get("sanitize_speed_limit_wz", 0.0),
+    )
+    parser.add_argument(
+        "--sanitize-imu-adjust",
+        action=argparse.BooleanOptionalAction,
+        default=bool(tune.get("sanitize_imu_adjust", False)),
+    )
+    parser.add_argument(
+        "--sanitize-yaw-pid-zero",
+        action=argparse.BooleanOptionalAction,
+        default=bool(tune.get("sanitize_yaw_pid_zero", True)),
+    )
+    parser.add_argument(
+        "--sanitize-write-flash",
+        action=argparse.BooleanOptionalAction,
+        default=bool(tune.get("sanitize_write_flash", False)),
+    )
+    parser.add_argument("--sanitize-settle-sec", type=float, default=tune.get("sanitize_settle_sec", 0.8))
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -455,7 +555,10 @@ def main():
         kick_wz=args.kick_wz,
         kick_duration=args.kick_duration,
         kick_cooldown=args.kick_cooldown,
+        cmd_vx_deadzone=args.cmd_vx_deadzone,
         cmd_wz_deadzone=args.cmd_wz_deadzone,
+        odom_vxy_deadzone=args.odom_vxy_deadzone,
+        odom_wz_deadzone=args.odom_wz_deadzone,
         cmd_smooth_alpha=args.cmd_smooth_alpha,
         max_vx_delta=args.max_vx_delta,
         max_wz_delta=args.max_wz_delta,
@@ -468,6 +571,16 @@ def main():
         odom_frame=args.odom_frame,
         base_frame=args.base_frame,
         odom_rate_hz=args.odom_rate_hz,
+        sanitize_on_start=args.sanitize_on_start,
+        sanitize_pid_kp=args.sanitize_pid_kp,
+        sanitize_pid_ki=args.sanitize_pid_ki,
+        sanitize_pid_kd=args.sanitize_pid_kd,
+        sanitize_speed_limit_vx=args.sanitize_speed_limit_vx,
+        sanitize_speed_limit_wz=args.sanitize_speed_limit_wz,
+        sanitize_imu_adjust=args.sanitize_imu_adjust,
+        sanitize_yaw_pid_zero=args.sanitize_yaw_pid_zero,
+        sanitize_write_flash=args.sanitize_write_flash,
+        sanitize_settle_sec=args.sanitize_settle_sec,
     )
 
     try:

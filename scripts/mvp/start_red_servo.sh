@@ -8,7 +8,7 @@ cd "$PROJECT_DIR"
 #
 # 启动内容：
 # 1. USB 摄像头节点 hobot_usb_cam，发布 /image
-# 2. 底盘桥 cmd_vel_to_rosmaster.py，订阅 /cmd_vel
+# 2. 底盘桥 m1_pwm_cmd_vel_bridge.py，订阅 /cmd_vel
 # 3. 红色视觉伺服 red_target_servo_auto_ros.py，订阅 /image，发布 /cmd_vel
 #
 # 默认参数见 configs/mvp_tune.yaml；临时覆盖示例：
@@ -87,8 +87,8 @@ if [ ! -e "$CHASSIS_PORT" ]; then
   exit 1
 fi
 
-if [ ! -f "$PROJECT_DIR/ros2_bridge/cmd_vel_to_rosmaster.py" ]; then
-  echo "[ERROR] 找不到底盘桥脚本：$PROJECT_DIR/ros2_bridge/cmd_vel_to_rosmaster.py"
+if [ ! -f "$PROJECT_DIR/ros2_bridge/m1_pwm_cmd_vel_bridge.py" ]; then
+  echo "[ERROR] 找不到底盘桥脚本：$PROJECT_DIR/ros2_bridge/m1_pwm_cmd_vel_bridge.py"
   exit 1
 fi
 
@@ -110,6 +110,7 @@ echo "[INFO] 清理旧的红色视觉伺服相关进程..."
 pkill -f "red_target_servo_ros.py" 2>/dev/null || true
 pkill -f "red_target_servo_compressed_ros.py" 2>/dev/null || true
 pkill -f "red_target_servo_auto_ros.py" 2>/dev/null || true
+pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
 pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
 pkill -f "hobot_usb_cam" 2>/dev/null || true
 
@@ -159,31 +160,13 @@ echo "[INFO] 图像话题类型："
 ros2 topic type "$IMAGE_TOPIC" || true
 
 # ---------- 启动底盘桥 ----------
-echo "[INFO] 启动底盘桥 cmd_vel_to_rosmaster.py..."
+echo "[INFO] 启动 PWM 底盘桥 m1_pwm_cmd_vel_bridge.py..."
 echo "[INFO] 日志：$BRIDGE_LOG"
 
-bash -lc "
-source $TROS_SETUP
-cd $PROJECT_DIR/ros2_bridge
-python3 cmd_vel_to_rosmaster.py \
-  --mvp-tune-config "$MVP_TUNE_FILE" \
-  --port $CHASSIS_PORT \
-  --max-vx $BRIDGE_MAX_VX \
-  --max-wz $BRIDGE_MAX_WZ \
-  --kick-vx $KICK_VX \
-  --kick-wz $KICK_WZ \
-  --kick-duration $KICK_DURATION \
-  --kick-cooldown $KICK_COOLDOWN \
-  --cmd-wz-deadzone $CMD_WZ_DEADZONE \
-  --cmd-smooth-alpha $CMD_SMOOTH_ALPHA \
-  --max-vx-delta $MAX_VX_DELTA \
-  --max-wz-delta $MAX_WZ_DELTA \
-  --control-rate-hz $CONTROL_RATE_HZ \
-  --debug
-" > "$BRIDGE_LOG" 2>&1 &
-
-BRIDGE_PID=$!
-echo "[INFO] BRIDGE_PID=$BRIDGE_PID"
+source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
+run_chassis_bridge "$BRIDGE_LOG"
+BRIDGE_PID=$(pgrep -f "m1_pwm_cmd_vel_bridge.py" | head -1 || echo "")
+echo "[INFO] BRIDGE_PID=${BRIDGE_PID:-unknown}"
 
 # ---------- 等待 /cmd_vel 订阅者出现 ----------
 echo "[INFO] 等待底盘桥订阅 /cmd_vel..."

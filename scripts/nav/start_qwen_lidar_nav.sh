@@ -17,6 +17,7 @@ echo "[1/8] stop old related processes..."
 pkill -f run_qwen_lidar_nav.py || true
 pkill -f run_qwen_pixel_task.py || true
 pkill -f compressed_to_raw_image.py || true
+pkill -f m1_pwm_cmd_vel_bridge.py || true
 pkill -f cmd_vel_to_rosmaster.py || true
 pkill -f hobot_yolo_world || true
 
@@ -70,7 +71,9 @@ for topic in /image_raw /scan; do
 done
 
 echo "[8/8] start chassis bridge and Qwen LiDAR nav..."
-python3 ros2_bridge/cmd_vel_to_rosmaster.py --port "$CHASSIS_PORT" --max-vx 0.08 --max-wz 0.35 --watchdog-timeout 0.5 > logs/qwen_lidar_chassis.log 2>&1 &
+source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
+source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
+run_chassis_bridge "$PROJECT_DIR/logs/qwen_lidar_chassis.log"
 sleep 1
 python3 src/apps/run_qwen_lidar_nav.py --config "$CONFIG" --instruction "$INSTRUCTION" > logs/qwen_lidar_nav.log 2>&1 &
 

@@ -50,6 +50,7 @@ FILES=(
   "src/control/mvp_visual_servo.py"
   "src/fsm/mvp_state_machine.py"
   "src/apps/run_mvp_task.py"
+  "ros2_bridge/m1_pwm_cmd_vel_bridge.py"
   "ros2_bridge/cmd_vel_to_rosmaster.py"
   "scripts/system/stop_all_safe.sh"
   "scripts/mvp/start_red_mvp_raw.sh"

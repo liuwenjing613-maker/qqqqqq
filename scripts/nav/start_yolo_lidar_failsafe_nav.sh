@@ -60,6 +60,8 @@ pkill -f test_qwen_ollama_image.py || true
 pkill -f bench_qwen_ollama.py || true
 pkill -f compressed_to_raw_image.py || true
 pkill -f "hobot_usb_cam" || true
+pkill -f "m1_pwm_cmd_vel_bridge.py" || true
+pkill -f "cmd_vel_to_rosmaster.py" || true
 pkill -f "ros2 launch hobot_usb_cam" || true
 sleep 2
 
@@ -211,36 +213,9 @@ python3 src/perception/yolo_world_to_bbox_json.py \
   > logs/yolo_failsafe_bbox_bridge.log 2>&1 &
 sleep 2
 
-echo "[6/7] start chassis bridge..."
-pkill -f cmd_vel_to_rosmaster.py || true
-CHASSIS_DEBUG_ARGS=()
-if [ "${CHASSIS_DEBUG:-0}" = "1" ]; then
-  CHASSIS_DEBUG_ARGS=(--debug)
-fi
-CHASSIS_RESET_ARGS=(--no-reset-on-zero)
-if [ "${CHASSIS_RESET_ON_ZERO:-0}" = "1" ]; then
-  CHASSIS_RESET_ARGS=(--reset-on-zero)
-fi
-
-python3 ros2_bridge/cmd_vel_to_rosmaster.py \
-  --port "$CHASSIS_PORT" \
-  --max-vx "$CHASSIS_MAX_VX" \
-  --max-wz "$CHASSIS_MAX_WZ" \
-  --watchdog-timeout "$CHASSIS_WATCHDOG_TIMEOUT" \
-  $( [ "$CHASSIS_ENABLE_KICK_START" = "1" ] && echo "--enable-kick-start" || echo "--no-enable-kick-start" ) \
-  --kick-vx "$CHASSIS_KICK_VX" \
-  --kick-wz "$CHASSIS_KICK_WZ" \
-  --kick-duration "$CHASSIS_KICK_DURATION" \
-  --kick-cooldown "$CHASSIS_KICK_COOLDOWN" \
-  --cmd-wz-deadzone "$CHASSIS_CMD_WZ_DEADZONE" \
-  --cmd-smooth-alpha "$CHASSIS_CMD_SMOOTH_ALPHA" \
-  --max-vx-delta "$CHASSIS_MAX_VX_DELTA" \
-  --max-wz-delta "$CHASSIS_MAX_WZ_DELTA" \
-  --control-rate-hz "$CHASSIS_CONTROL_RATE_HZ" \
-  "${CHASSIS_RESET_ARGS[@]}" \
-  --zero-reset-hold-sec "$CHASSIS_ZERO_RESET_HOLD_SEC" \
-  "${CHASSIS_DEBUG_ARGS[@]}" \
-  > logs/yolo_failsafe_chassis.log 2>&1 &
+echo "[6/7] start chassis bridge (PWM)..."
+source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
+run_chassis_bridge "$PROJECT_DIR/logs/yolo_failsafe_chassis.log"
 sleep 1
 
 echo "[7/7] wait for /scan..."

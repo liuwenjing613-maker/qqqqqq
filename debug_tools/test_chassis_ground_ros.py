@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-经 ROS /cmd_vel + cmd_vel_to_rosmaster 测试前进/左转/右转。
-与 MVP 实际走的路径一致，用于排查底盘桥与平滑参数。
+经 ROS /cmd_vel + m1_pwm_cmd_vel_bridge 测试前进/左转/右转。
+与 MVP 实际走的路径一致，用于排查 PWM 底盘桥参数。
 
-需先启动 cmd_vel_to_rosmaster（本脚本不自动启动）。
+需先启动 m1_pwm_cmd_vel_bridge（本脚本不自动启动）。
 """
 
 import argparse
@@ -61,7 +61,7 @@ def main():
     print("=== /cmd_vel 落地测试 ===")
     print(f"vx={args.vx} wz(left)={args.wz} duration={args.duration}")
     print("请先运行: bash scripts/test_chassis_ground_ros.sh bridge")
-    print("或手动启动 cmd_vel_to_rosmaster.py")
+    print("或手动启动 m1_pwm_cmd_vel_bridge.py（scripts/lib/run_chassis_bridge.sh）")
     if not args.yes:
         input("确认底盘桥已启动、周围安全，按 Enter：")
 

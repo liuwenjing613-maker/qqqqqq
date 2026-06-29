@@ -10,6 +10,7 @@ pkill -f "yolo_world_servo_ros.py" 2>/dev/null || true
 pkill -f "yolo_world_bbox_preview.py" 2>/dev/null || true
 pkill -f "yolo_world_diag_preview.py" 2>/dev/null || true
 pkill -f "keyboard_cmd_vel.py" 2>/dev/null || true
+pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
 pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
 pkill -f "compressed_to_raw_image.py" 2>/dev/null || true
 pkill -f "save_raw_image_once.py" 2>/dev/null || true

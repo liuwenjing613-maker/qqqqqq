@@ -50,6 +50,7 @@ kill_demo_processes() {
     fi
   done
   pkill -f "async_slam_toolbox_node" 2>/dev/null || true
+  pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
   pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
   pkill -f "ydlidar_ros2_driver_node" 2>/dev/null || true
@@ -293,6 +294,7 @@ main() {
 
   log "Stopping previous demo-related processes (YOLO/Qwen untouched)..."
   pkill -f "async_slam_toolbox_node" 2>/dev/null || true
+  pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
   pkill -f "static_transform_publisher.*base_link.*laser" 2>/dev/null || true
   sleep 0.5
@@ -302,15 +304,11 @@ main() {
   sleep 3
   cp -f "${PROJECT_DIR}/logs/lidar_driver.log" "${LOG_DIR}/lidar_driver.log" 2>/dev/null || true
 
-  log "[2/4] Chassis bridge + /odom (/dev/rosmaster)"
-  start_background chassis_bridge \
-    python3 "${PROJECT_DIR}/ros2_bridge/cmd_vel_to_rosmaster.py" \
-    --mvp-tune-config "${PROJECT_DIR}/configs/mvp_tune.yaml" \
-    --port "${CHASSIS_DEV}" \
-    --publish-odom \
-    --odom-rate-hz 30.0 \
-    --watchdog-timeout 2.0 \
-    --cmd-smooth-alpha 0.0
+  log "[2/4] Chassis PWM bridge (no /odom)"
+  source "${PROJECT_DIR}/scripts/lib/load_mvp_tune.sh"
+  source "${PROJECT_DIR}/scripts/lib/run_chassis_bridge.sh"
+  export CHASSIS_PORT="${CHASSIS_DEV}"
+  run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"
   sleep 2
 
   log "[3/4] Static TF base_link -> laser"

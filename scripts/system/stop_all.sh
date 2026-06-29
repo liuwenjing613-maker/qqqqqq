@@ -8,6 +8,7 @@ pkill -f run_mvp_task.py
 pkill -f red_target_servo_ros.py
 pkill -f yolo_world_servo_ros.py
 pkill -f keyboard_cmd_vel.py
+pkill -f m1_pwm_cmd_vel_bridge.py
 pkill -f cmd_vel_to_rosmaster.py
 pkill -f hobot_usb_cam
 pkill -f websocket

@@ -1,0 +1,204 @@
+diff -ruN slam_fix_orig/rdk_x5_vln_robot/configs/mvp_tune.yaml slam_fix_work/rdk_x5_vln_robot/configs/mvp_tune.yaml
+--- slam_fix_orig/rdk_x5_vln_robot/configs/mvp_tune.yaml	2026-06-28 11:47:16.612550057 +0000
++++ slam_fix_work/rdk_x5_vln_robot/configs/mvp_tune.yaml	2026-06-28 11:47:17.731560244 +0000
+@@ -23,7 +23,10 @@
+ kp_turn: 0.10
+ 
+ wz_deadzone: 0.08
++cmd_vx_deadzone: 0.003
+ cmd_wz_deadzone: 0.012
++odom_vxy_deadzone: 0.003
++odom_wz_deadzone: 0.015
+ forward_turn_scale: 0.60
+ turn_threshold: 0.30
+ forward_threshold: 0.18
+diff -ruN slam_fix_orig/rdk_x5_vln_robot/ros2_bridge/cmd_vel_to_rosmaster.py slam_fix_work/rdk_x5_vln_robot/ros2_bridge/cmd_vel_to_rosmaster.py
+--- slam_fix_orig/rdk_x5_vln_robot/ros2_bridge/cmd_vel_to_rosmaster.py	2026-06-28 11:47:16.598905509 +0000
++++ slam_fix_work/rdk_x5_vln_robot/ros2_bridge/cmd_vel_to_rosmaster.py	2026-06-28 11:47:17.731374533 +0000
+@@ -56,7 +56,10 @@
+         kick_wz=0.24,
+         kick_duration=0.18,
+         kick_cooldown=1.0,
++        cmd_vx_deadzone=0.003,
+         cmd_wz_deadzone=0.01,
++        odom_vxy_deadzone=0.003,
++        odom_wz_deadzone=0.015,
+         cmd_smooth_alpha=0.4,
+         max_vx_delta=0.015,
+         max_wz_delta=0.02,
+@@ -98,7 +101,10 @@
+         self.kick_wz = float(kick_wz)
+         self.kick_duration = float(kick_duration)
+         self.kick_cooldown = float(kick_cooldown)
++        self.cmd_vx_deadzone = float(cmd_vx_deadzone)
+         self.cmd_wz_deadzone = float(cmd_wz_deadzone)
++        self.odom_vxy_deadzone = float(odom_vxy_deadzone)
++        self.odom_wz_deadzone = float(odom_wz_deadzone)
+         self.last_kick_time = 0.0
+         self.kick_active_until = 0.0
+         self.kick_vx_target = 0.0
+@@ -182,7 +188,8 @@
+             "Kick start: "
+             f"enable={self.enable_kick_start}, kick_vx={self.kick_vx:.3f}, "
+             f"kick_wz={self.kick_wz:.3f}, duration={self.kick_duration:.3f}s, "
+-            f"cooldown={self.kick_cooldown:.3f}s, cmd_wz_deadzone={self.cmd_wz_deadzone:.3f}"
++            f"cooldown={self.kick_cooldown:.3f}s, "
++            f"cmd_vx_deadzone={self.cmd_vx_deadzone:.3f}, cmd_wz_deadzone={self.cmd_wz_deadzone:.3f}"
+         )
+         if self.publish_odom:
+             self.get_logger().info(
+@@ -200,6 +207,13 @@
+             vx = float(motion[0])
+             vy = float(motion[1])
+             wz = float(motion[2])
++            # Suppress tiny stationary noise; otherwise SLAM slowly drifts while the robot is still.
++            if abs(vx) < self.odom_vxy_deadzone:
++                vx = 0.0
++            if abs(vy) < self.odom_vxy_deadzone:
++                vy = 0.0
++            if abs(wz) < self.odom_wz_deadzone:
++                wz = 0.0
+         except Exception as exc:
+             self.get_logger().warning(
+                 f"get_motion_data failed, skip odom publish: {exc!r}"
+@@ -209,6 +223,9 @@
+         with self.odom_lock:
+             if self.last_odom_time is not None:
+                 dt = now - self.last_odom_time
++                if dt > 0.2:
++                    # Ignore long scheduling gaps to avoid one bad jump in odom.
++                    dt = 0.0
+                 if dt > 0.0:
+                     cos_yaw = math.cos(self.odom_yaw)
+                     sin_yaw = math.sin(self.odom_yaw)
+@@ -261,6 +278,8 @@
+ 
+         vx = clamp(raw_vx, -self.max_vx, self.max_vx)
+         wz = clamp(raw_wz, -self.max_wz, self.max_wz)
++        if abs(vx) < self.cmd_vx_deadzone:
++            vx = 0.0
+         if abs(wz) < self.cmd_wz_deadzone:
+             wz = 0.0
+ 
+@@ -346,6 +365,8 @@
+                 "last_raw_wz": self.last_raw_wz,
+                 "last_sent_vx": self.last_sent_vx,
+                 "last_sent_wz": self.last_sent_wz,
++                "cmd_vx_deadzone": self.cmd_vx_deadzone,
++                "cmd_wz_deadzone": self.cmd_wz_deadzone,
+                 "kick_enabled": self.enable_kick_start,
+                 "kick_active": self.in_kick,
+                 "watchdog_timeout": self.watchdog_timeout,
+@@ -420,7 +441,10 @@
+     parser.add_argument("--kick-wz", type=float, default=tune["kick_wz"])
+     parser.add_argument("--kick-duration", type=float, default=tune["kick_duration"])
+     parser.add_argument("--kick-cooldown", type=float, default=tune["kick_cooldown"])
++    parser.add_argument("--cmd-vx-deadzone", type=float, default=tune.get("cmd_vx_deadzone", 0.003))
+     parser.add_argument("--cmd-wz-deadzone", type=float, default=tune["cmd_wz_deadzone"])
++    parser.add_argument("--odom-vxy-deadzone", type=float, default=tune.get("odom_vxy_deadzone", 0.003))
++    parser.add_argument("--odom-wz-deadzone", type=float, default=tune.get("odom_wz_deadzone", 0.015))
+     parser.add_argument("--cmd-smooth-alpha", type=float, default=tune["cmd_smooth_alpha"])
+     parser.add_argument("--max-vx-delta", type=float, default=tune["max_vx_delta"])
+     parser.add_argument("--max-wz-delta", type=float, default=tune["max_wz_delta"])
+@@ -455,7 +479,10 @@
+         kick_wz=args.kick_wz,
+         kick_duration=args.kick_duration,
+         kick_cooldown=args.kick_cooldown,
++        cmd_vx_deadzone=args.cmd_vx_deadzone,
+         cmd_wz_deadzone=args.cmd_wz_deadzone,
++        odom_vxy_deadzone=args.odom_vxy_deadzone,
++        odom_wz_deadzone=args.odom_wz_deadzone,
+         cmd_smooth_alpha=args.cmd_smooth_alpha,
+         max_vx_delta=args.max_vx_delta,
+         max_wz_delta=args.max_wz_delta,
+diff -ruN slam_fix_orig/rdk_x5_vln_robot/scripts/slam/run_corridor_mapping_live_foxglove.sh slam_fix_work/rdk_x5_vln_robot/scripts/slam/run_corridor_mapping_live_foxglove.sh
+--- slam_fix_orig/rdk_x5_vln_robot/scripts/slam/run_corridor_mapping_live_foxglove.sh	2026-06-28 11:47:16.578451893 +0000
++++ slam_fix_work/rdk_x5_vln_robot/scripts/slam/run_corridor_mapping_live_foxglove.sh	2026-06-28 11:47:17.730991505 +0000
+@@ -63,6 +63,11 @@
+ trap cleanup EXIT INT TERM
+ 
+ ensure_slam_config() {
++  if [ -f "$SLAM_CONFIG" ]; then
++    log "SLAM config OK: $SLAM_CONFIG"
++    return 0
++  fi
++
+   mkdir -p "$(dirname "$SLAM_CONFIG")"
+ 
+   cat > "$SLAM_CONFIG" <<'YAML'
+@@ -179,7 +184,11 @@
+     --odom-topic /odom \
+     --odom-frame odom \
+     --base-frame base_link \
+-    --odom-rate-hz 30.0
++    --odom-rate-hz 30.0 \
++    --watchdog-timeout 0.5 \
++    --cmd-smooth-alpha 0.0 \
++    --reset-on-zero \
++    --zero-reset-hold-sec 0.15
+   sleep 4
+ 
+   log "[3/5] Static TF base_link -> laser"
+diff -ruN slam_fix_orig/rdk_x5_vln_robot/scripts/slam/run_joy_mapping_all.sh slam_fix_work/rdk_x5_vln_robot/scripts/slam/run_joy_mapping_all.sh
+--- slam_fix_orig/rdk_x5_vln_robot/scripts/slam/run_joy_mapping_all.sh	2026-06-28 11:47:16.578722180 +0000
++++ slam_fix_work/rdk_x5_vln_robot/scripts/slam/run_joy_mapping_all.sh	2026-06-28 11:47:17.730579007 +0000
+@@ -40,8 +40,9 @@
+ 
+ zero_cmd() {
+   source_ros
+-  timeout 2 ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
+-    "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" \
++  # Publish zero for a short burst. A single zero can be overwritten by joy autorepeat.
++  timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
++    "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \
+     >/dev/null 2>&1 || true
+ }
+ 
+@@ -88,7 +89,11 @@
+ 
+ cleanup() {
+   echo
+-  log "Ctrl+C/exit detected: stop robot, save map, cleanup..."
++  log "Ctrl+C/exit detected: stop joystick, stop robot, save map, cleanup..."
++  # Stop command publishers first; otherwise teleop/joy can overwrite the zero command while saving.
++  pkill -f "teleop_twist_joy" 2>/dev/null || true
++  pkill -f "joy_node" 2>/dev/null || true
++  pkill -f "game_controller_node" 2>/dev/null || true
+   zero_cmd
+   save_map
+   kill_children
+@@ -168,26 +173,26 @@
+   log "[1/3] Start SLAM + Foxglove live stack"
+   start_bg live_stack bash scripts/slam/run_corridor_mapping_live_foxglove.sh
+ 
+-  wait_topic_exists /scan 90 || true
+-  wait_topic_exists /odom 90 || true
+-  wait_topic_exists /map 90 || true
+-  wait_topic_exists /tf 40 || true
++  wait_topic_exists /scan 90 || { log "FAIL: /scan not found"; exit 1; }
++  wait_topic_exists /odom 90 || { log "FAIL: /odom not found"; exit 1; }
++  wait_topic_exists /map 90 || { log "FAIL: /map not found"; exit 1; }
++  wait_topic_exists /tf 40 || { log "FAIL: /tf not found"; exit 1; }
+ 
+   log "[2/3] Start joystick /joy"
+   start_bg joy_node ros2 run joy joy_node --ros-args \
+     -p dev:=/dev/input/js0 \
+-    -p deadzone:=0.08 \
++    -p deadzone:=0.15 \
+     -p autorepeat_rate:=20.0
+ 
+-  wait_topic_exists /joy 30 || true
++  wait_topic_exists /joy 30 || { log "FAIL: /joy not found"; exit 1; }
+ 
+   log "[3/3] Start teleop /joy -> /cmd_vel"
+   start_bg teleop ros2 run teleop_twist_joy teleop_node --ros-args \
+     -p require_enable_button:=false \
+     -p axis_linear.x:=1 \
+-    -p scale_linear.x:=0.025 \
++    -p scale_linear.x:=0.06 \
+     -p axis_angular.yaw:=0 \
+-    -p scale_angular.yaw:=0.12
++    -p scale_angular.yaw:=0.24
+ 
+   sleep 2
+   show_status

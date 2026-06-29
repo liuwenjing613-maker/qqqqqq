@@ -15,23 +15,19 @@
 cd ~/rdk_x5_vln_robot
 source /opt/tros/humble/setup.bash
 
+pkill -f m1_pwm_cmd_vel_bridge.py || true
 pkill -f cmd_vel_to_rosmaster.py || true
 
-python3 ros2_bridge/cmd_vel_to_rosmaster.py \
-  --port /dev/ttyUSB1 \
-  --max-vx 0.09 \
-  --max-wz 0.35 \
-  --watchdog-timeout 0.8 \
-  --enable-kick-start \
-  --kick-vx 0.08 \
-  --kick-wz 0.24 \
-  --kick-duration 0.25 \
-  --kick-cooldown 0.6 \
-  --cmd-smooth-alpha 0.0 \
-  --max-vx-delta 0.09 \
-  --max-wz-delta 0.35 \
-  --no-reset-on-zero \
-  --debug
+source scripts/lib/load_mvp_tune.sh
+source scripts/lib/run_chassis_bridge.sh
+run_chassis_bridge logs/chassis_test.log
+# 或手动：
+# python3 ros2_bridge/m1_pwm_cmd_vel_bridge.py \
+#   --port /dev/ttyUSB1 \
+#   --max-vx 0.06 \
+#   --max-wz 0.06 \
+#   --wheel-layout fl-rl-fr-rr \
+#   --debug
 ```
 
 另开终端测试前进（车轮架空）：
