@@ -13,7 +13,7 @@ target_words:
   - bottle
 
 lidar_front_deg: 25.0
-camera_lidar_yaw_offset_deg: 270.0
+camera_lidar_yaw_offset_deg: 180.0
 
 topics:
   image_raw: /image_raw
@@ -80,14 +80,14 @@ fsm:
   stable_frames_required: 3
   lost_frames_limit: 5
   centered_required_frames: 3
-  max_search_sec: 45
+  max_search_sec: 120
   max_task_sec: 0
   min_state_frames: 2
 
 success:
   require_lidar: true
   center_px: 70
-  min_safe_distance: 0.35
+  min_safe_distance: 0.20
   stop_distance: 0.90
   verify_distance_max: 0.85
   min_area_ratio: 0.08
@@ -118,15 +118,16 @@ safety:
   turn_slow_vx_scale: 0.5
 
 search:
-  scan_wz: 0.04
-  pulse_sec: 0.20
-  observe_sec: 0.60
+  scan_wz: 0.05
+  search_arc_vx: 0.02
+  pulse_sec: 0.35
+  observe_sec: 0.10
   loss_memory_sec: 4.0
-  free_space_after_loss_sec: 8.0
+  free_space_after_loss_sec: 4.0
   free_space_enabled: true
-  free_space_enable_after_sec: 10.0
-  free_space_vx: 0.015
-  free_space_min_clearance: 0.45
+  free_space_enable_after_sec: 4.0
+  free_space_vx: 0.025
+  free_space_min_clearance: 0.38
   turn_lock_sec: 6.0
   lidar_turn_min_delta: 0.15
   lidar_turn_side_deg: 45.0
