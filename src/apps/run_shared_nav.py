@@ -24,6 +24,13 @@ if str(ROOT) not in sys.path:
 from src.config.nav_success import load_success_config
 from src.control.point_servo import PointServo, PointServoConfig, ServoCommand, clamp
 from src.fsm.nav_state_machine import NavFSMConfig, NavObservation, NavState, NavStateMachine
+from src.nav.search_strategy import (
+    TargetSearchMemory,
+    compute_loss_age,
+    pick_clearance_turn_dir,
+    should_use_free_space,
+    turn_dir_from_ex,
+)
 from src.perception.free_space_waypoint import FreeSpaceConfig, FreeSpaceWaypointProvider
 from src.perception.target_adapter import NavTarget, TargetAdapter
 
@@ -72,6 +79,7 @@ class SharedNav(Node):
         safety = section(cfg, "safety")
         success_cfg = load_success_config(cfg)
         search = section(cfg, "search")
+        track_cfg = section(cfg, "track")
 
         self.image_width = int(camera.get("width", cfg.get("image_width", cfg.get("camera_width", 640))))
         self.image_height = int(camera.get("height", cfg.get("image_height", cfg.get("camera_height", 480))))
@@ -158,6 +166,17 @@ class SharedNav(Node):
         self.free_space_enabled = bool(search.get("free_space_enabled", False))
         self.free_space_enable_after_sec = float(search.get("free_space_enable_after_sec", 10.0))
         self.free_space_vx = float(search.get("free_space_vx", 0.015))
+        self.loss_memory_sec = float(search.get("loss_memory_sec", 4.0))
+        self.free_space_after_loss_sec = float(
+            search.get("free_space_after_loss_sec", self.free_space_enable_after_sec)
+        )
+        self.turn_lock_sec = float(search.get("turn_lock_sec", 6.0))
+        self.lidar_turn_min_delta = float(search.get("lidar_turn_min_delta", 0.15))
+        self.lidar_turn_side_deg = float(search.get("lidar_turn_side_deg", 45.0))
+        self.lidar_fallback_on_no_memory = bool(search.get("lidar_fallback_on_no_memory", True))
+        self.track_blocked_hold_on_target = bool(track_cfg.get("blocked_hold_on_target", True))
+
+        self.search_mem = TargetSearchMemory()
 
         self.emergency_stop_distance = float(safety.get("emergency_stop_distance", 0.45))
         self.hard_stop_distance = float(safety.get("hard_stop_distance", 0.55))
@@ -243,11 +262,17 @@ class SharedNav(Node):
         now = time.time()
         self.step_count += 1
         target = self.resolve_target(now)
+        self.update_target_memory(target, now)
         front = self.front_distance()
         obs = self.make_observation(now, target, front)
         result = self.fsm.update(obs)
         self.last_fsm_result = result
         self.last_target = target
+
+        if result.changed and result.state == NavState.BLOCKED:
+            self.search_mem.search_turn_locked_until = 0.0
+        if self.target_ok(target):
+            self.search_mem.search_mode = "visual_handoff"
 
         if result.state in (NavState.ARRIVE_VERIFY, NavState.SUCCESS, NavState.FAILED):
             self.desired_cmd = Twist()
@@ -324,6 +349,93 @@ class SharedNav(Node):
         elapsed = now - (self.fsm.state_enter_time or now)
         return True if elapsed >= 0.5 else None
 
+    def target_ok(self, target: NavTarget) -> bool:
+        return bool(
+            target.visible
+            and not target.stale
+            and target.score >= self.target_min_score
+        )
+
+    def update_target_memory(self, target: NavTarget, now: float) -> None:
+        if not self.target_ok(target):
+            return
+        self.search_mem.last_visible_time = now
+        if target.u is not None:
+            self.search_mem.last_target_u = float(target.u)
+            self.search_mem.last_target_ex = (
+                float(target.u) - self.image_width / 2.0
+            ) / max(float(self.image_width), 1.0)
+
+    def loss_age(self, now: float) -> float:
+        return compute_loss_age(now, self.search_mem.last_visible_time)
+
+    def lock_search_turn(self, turn_dir: float, now: float, mode: str) -> None:
+        self.search_mem.search_turn_dir = float(turn_dir)
+        self.search_mem.search_turn_locked_until = now + self.turn_lock_sec
+        self.search_mem.search_mode = mode
+
+    def pick_clearance_turn(self) -> Tuple[float, str]:
+        left = self.free_space.left_clearance(self.lidar_turn_side_deg)
+        right = self.free_space.right_clearance(-self.lidar_turn_side_deg)
+        turn_dir, side = pick_clearance_turn_dir(
+            left,
+            right,
+            self.lidar_turn_min_delta,
+            self.search_mem.search_turn_dir,
+        )
+        return turn_dir, side
+
+    def pick_memory_turn(self) -> Tuple[float, str]:
+        if self.search_mem.last_target_ex is not None:
+            return turn_dir_from_ex(self.search_mem.last_target_ex), "vision_memory"
+        if self.lidar_fallback_on_no_memory:
+            turn_dir, side = self.pick_clearance_turn()
+            return turn_dir, f"lidar_clearance_{side}"
+        return self.search_mem.search_turn_dir, "vision_memory_default"
+
+    def resolve_locked_turn(self, now: float, pick_fn) -> Tuple[float, str]:
+        if now < self.search_mem.search_turn_locked_until:
+            return self.search_mem.search_turn_dir, self.search_mem.search_mode
+        turn_dir, mode = pick_fn()
+        self.lock_search_turn(turn_dir, now, mode)
+        return turn_dir, mode
+
+    def resolve_search_spin_cmd(self, now: float) -> Tuple[ServoCommand, str]:
+        def pick() -> Tuple[float, str]:
+            if self.search_mem.last_target_ex is not None:
+                return self.pick_memory_turn()
+            turn_dir, side = self.pick_clearance_turn()
+            return turn_dir, f"lidar_clearance_{side}"
+
+        turn_dir, mode = self.resolve_locked_turn(now, pick)
+        return ServoCommand(vx=0.0, wz=turn_dir * abs(self.scan_wz)), f"{mode}_scan"
+
+    def resolve_search_cmd(self, now: float) -> Tuple[ServoCommand, str]:
+        age = self.loss_age(now)
+        if should_use_free_space(age, self.free_space_enabled, self.free_space_after_loss_sec):
+            wp = self.free_space.get_waypoint(self.image_width, self.image_height)
+            if wp.get("usable", False):
+                self.search_mem.search_mode = "lidar_free_space"
+                cmd = self.servo.compute_cmd(
+                    {"visible": True, "u": wp.get("u"), "v": wp.get("v")}
+                ).cmd
+                cmd.vx = min(cmd.vx, self.free_space_vx)
+                return cmd, "lidar_free_space"
+        return self.resolve_search_spin_cmd(now)
+
+    def blocked_recovery_cmd(self, target: NavTarget, now: float) -> Tuple[ServoCommand, str]:
+        if self.target_ok(target) and self.track_blocked_hold_on_target:
+            return ServoCommand(), "blocked_hold_target"
+        wp = self.free_space.get_waypoint(self.image_width, self.image_height)
+        if wp.get("usable", False):
+            cmd = self.servo.compute_cmd(
+                {"visible": True, "u": wp.get("u"), "v": wp.get("v")}
+            ).cmd
+            cmd.vx = min(cmd.vx, self.free_space_vx)
+            return cmd, "blocked_free_space"
+        turn_dir, side = self.pick_clearance_turn()
+        return ServoCommand(vx=0.0, wz=turn_dir * abs(self.scan_wz)), f"blocked_turn_{side}"
+
     def command_for_state(self, state: NavState, target: NavTarget, now: float) -> Tuple[ServoCommand, str]:
         if state in (NavState.BOOT, NavState.WAIT_SENSORS, NavState.CANDIDATE_LOCK):
             return ServoCommand(), f"{state.value.lower()}_stop"
@@ -331,6 +443,13 @@ class SharedNav(Node):
             front = self.front_distance()
             if front is not None and front <= self.stop_distance:
                 return ServoCommand(vx=0.0, wz=0.0), "STOP_FOR_VERIFY"
+            if (
+                self.track_blocked_hold_on_target
+                and self.target_ok(target)
+                and front is not None
+                and front <= self.hard_stop_distance
+            ):
+                return ServoCommand(), "track_blocked_hold"
             result = self.servo.compute_cmd(target.to_dict())
             cmd = result.cmd
             if front is not None and front < self.slow_distance and cmd.vx > 0.0:
@@ -338,21 +457,13 @@ class SharedNav(Node):
                 cmd.vx = self.servo.cfg.max_vx * (front - self.stop_distance) / span
             return cmd, result.state
         if state == NavState.SEARCH:
-            if self.free_space_enabled and self.fsm.state_enter_time is not None:
-                if now - self.fsm.state_enter_time >= self.free_space_enable_after_sec:
-                    wp = self.free_space.get_waypoint(self.image_width, self.image_height)
-                    if wp.get("usable", False):
-                        cmd = self.servo.compute_cmd({"visible": True, "u": wp.get("u"), "v": wp.get("v")}).cmd
-                        cmd.vx = min(cmd.vx, self.free_space_vx)
-                        return cmd, "free_space_search"
-            return ServoCommand(vx=0.0, wz=self.scan_wz), "search_scan"
+            return self.resolve_search_cmd(now)
         if state == NavState.LOST_RECOVERY:
             return self.recovery_pulse_cmd(now)
         if state == NavState.BLOCKED:
             if self.last_safety.get("safety_reason") == "emergency_stop":
                 return ServoCommand(), "blocked_emergency_stop"
-            turn_dir, side = self.pick_clearance_turn()
-            return ServoCommand(vx=0.0, wz=turn_dir * abs(self.scan_wz)), f"blocked_turn_{side}"
+            return self.blocked_recovery_cmd(target, now)
         return ServoCommand(), "unhandled_stop"
 
     def recovery_pulse_cmd(self, now: float) -> Tuple[ServoCommand, str]:
@@ -360,7 +471,8 @@ class SharedNav(Node):
         cycle = max(self.pulse_sec + self.observe_sec, 1e-3)
         phase = (now - start) % cycle
         if phase < self.pulse_sec:
-            return ServoCommand(vx=0.0, wz=self.scan_wz), "lost_recovery_pulse"
+            cmd, mode = self.resolve_search_spin_cmd(now)
+            return cmd, f"lost_recovery_{mode}"
         return ServoCommand(), "lost_recovery_observe"
 
     def apply_safety_layer(self, raw_cmd: Twist) -> Tuple[Twist, Dict[str, Any]]:
@@ -416,15 +528,6 @@ class SharedNav(Node):
         info.update({"safe_cmd_vx": float(safe.linear.x), "safe_cmd_wz": float(safe.angular.z), "safety_reason": reason})
         return safe, info
 
-    def pick_clearance_turn(self) -> Tuple[float, str]:
-        left = self.free_space.left_clearance()
-        right = self.free_space.right_clearance()
-        if left is None and right is None:
-            return 1.0, "unknown"
-        if right is None or (left is not None and left >= right):
-            return 1.0, "left"
-        return -1.0, "right"
-
     def front_distance(self) -> Optional[float]:
         if not self.require_lidar:
             return None
@@ -469,6 +572,11 @@ class SharedNav(Node):
             "safe_cmd_vx": float(self.last_safety.get("safe_cmd_vx", self.last_cmd.linear.x)),
             "safe_cmd_wz": float(self.last_safety.get("safe_cmd_wz", self.last_cmd.angular.z)),
             "safety": self.last_safety,
+            "search_mode": self.search_mem.search_mode,
+            "search_turn_dir": self.search_mem.search_turn_dir,
+            "loss_age_sec": self.loss_age(time.time()),
+            "last_target_u": self.search_mem.last_target_u,
+            "last_target_ex": self.search_mem.last_target_ex,
             "time": time.time(),
         }
         data.update(json_safe(kwargs))

@@ -1,29 +1,19 @@
 [BPU_PLAT]BPU Platform Version(1.3.6)! soc info(x5)
 [HBRT] set log level as 0. version = 3.15.55.0
 [DNN] Runtime version = 1.24.5_(3.15.55 HBRT)
-[A][DNN][packed_model.cpp:247][Model](2026-06-30,17:17:18.249.315) [HorizonRT] The model builder version = 1.23.8
-[INFO] [1782811038.577097973] [yolov5s_bpu_web_node]: subscribing raw image: /image_raw
-[INFO] [1782811038.587656053] [yolov5s_bpu_web_node]: ===== YOLOv5s-BPU web node started =====
-[INFO] [1782811038.590310844] [yolov5s_bpu_web_node]: model=/root/rdk_model_zoo/samples/vision/yolov5/model/yolov5s_tag_v7.0_detect_640x640_bayese_nv12.bin
-[INFO] [1782811038.592568885] [yolov5s_bpu_web_node]: target_classes=['bottle']
-[INFO] [1782811038.594699593] [yolov5s_bpu_web_node]: out_topic=/target_bbox_json
-[INFO] [1782811038.596797051] [yolov5s_bpu_web_node]: annotated_topic=/yolov5s_bpu/annotated/compressed
-[INFO] [1782811038.598931550] [yolov5s_bpu_web_node]: web=http://<RDK_IP>:8088/
-[INFO] [1782811048.841504110] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811051.841232243] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811054.841691792] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811057.840375884] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811060.840664558] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811063.840318232] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811066.840003572] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811069.845950161] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811072.840129211] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811075.841824175] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811078.842328681] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811081.842199020] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811084.841920235] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1782811087.841658657] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[W][DNN]bpu_model_info.cpp:491][Version](2026-06-30,17:17:18.362.635) Model: yolov5s_tag_v7.0_detect_640x640_bayese_nv12. Inconsistency between the hbrt library version 3.15.55.0 and the model build version 3.15.54.0 detected, in order to ensure correct model results, it is recommended to use compilation tools and the BPU SDK from the same OpenExplorer package.
+[A][DNN][packed_model.cpp:247][Model](2026-06-30,19:45:08.456.998) [HorizonRT] The model builder version = 1.23.8
+[INFO] [1782819908.802401679] [yolov5s_bpu_web_node]: subscribing raw image: /image_raw
+[INFO] [1782819908.813041660] [yolov5s_bpu_web_node]: ===== YOLOv5s-BPU web node started =====
+[INFO] [1782819908.815500572] [yolov5s_bpu_web_node]: model=/root/rdk_model_zoo/samples/vision/yolov5/model/yolov5s_tag_v7.0_detect_640x640_bayese_nv12.bin
+[INFO] [1782819908.817844901] [yolov5s_bpu_web_node]: target_classes=['bottle']
+[INFO] [1782819908.820034230] [yolov5s_bpu_web_node]: out_topic=/target_bbox_json
+[INFO] [1782819908.822350100] [yolov5s_bpu_web_node]: annotated_topic=/yolov5s_bpu/annotated/compressed
+[INFO] [1782819908.824889346] [yolov5s_bpu_web_node]: web=http://<RDK_IP>:8088/
+[INFO] [1782819919.552934686] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1782819922.549392332] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1782819925.548614975] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1782819928.549877200] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[W][DNN]bpu_model_info.cpp:491][Version](2026-06-30,19:45:08.584.490) Model: yolov5s_tag_v7.0_detect_640x640_bayese_nv12. Inconsistency between the hbrt library version 3.15.55.0 and the model build version 3.15.54.0 detected, in order to ensure correct model results, it is recommended to use compilation tools and the BPU SDK from the same OpenExplorer package.
 Traceback (most recent call last):
   File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 468, in main
     rclpy.spin(node)

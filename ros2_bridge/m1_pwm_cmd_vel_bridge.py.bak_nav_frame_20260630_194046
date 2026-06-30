@@ -126,7 +126,6 @@ class M1PwmCmdVelBridge(Node):
         odom_wz_scale: float = 1.0,
         odom_use_vy: bool = False,
         base_yaw_offset: float = 0.0,
-        odom_xy_yaw_offset: float = 0.0,
     ):
         super().__init__("m1_pwm_cmd_vel_bridge")
 
@@ -142,7 +141,6 @@ class M1PwmCmdVelBridge(Node):
         self.odom_wz_scale = float(odom_wz_scale)
         self.odom_use_vy = bool(odom_use_vy)
         self.base_yaw_offset = float(base_yaw_offset)
-        self.odom_xy_yaw_offset = float(odom_xy_yaw_offset)
 
         self.port = str(port)
         self.max_vx = float(max_vx)
@@ -223,10 +221,6 @@ class M1PwmCmdVelBridge(Node):
             self.get_logger().info(
                 f"base_link yaw offset={self.base_yaw_offset:.4f} rad "
                 f"({math.degrees(self.base_yaw_offset):.1f} deg)"
-            )
-            self.get_logger().info(
-                f"odom_xy_yaw offset={self.odom_xy_yaw_offset:.4f} rad "
-                f"({math.degrees(self.odom_xy_yaw_offset):.1f} deg)"
             )
         else:
             self.get_logger().info("m1_pwm_cmd_vel_bridge started (drive_mode=pwm, no /odom)")
@@ -360,12 +354,14 @@ class M1PwmCmdVelBridge(Node):
                     dy_body = vy * dt
                     dyaw = wz * dt
 
-                    xy_yaw_before = math.atan2(
-                        math.sin(self.odom_yaw + self.odom_xy_yaw_offset),
-                        math.cos(self.odom_yaw + self.odom_xy_yaw_offset),
+                    # 用发布后的 base_link 朝向参与 x/y 积分；
+                    # 否则只改变 TF 箭头，不改变 map/odom 中的位置运动方向。
+                    published_yaw_before = math.atan2(
+                        math.sin(self.odom_yaw + self.base_yaw_offset),
+                        math.cos(self.odom_yaw + self.base_yaw_offset),
                     )
 
-                    yaw_mid = xy_yaw_before + 0.5 * dyaw
+                    yaw_mid = published_yaw_before + 0.5 * dyaw
 
                     self.odom_x += dx_body * math.cos(yaw_mid) - dy_body * math.sin(yaw_mid)
                     self.odom_y += dx_body * math.sin(yaw_mid) + dy_body * math.cos(yaw_mid)
@@ -466,8 +462,6 @@ class M1PwmCmdVelBridge(Node):
                 "odom_wz_deadzone": self.odom_wz_deadzone,
                 "base_yaw_offset": self.base_yaw_offset,
                 "base_yaw_offset_deg": math.degrees(self.base_yaw_offset),
-                "odom_xy_yaw_offset": self.odom_xy_yaw_offset,
-                "odom_xy_yaw_offset_deg": math.degrees(self.odom_xy_yaw_offset),
                 "time": time.time(),
             }
         self.state_pub.publish(String(data=json.dumps(state, ensure_ascii=False)))
@@ -524,7 +518,6 @@ def main() -> None:
     parser.add_argument("--odom-wz-scale", type=float, default=1.0)
     parser.add_argument("--odom-use-vy", action="store_true", default=False)
     parser.add_argument("--base-yaw-offset", type=float, default=0.0)
-    parser.add_argument("--odom-xy-yaw-offset", type=float, default=0.0)
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -559,7 +552,6 @@ def main() -> None:
         odom_wz_scale=args.odom_wz_scale,
         odom_use_vy=args.odom_use_vy,
         base_yaw_offset=args.base_yaw_offset,
-        odom_xy_yaw_offset=args.odom_xy_yaw_offset,
     )
 
     try:
