@@ -161,6 +161,7 @@ class SharedNav(Node):
         )
 
         self.scan_wz = float(search.get("scan_wz", 0.04))
+        self.search_arc_vx = float(search.get("search_arc_vx", 0.02))
         self.pulse_sec = float(search.get("pulse_sec", 0.20))
         self.observe_sec = float(search.get("observe_sec", 0.60))
         self.free_space_enabled = bool(search.get("free_space_enabled", False))
@@ -408,7 +409,15 @@ class SharedNav(Node):
             return turn_dir, f"lidar_clearance_{side}"
 
         turn_dir, mode = self.resolve_locked_turn(now, pick)
-        return ServoCommand(vx=0.0, wz=turn_dir * abs(self.scan_wz)), f"{mode}_scan"
+        vx = self._search_arc_vx()
+        return ServoCommand(vx=vx, wz=turn_dir * abs(self.scan_wz)), f"{mode}_scan"
+
+    def _search_arc_vx(self) -> float:
+        """Slow forward while turning during search; zero when too close to obstacles."""
+        front = self.front_distance()
+        if front is not None and front <= self.hard_stop_distance + 0.05:
+            return 0.0
+        return self.search_arc_vx
 
     def resolve_search_cmd(self, now: float) -> Tuple[ServoCommand, str]:
         age = self.loss_age(now)
@@ -436,44 +445,48 @@ class SharedNav(Node):
         turn_dir, side = self.pick_clearance_turn()
         return ServoCommand(vx=0.0, wz=turn_dir * abs(self.scan_wz)), f"blocked_turn_{side}"
 
+    def _apply_front_speed_scale(self, cmd: ServoCommand, front: Optional[float]) -> ServoCommand:
+        if front is not None and front < self.slow_distance and cmd.vx > 0.0:
+            span = max(self.slow_distance - self.stop_distance, 1e-6)
+            cmd.vx = self.servo.cfg.max_vx * (front - self.stop_distance) / span
+        return cmd
+
     def command_for_state(self, state: NavState, target: NavTarget, now: float) -> Tuple[ServoCommand, str]:
-        if state in (NavState.BOOT, NavState.WAIT_SENSORS, NavState.CANDIDATE_LOCK):
+        if state in (NavState.BOOT, NavState.WAIT_SENSORS):
             return ServoCommand(), f"{state.value.lower()}_stop"
+        if state == NavState.CANDIDATE_LOCK:
+            if self.target_ok(target):
+                front = self.front_distance()
+                result = self.servo.compute_cmd(target.to_dict())
+                cmd = self._apply_front_speed_scale(result.cmd, front)
+                return cmd, f"candidate_{result.state.lower()}"
+            return ServoCommand(), "candidate_lock_stop"
         if state == NavState.TRACK:
             front = self.front_distance()
+            if not self.target_ok(target):
+                cmd, reason = self.resolve_search_cmd(now)
+                return cmd, f"track_lost_{reason}"
             if front is not None and front <= self.stop_distance:
                 return ServoCommand(vx=0.0, wz=0.0), "STOP_FOR_VERIFY"
             if (
                 self.track_blocked_hold_on_target
-                and self.target_ok(target)
                 and front is not None
                 and front <= self.hard_stop_distance
             ):
                 return ServoCommand(), "track_blocked_hold"
             result = self.servo.compute_cmd(target.to_dict())
-            cmd = result.cmd
-            if front is not None and front < self.slow_distance and cmd.vx > 0.0:
-                span = max(self.slow_distance - self.stop_distance, 1e-6)
-                cmd.vx = self.servo.cfg.max_vx * (front - self.stop_distance) / span
+            cmd = self._apply_front_speed_scale(result.cmd, front)
             return cmd, result.state
         if state == NavState.SEARCH:
             return self.resolve_search_cmd(now)
         if state == NavState.LOST_RECOVERY:
-            return self.recovery_pulse_cmd(now)
+            cmd, reason = self.resolve_search_cmd(now)
+            return cmd, f"lost_recovery_{reason}"
         if state == NavState.BLOCKED:
             if self.last_safety.get("safety_reason") == "emergency_stop":
                 return ServoCommand(), "blocked_emergency_stop"
             return self.blocked_recovery_cmd(target, now)
         return ServoCommand(), "unhandled_stop"
-
-    def recovery_pulse_cmd(self, now: float) -> Tuple[ServoCommand, str]:
-        start = self.fsm.state_enter_time or now
-        cycle = max(self.pulse_sec + self.observe_sec, 1e-3)
-        phase = (now - start) % cycle
-        if phase < self.pulse_sec:
-            cmd, mode = self.resolve_search_spin_cmd(now)
-            return cmd, f"lost_recovery_{mode}"
-        return ServoCommand(), "lost_recovery_observe"
 
     def apply_safety_layer(self, raw_cmd: Twist) -> Tuple[Twist, Dict[str, Any]]:
         front = self.front_distance()
