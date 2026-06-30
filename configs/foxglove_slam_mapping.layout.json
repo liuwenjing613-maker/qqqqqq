@@ -1,0 +1,65 @@
+{
+  "configById": {
+    "3D!slam_mapping": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 12,
+        "phi": 60,
+        "thetaOffset": 45,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-none",
+      "followTf": "base_link",
+      "scene": {
+        "enableStats": false,
+        "backgroundColor": "#1a1a1a"
+      },
+      "transforms": {
+        "enable": true,
+        "showLabel": false,
+        "lineWidth": 0.2,
+        "labelSize": 0.05
+      },
+      "topics": {
+        "/map": {
+          "visible": true,
+          "colorMode": "costmap",
+          "minColor": "#000000",
+          "maxColor": "#ffffff"
+        },
+        "/scan_filtered": {
+          "visible": true,
+          "pointSize": 4,
+          "decayTime": 0
+        },
+        "/scan": {
+          "visible": false
+        },
+        "/slam_toolbox/scan_visualization": {
+          "visible": false
+        }
+      },
+      "layers": {},
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      }
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": "3D!slam_mapping"
+}

@@ -54,8 +54,10 @@ class NavFSMConfig:
     qwen_verify_timeout_sec: float = 12.0
     qwen_verify_fail_policy: str = "search"
     recovery_max_sec: float = 4.0
-    arrive_min_distance: float = 0.55
-    arrive_max_distance: float = 0.75
+    min_safe_distance: float = 0.35
+    stop_distance: float = 0.75
+    verify_distance_max: float = 0.85
+    emergency_stop_distance: float = 0.25
     arrive_area_ratio: float = 0.16
     center_only_arrive_enabled: bool = False
 
@@ -227,9 +229,18 @@ class NavStateMachine:
             if obs.blocked or obs.emergency:
                 self._enter(NavState.BLOCKED, obs.now)
                 reason = "blocked"
-            elif not target_ok and self.lost_frames >= self.cfg.lost_frames_limit:
-                self._enter(NavState.LOST_RECOVERY, obs.now)
-                reason = "arrive_target_lost"
+            elif not self._target_ok(obs):
+                self.lost_frames += 1
+                if self.lost_frames >= self.cfg.lost_frames_limit:
+                    self._enter(NavState.LOST_RECOVERY, obs.now)
+                    reason = "arrive_target_lost"
+                else:
+                    reason = "arrive_target_lost_grace"
+            elif not self._verify_distance_ok(obs):
+                self._enter(NavState.TRACK, obs.now)
+                self.arrive_frames = 0
+                self.arrive_verify_frames = 0
+                reason = "verify_distance_lost"
             elif self.cfg.qwen_verify_required:
                 if obs.qwen_verified is True:
                     self._enter(NavState.SUCCESS, obs.now)
@@ -274,18 +285,34 @@ class NavStateMachine:
         )
 
     def arrive_ok(self, obs: NavObservation) -> bool:
-        if not obs.target_centered:
+        target_ok = self._target_ok(obs)
+        if not target_ok or not obs.target_centered:
             return False
 
-        if obs.require_lidar:
-            if obs.front_distance is None:
-                return False
-            return self.cfg.arrive_min_distance <= obs.front_distance <= self.cfg.arrive_max_distance
+        safe_distance_ok = (
+            obs.front_distance is None or obs.front_distance > self.cfg.emergency_stop_distance
+        )
 
-        if obs.target_area_ratio is not None:
-            return obs.target_area_ratio >= self.cfg.arrive_area_ratio
+        close_enough = False
+        if obs.target_area_ratio is not None and obs.target_area_ratio >= self.cfg.arrive_area_ratio:
+            close_enough = True
+        elif obs.front_distance is not None:
+            close_enough = (
+                obs.front_distance <= self.cfg.stop_distance
+                and obs.front_distance > self.cfg.min_safe_distance
+            )
+        elif self.cfg.center_only_arrive_enabled:
+            close_enough = True
 
-        return self.cfg.center_only_arrive_enabled
+        return safe_distance_ok and close_enough
+
+    def _verify_distance_ok(self, obs: NavObservation) -> bool:
+        if obs.front_distance is None:
+            return not obs.require_lidar
+        return (
+            obs.front_distance > self.cfg.min_safe_distance
+            and obs.front_distance <= self.cfg.verify_distance_max
+        )
 
     @staticmethod
     def _target_ok(obs: NavObservation) -> bool:

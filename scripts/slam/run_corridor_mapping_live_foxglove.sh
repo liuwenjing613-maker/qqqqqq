@@ -219,6 +219,12 @@ main() {
 
   log "[2/6] Chassis PWM bridge + /odom"
   source "${PROJECT_DIR}/scripts/lib/load_mvp_tune.sh"
+  if [ "${SLAM_USE_CALIBRATION:-0}" = "1" ]; then
+    # load_mvp_tune 会覆盖 CHASSIS_MAX_VX 等；校准模式下重新应用建图专用参数
+    # shellcheck source=scripts/lib/slam_calibrated_env.sh
+    source "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh"
+    log "Calibration mode: re-applied slam_calibrated_env after mvp_tune"
+  fi
   source "${PROJECT_DIR}/scripts/lib/run_chassis_bridge.sh"
   export CHASSIS_PORT="${CHASSIS_DEV}"
   run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"

@@ -1,0 +1,47 @@
+[INFO] [1782808076.724703097] [m1_pwm_cmd_vel_bridge]: Initializing Rosmaster PWM bridge on /dev/rosmaster
+[INFO] [1782808077.325329828] [m1_pwm_cmd_vel_bridge]: m1_pwm_cmd_vel_bridge started (drive_mode=pwm)
+[INFO] [1782808077.327976620] [m1_pwm_cmd_vel_bridge]: Publishing odom topic=/odom, TF odom->base_link, source=get_motion_data()
+[INFO] [1782808077.330316537] [m1_pwm_cmd_vel_bridge]: odom_wz_scale=-0.58
+[INFO] [1782808077.333460746] [m1_pwm_cmd_vel_bridge]: base_link yaw offset=0.0000 rad (0.0 deg)
+[INFO] [1782808077.335865122] [m1_pwm_cmd_vel_bridge]: fl-rl-fr-rr: M1=FL, M2=RL, M3=FR, M4=RR
+[INFO] [1782808077.338341831] [m1_pwm_cmd_vel_bridge]: motor_signs=[1, 1, 1, 1], motor_trims=[1.15, 1.15, 1.0, 1.0]
+[INFO] [1782808077.340669831] [m1_pwm_cmd_vel_bridge]: limits: max_vx=0.050, max_wz=0.100, vx_db=10.0, wz_db=10.0, pwm_max=40.0, vx_gain=200.0, wz_gain=150.0
+[INFO] [1782808077.343138915] [m1_pwm_cmd_vel_bridge]: Tip: use angular.z in rad/s (e.g. 0.12~0.16), NOT 3.0. M1 wz breakaway from calibration is about 0.16 rad/s.
+[INFO] [1782808610.900044076] [m1_pwm_cmd_vel_bridge]: Stopping PWM motors before node shutdown...
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389
+Rosmaster Serial Opened! Baudrate=115200
+----------------create receive threading--------------
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/m1_pwm_cmd_vel_bridge.py", line 562, in main
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 748, in _spin_once_impl
+    raise handler.exception()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 254, in __call__
+    self._handler.send(None)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 447, in handler
+    await call_coroutine(entity, arg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 361, in _execute_timer
+    await await_or_execute(tmr.callback)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 107, in await_or_execute
+    return callback(*args)
+  File "/root/rdk_x5_vln_robot/ros2_bridge/m1_pwm_cmd_vel_bridge.py", line 390, in odom_timer_callback
+    odom.twist.twist.angular.z = wz
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py", line 70, in publish
+    self.__publisher.publish(msg)
+rclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/m1_pwm_cmd_vel_bridge.py", line 572, in <module>
+  File "/root/rdk_x5_vln_robot/ros2_bridge/m1_pwm_cmd_vel_bridge.py", line 568, in main
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

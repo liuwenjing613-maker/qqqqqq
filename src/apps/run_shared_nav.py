@@ -84,6 +84,10 @@ class SharedNav(Node):
         self.target_color = str(target_cfg.get("color", "red"))
         self.target_min_score = float(target_cfg.get("min_score", 0.0))
         self.arrive_center_px = float(success_cfg["center_px"])
+        self.min_safe_distance = float(success_cfg["min_safe_distance"])
+        self.stop_distance = float(success_cfg["stop_distance"])
+        self.verify_distance_max = float(success_cfg["verify_distance_max"])
+        self.success_min_area_ratio = float(success_cfg["min_area_ratio"])
 
         fsm_cfg = section(cfg, "fsm")
         self.fsm = NavStateMachine(
@@ -100,9 +104,11 @@ class SharedNav(Node):
                 qwen_verify_timeout_sec=float(success_cfg["qwen_verify_timeout_sec"]),
                 qwen_verify_fail_policy=str(success_cfg["qwen_verify_fail_policy"]),
                 recovery_max_sec=float(fsm_cfg.get("recovery_max_sec", 4.0)),
-                arrive_min_distance=float(success_cfg["min_distance"]),
-                arrive_max_distance=float(success_cfg["max_distance"]),
-                arrive_area_ratio=float(success_cfg["min_area_ratio"]),
+                min_safe_distance=self.min_safe_distance,
+                stop_distance=self.stop_distance,
+                verify_distance_max=self.verify_distance_max,
+                emergency_stop_distance=float(success_cfg["emergency_stop_distance"]),
+                arrive_area_ratio=self.success_min_area_ratio,
                 center_only_arrive_enabled=bool(success_cfg["center_only_enabled"]),
             )
         )
@@ -243,6 +249,13 @@ class SharedNav(Node):
         self.last_fsm_result = result
         self.last_target = target
 
+        if result.state in (NavState.ARRIVE_VERIFY, NavState.SUCCESS, NavState.FAILED):
+            self.desired_cmd = Twist()
+            self.desired_reason = f"{result.state.value.lower()}_stop"
+            self.publish_point(target, result.state.value)
+            self.publish_state(result.state.value, reason=self.desired_reason, target=target.to_dict(), from_control=False)
+            return
+
         cmd, reason = self.command_for_state(result.state, target, now)
         self.desired_cmd = self.to_twist(cmd)
         self.desired_reason = reason
@@ -250,6 +263,13 @@ class SharedNav(Node):
         self.publish_state(result.state.value, reason=reason, target=target.to_dict(), from_control=False)
 
     def control_timer_cb(self) -> None:
+        if self.fsm.state in (NavState.ARRIVE_VERIFY, NavState.SUCCESS, NavState.FAILED):
+            self.publish_zero_cmd()
+            self._control_tick += 1
+            if self._control_tick % self._state_publish_div == 0:
+                self.publish_state(self.fsm.state.value, reason=self.desired_reason, from_control=True)
+            return
+
         safe_cmd, safety = self.apply_safety_layer(self.desired_cmd)
         self.last_safety = safety
         self.last_cmd = safe_cmd
@@ -305,11 +325,18 @@ class SharedNav(Node):
         return True if elapsed >= 0.5 else None
 
     def command_for_state(self, state: NavState, target: NavTarget, now: float) -> Tuple[ServoCommand, str]:
-        if state in (NavState.BOOT, NavState.WAIT_SENSORS, NavState.CANDIDATE_LOCK, NavState.ARRIVE_VERIFY, NavState.SUCCESS, NavState.FAILED):
+        if state in (NavState.BOOT, NavState.WAIT_SENSORS, NavState.CANDIDATE_LOCK):
             return ServoCommand(), f"{state.value.lower()}_stop"
         if state == NavState.TRACK:
+            front = self.front_distance()
+            if front is not None and front <= self.stop_distance:
+                return ServoCommand(vx=0.0, wz=0.0), "STOP_FOR_VERIFY"
             result = self.servo.compute_cmd(target.to_dict())
-            return result.cmd, result.state
+            cmd = result.cmd
+            if front is not None and front < self.slow_distance and cmd.vx > 0.0:
+                span = max(self.slow_distance - self.stop_distance, 1e-6)
+                cmd.vx = self.servo.cfg.max_vx * (front - self.stop_distance) / span
+            return cmd, result.state
         if state == NavState.SEARCH:
             if self.free_space_enabled and self.fsm.state_enter_time is not None:
                 if now - self.fsm.state_enter_time >= self.free_space_enable_after_sec:
@@ -370,8 +397,8 @@ class SharedNav(Node):
             info["safety_limited"] = True
             reason = "hard_stop"
         elif front is not None and front < self.slow_distance and vx > 0.0:
-            span = max(self.slow_distance - self.hard_stop_distance, 1e-6)
-            vx *= clamp((front - self.hard_stop_distance) / span, 0.0, 1.0)
+            span = max(self.slow_distance - self.stop_distance, 1e-6)
+            vx = min(vx, self.max_cmd_vx * clamp((front - self.stop_distance) / span, 0.0, 1.0))
             info["safety_limited"] = True
             reason = "slow_zone_scale"
 
@@ -450,9 +477,19 @@ class SharedNav(Node):
         if not from_control:
             self.get_logger().info(payload)
 
+    def publish_zero_cmd(self) -> None:
+        zero = Twist()
+        self.desired_cmd = zero
+        self.last_cmd = zero
+        self.last_safety = {
+            "safe_cmd_vx": 0.0,
+            "safe_cmd_wz": 0.0,
+            "safety_reason": "zero_cmd",
+        }
+        self.cmd_pub.publish(zero)
+
     def publish_stop(self) -> None:
-        self.desired_cmd = Twist()
-        self.cmd_pub.publish(Twist())
+        self.publish_zero_cmd()
 
 
 def main() -> None:

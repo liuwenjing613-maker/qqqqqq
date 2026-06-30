@@ -13,8 +13,9 @@ def test_load_success_from_success_section():
         "success": {
             "require_lidar": True,
             "center_px": 80,
-            "min_distance": 0.5,
-            "max_distance": 0.7,
+            "min_safe_distance": 0.35,
+            "stop_distance": 0.75,
+            "verify_distance_max": 0.85,
             "arrive_frames": 3,
             "verify_frames": 5,
             "qwen_verify_required": True,
@@ -22,7 +23,9 @@ def test_load_success_from_success_section():
     }
     s = load_success_config(cfg)
     assert s["center_px"] == 80.0
-    assert s["min_distance"] == 0.5
+    assert s["min_safe_distance"] == 0.35
+    assert s["stop_distance"] == 0.75
+    assert s["verify_distance_max"] == 0.85
     assert s["arrive_frames"] == 3
     assert s["verify_frames"] == 5
     assert s["qwen_verify_required"] is True
@@ -37,11 +40,13 @@ def test_load_success_legacy_arrive_fallback():
             "arrive_max_distance": 0.8,
             "arrive_area_ratio": 0.2,
         },
+        "safety": {"hard_stop_distance": 0.35},
     }
     s = load_success_config(cfg)
     assert s["require_lidar"] is False
     assert s["center_px"] == 60.0
-    assert s["min_distance"] == 0.55
+    assert s["min_safe_distance"] == 0.55
+    assert s["stop_distance"] == 0.8
     assert s["arrive_frames"] == 6
     assert s["verify_frames"] == 6
     assert s["min_area_ratio"] == 0.2

@@ -61,6 +61,9 @@ def parse_motor_trims(text: str) -> Tuple[float, float, float, float]:
     if len(parts) != 4:
         raise ValueError(f"motor-trims must have 4 comma-separated values, got {text!r}")
     trims = [float(p) for p in parts]
+    for i, t in enumerate(trims):
+        if t < 0.5 or t > 1.5:
+            raise ValueError(f"motor trim[{i}] must be in [0.5, 1.5], got {t}")
     return trims[0], trims[1], trims[2], trims[3]
 
 
@@ -118,10 +121,11 @@ class M1PwmCmdVelBridge(Node):
         odom_rate_hz: float = 30.0,
         odom_vxy_deadzone: float = 0.003,
         odom_wz_deadzone: float = 0.015,
-        odom_vx_scale: float | None = None,
-        odom_vy_scale: float | None = None,
-        odom_wz_scale: float | None = None,
-        base_yaw_offset: float | None = None,
+        odom_vx_scale: float = 1.0,
+        odom_vy_scale: float = 1.0,
+        odom_wz_scale: float = 1.0,
+        odom_use_vy: bool = False,
+        base_yaw_offset: float = 0.0,
     ):
         super().__init__("m1_pwm_cmd_vel_bridge")
 
@@ -132,17 +136,10 @@ class M1PwmCmdVelBridge(Node):
         self.odom_rate_hz = float(odom_rate_hz)
         self.odom_vxy_deadzone = float(odom_vxy_deadzone)
         self.odom_wz_deadzone = float(odom_wz_deadzone)
-        if odom_vx_scale is None:
-            odom_vx_scale = float(os.environ.get("CHASSIS_ODOM_VX_SCALE", "1.0"))
-        if odom_vy_scale is None:
-            odom_vy_scale = float(os.environ.get("CHASSIS_ODOM_VY_SCALE", "1.0"))
-        if odom_wz_scale is None:
-            odom_wz_scale = float(os.environ.get("CHASSIS_ODOM_WZ_SCALE", "1.0"))
-        if base_yaw_offset is None:
-            base_yaw_offset = float(os.environ.get("CHASSIS_BASE_YAW_OFFSET", "0.0"))
         self.odom_vx_scale = float(odom_vx_scale)
         self.odom_vy_scale = float(odom_vy_scale)
         self.odom_wz_scale = float(odom_wz_scale)
+        self.odom_use_vy = bool(odom_use_vy)
         self.base_yaw_offset = float(base_yaw_offset)
 
         self.port = str(port)
@@ -291,10 +288,10 @@ class M1PwmCmdVelBridge(Node):
         s1, s2, s3, s4 = self.motor_signs
         t1, t2, t3, t4 = self.motor_trims
         targets = [
-            clamp(m1 * s1 * t1, -self.pwm_max, self.pwm_max),
-            clamp(m2 * s2 * t2, -self.pwm_max, self.pwm_max),
-            clamp(m3 * s3 * t3, -self.pwm_max, self.pwm_max),
-            clamp(m4 * s4 * t4, -self.pwm_max, self.pwm_max),
+            m1 * s1 * t1,
+            m2 * s2 * t2,
+            m3 * s3 * t3,
+            m4 * s4 * t4,
         ]
         pwms = self.pwm_smoother.update(targets)
 
@@ -328,18 +325,19 @@ class M1PwmCmdVelBridge(Node):
         now = time.time()
         try:
             motion = self.bot.get_motion_data()
-            vx = float(motion[0])
-            vy = float(motion[1])
-            wz = float(motion[2])
+            vx = float(motion[0]) * self.odom_vx_scale
+            vy = float(motion[1]) * self.odom_vy_scale
+            wz = float(motion[2]) * self.odom_wz_scale
+
+            if not self.odom_use_vy:
+                vy = 0.0
+
             if abs(vx) < self.odom_vxy_deadzone:
                 vx = 0.0
             if abs(vy) < self.odom_vxy_deadzone:
                 vy = 0.0
             if abs(wz) < self.odom_wz_deadzone:
                 wz = 0.0
-            vx *= self.odom_vx_scale
-            vy *= self.odom_vy_scale
-            wz *= self.odom_wz_scale
         except Exception as exc:
             self.get_logger().warning(
                 f"get_motion_data failed, skip odom publish: {exc!r}"
@@ -352,11 +350,14 @@ class M1PwmCmdVelBridge(Node):
                 if dt > 0.2:
                     dt = 0.0
                 if dt > 0.0:
-                    cos_yaw = math.cos(self.odom_yaw)
-                    sin_yaw = math.sin(self.odom_yaw)
-                    self.odom_x += (vx * cos_yaw - vy * sin_yaw) * dt
-                    self.odom_y += (vx * sin_yaw + vy * cos_yaw) * dt
-                    self.odom_yaw += wz * dt
+                    dx_body = vx * dt
+                    dy_body = vy * dt
+                    dyaw = wz * dt
+                    yaw_mid = self.odom_yaw + 0.5 * dyaw
+
+                    self.odom_x += dx_body * math.cos(yaw_mid) - dy_body * math.sin(yaw_mid)
+                    self.odom_y += dx_body * math.sin(yaw_mid) + dy_body * math.cos(yaw_mid)
+                    self.odom_yaw += dyaw
                     self.odom_yaw = math.atan2(
                         math.sin(self.odom_yaw), math.cos(self.odom_yaw)
                     )
@@ -444,6 +445,12 @@ class M1PwmCmdVelBridge(Node):
                 "wz_pwm_gain": self.wz_pwm_gain,
                 "motor_signs": list(self.motor_signs),
                 "motor_trims": list(self.motor_trims),
+                "odom_vx_scale": self.odom_vx_scale,
+                "odom_vy_scale": self.odom_vy_scale,
+                "odom_wz_scale": self.odom_wz_scale,
+                "odom_use_vy": self.odom_use_vy,
+                "odom_vxy_deadzone": self.odom_vxy_deadzone,
+                "odom_wz_deadzone": self.odom_wz_deadzone,
                 "time": time.time(),
             }
         self.state_pub.publish(String(data=json.dumps(state, ensure_ascii=False)))
@@ -480,11 +487,7 @@ def main() -> None:
     parser.add_argument("--smooth-alpha", type=float, default=0.35)
     parser.add_argument("--max-pwm-delta", type=float, default=3.0)
     parser.add_argument("--motor-signs", default="1,1,1,1")
-    parser.add_argument(
-        "--motor-trims",
-        default=os.environ.get("CHASSIS_MOTOR_TRIMS", "1.0,1.0,1.0,1.0"),
-        help="Per-motor PWM scale factors M1,M2,M3,M4 (applied after motor_signs)",
-    )
+    parser.add_argument("--motor-trims", default="1.0,1.0,1.0,1.0")
     parser.add_argument(
         "--wheel-layout",
         default=YAHBOOM_M1_LAYOUT,
@@ -499,30 +502,11 @@ def main() -> None:
     parser.add_argument("--odom-rate-hz", type=float, default=30.0)
     parser.add_argument("--odom-vxy-deadzone", type=float, default=0.003)
     parser.add_argument("--odom-wz-deadzone", type=float, default=0.015)
-    parser.add_argument(
-        "--odom-vx-scale",
-        type=float,
-        default=float(os.environ.get("CHASSIS_ODOM_VX_SCALE", "1.0")),
-        help="Scale vx from get_motion_data() before odom integration only",
-    )
-    parser.add_argument(
-        "--odom-vy-scale",
-        type=float,
-        default=float(os.environ.get("CHASSIS_ODOM_VY_SCALE", "1.0")),
-        help="Scale vy from get_motion_data() before odom integration only",
-    )
-    parser.add_argument(
-        "--odom-wz-scale",
-        type=float,
-        default=float(os.environ.get("CHASSIS_ODOM_WZ_SCALE", "1.0")),
-        help="Scale wz from get_motion_data() before odom integration only",
-    )
-    parser.add_argument(
-        "--base-yaw-offset",
-        type=float,
-        default=float(os.environ.get("CHASSIS_BASE_YAW_OFFSET", "0.0")),
-        help="Constant yaw offset (rad) added when publishing odom->base_link TF",
-    )
+    parser.add_argument("--odom-vx-scale", type=float, default=1.0)
+    parser.add_argument("--odom-vy-scale", type=float, default=1.0)
+    parser.add_argument("--odom-wz-scale", type=float, default=1.0)
+    parser.add_argument("--odom-use-vy", action="store_true", default=False)
+    parser.add_argument("--base-yaw-offset", type=float, default=0.0)
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -555,6 +539,7 @@ def main() -> None:
         odom_vx_scale=args.odom_vx_scale,
         odom_vy_scale=args.odom_vy_scale,
         odom_wz_scale=args.odom_wz_scale,
+        odom_use_vy=args.odom_use_vy,
         base_yaw_offset=args.base_yaw_offset,
     )
 

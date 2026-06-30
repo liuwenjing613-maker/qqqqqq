@@ -84,8 +84,9 @@ fsm:
 success:
   require_lidar: true
   center_px: 70
-  min_distance: 0.6
-  max_distance: 0.7
+  min_safe_distance: 0.35
+  stop_distance: 0.75
+  verify_distance_max: 0.85
   min_area_ratio: 0.16
   center_only_enabled: false
   arrive_frames: 2
