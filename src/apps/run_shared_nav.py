@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.config.nav_success import load_success_config
 from src.control.point_servo import PointServo, PointServoConfig, ServoCommand, clamp
 from src.fsm.nav_state_machine import NavFSMConfig, NavObservation, NavState, NavStateMachine
 from src.perception.free_space_waypoint import FreeSpaceConfig, FreeSpaceWaypointProvider
@@ -69,7 +70,7 @@ class SharedNav(Node):
         freshness = section(cfg, "freshness")
         rates = section(cfg, "rates")
         safety = section(cfg, "safety")
-        arrive = section(cfg, "arrive")
+        success_cfg = load_success_config(cfg)
         search = section(cfg, "search")
 
         self.image_width = int(camera.get("width", cfg.get("image_width", cfg.get("camera_width", 640))))
@@ -78,30 +79,31 @@ class SharedNav(Node):
         self.scan_stale_sec = float(freshness.get("scan_stale_sec", 0.30))
         self.bbox_stale_sec = float(freshness.get("bbox_stale_sec", 0.45))
 
-        self.require_lidar = bool(section(cfg, "fsm").get("require_lidar", safety.get("require_lidar", False)))
+        self.require_lidar = bool(success_cfg["require_lidar"])
         self.target_source = str(target_cfg.get("source", "color" if self.mode == "color_nav" else "yolo_bbox"))
         self.target_color = str(target_cfg.get("color", "red"))
         self.target_min_score = float(target_cfg.get("min_score", 0.0))
-        self.arrive_center_px = float(arrive.get("center_px", 70))
+        self.arrive_center_px = float(success_cfg["center_px"])
 
         fsm_cfg = section(cfg, "fsm")
         self.fsm = NavStateMachine(
             NavFSMConfig(
                 stable_frames_required=int(fsm_cfg.get("stable_frames_required", 3)),
                 lost_frames_limit=int(fsm_cfg.get("lost_frames_limit", 5)),
-                arrive_required_frames=int(fsm_cfg.get("arrive_required_frames", arrive.get("arrive_required_frames", 4))),
+                arrive_required_frames=int(success_cfg["arrive_frames"]),
+                verify_required_frames=int(success_cfg["verify_frames"]),
                 centered_required_frames=int(fsm_cfg.get("centered_required_frames", 3)),
                 max_search_sec=float(fsm_cfg.get("max_search_sec", 30.0)),
                 max_task_sec=float(fsm_cfg.get("max_task_sec", 180.0)),
                 min_state_frames=int(fsm_cfg.get("min_state_frames", 2)),
-                qwen_verify_required=bool(fsm_cfg.get("qwen_verify_required", False)),
-                qwen_verify_timeout_sec=float(fsm_cfg.get("qwen_verify_timeout_sec", section(cfg, "qwen").get("timeout_sec", 12.0))),
-                qwen_verify_fail_policy=str(fsm_cfg.get("qwen_verify_fail_policy", "search")),
+                qwen_verify_required=bool(success_cfg["qwen_verify_required"]),
+                qwen_verify_timeout_sec=float(success_cfg["qwen_verify_timeout_sec"]),
+                qwen_verify_fail_policy=str(success_cfg["qwen_verify_fail_policy"]),
                 recovery_max_sec=float(fsm_cfg.get("recovery_max_sec", 4.0)),
-                arrive_min_distance=float(arrive.get("arrive_min_distance", 0.55)),
-                arrive_max_distance=float(arrive.get("arrive_max_distance", 0.75)),
-                arrive_area_ratio=float(arrive.get("arrive_area_ratio", 0.16)),
-                center_only_arrive_enabled=bool(arrive.get("center_only_arrive_enabled", False)),
+                arrive_min_distance=float(success_cfg["min_distance"]),
+                arrive_max_distance=float(success_cfg["max_distance"]),
+                arrive_area_ratio=float(success_cfg["min_area_ratio"]),
+                center_only_arrive_enabled=bool(success_cfg["center_only_enabled"]),
             )
         )
 
@@ -116,6 +118,7 @@ class SharedNav(Node):
                 kp_turn=float(servo_cfg.get("kp_turn", 0.12)),
                 center_deadband=float(servo_cfg.get("center_deadband", 0.06)),
                 turn_only_threshold=float(servo_cfg.get("turn_only_threshold", 0.20)),
+                turn_only_vx=float(servo_cfg.get("turn_only_vx", servo_cfg.get("steer_vx", 0.04))),
                 cmd_wz_deadband=float(servo_cfg.get("cmd_wz_deadband", 0.006)),
             )
         )

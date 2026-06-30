@@ -56,18 +56,27 @@ def load_launch_config(path: str | None = None) -> Dict[str, Any]:
 
     camera = _section(raw, "camera")
     yolo_world = _section(raw, "yolo_world")
+    yolov5s_bpu = _section(raw, "yolov5s_bpu")
     yolo_bridge = _section(raw, "yolo_bridge")
+    target_cfg = _section(raw, "target")
     chassis = _section(raw, "chassis")
 
-    target_words = raw.get("target_words", [])
+    target_words = raw.get("target_words", target_cfg.get("words", []))
     target_words_csv = _join_words(target_words)
     bridge_classes = str(
-        yolo_bridge.get("target_classes", target_words_csv or "bottle,cup")
+        yolov5s_bpu.get(
+            "target_classes",
+            yolo_bridge.get("target_classes", _join_words(target_cfg.get("classes", [])) or target_words_csv or "bottle"),
+        )
     ).strip()
 
+    use_yolov5s_bpu = _as_bool(yolov5s_bpu.get("enabled", False))
     score_threshold = _as_float(
-        yolo_world.get("score_threshold", yolo_bridge.get("min_score", raw.get("target_min_score", 0.002))),
-        "yolo_world.score_threshold",
+        yolov5s_bpu.get(
+            "score_threshold",
+            yolo_world.get("score_threshold", yolo_bridge.get("min_score", target_cfg.get("min_score", 0.002))),
+        ),
+        "detector.score_threshold",
     )
 
     return {
@@ -76,6 +85,29 @@ def load_launch_config(path: str | None = None) -> Dict[str, Any]:
         "target_words_csv": target_words_csv,
         "target_classes": bridge_classes,
         "score_threshold": score_threshold,
+        "detector_backend": "yolov5s_bpu" if use_yolov5s_bpu else "yolo_world",
+        "yolov5s_model": str(
+            yolov5s_bpu.get(
+                "model",
+                "/root/rdk_model_zoo/samples/vision/yolov5/model/yolov5s_tag_v7.0_detect_640x640_bayese_nv12.bin",
+            )
+        ),
+        "yolov5s_runtime_dir": str(
+            yolov5s_bpu.get("runtime_dir", "/root/rdk_model_zoo/samples/vision/yolov5/runtime/python")
+        ),
+        "yolov5s_zoo_root": str(yolov5s_bpu.get("zoo_root", "/root/rdk_model_zoo")),
+        "yolov5s_input_type": str(yolov5s_bpu.get("input_type", "raw")),
+        "yolov5s_image_topic": str(
+            yolov5s_bpu.get("image_topic", raw.get("image_topic", "/image_raw"))
+        ),
+        "yolov5s_out_topic": str(
+            yolov5s_bpu.get("out_topic", raw.get("target_bbox_topic", "/target_bbox_json"))
+        ),
+        "yolov5s_target_words_topic": str(
+            yolov5s_bpu.get("target_words_topic", raw.get("target_words_topic", "/target_words"))
+        ),
+        "yolov5s_nms_threshold": _as_float(yolov5s_bpu.get("nms_threshold", 0.45), "yolov5s_bpu.nms_threshold"),
+        "yolov5s_max_hz": _as_float(yolov5s_bpu.get("max_hz", 10.0), "yolov5s_bpu.max_hz"),
         "camera_device": str(camera.get("device", "/dev/video0")),
         "camera_compressed_topic": str(camera.get("compressed_topic", "/image")),
         "image_raw_topic": str(raw.get("image_topic", "/image_raw")),
@@ -123,6 +155,16 @@ def shell_export(cfg: Dict[str, Any]) -> str:
         "TARGET_WORDS": cfg["target_words_csv"],
         "TARGET_CLASSES": cfg["target_classes"],
         "SCORE_THRESHOLD": cfg["score_threshold"],
+        "DETECTOR_BACKEND": cfg["detector_backend"],
+        "YOLOV5S_MODEL": cfg["yolov5s_model"],
+        "YOLOV5S_RUNTIME_DIR": cfg["yolov5s_runtime_dir"],
+        "YOLOV5S_ZOO_ROOT": cfg["yolov5s_zoo_root"],
+        "YOLOV5S_INPUT_TYPE": cfg["yolov5s_input_type"],
+        "YOLOV5S_IMAGE_TOPIC": cfg["yolov5s_image_topic"],
+        "YOLOV5S_OUT_TOPIC": cfg["yolov5s_out_topic"],
+        "YOLOV5S_TARGET_WORDS_TOPIC": cfg["yolov5s_target_words_topic"],
+        "YOLOV5S_NMS_THRESHOLD": cfg["yolov5s_nms_threshold"],
+        "YOLOV5S_MAX_HZ": cfg["yolov5s_max_hz"],
         "CAMERA_DEV": cfg["camera_device"],
         "CAMERA_COMPRESSED_TOPIC": cfg["camera_compressed_topic"],
         "IMAGE_RAW_TOPIC": cfg["image_raw_topic"],

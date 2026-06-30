@@ -85,14 +85,22 @@ voter:
   smooth_alpha: 0.20
 
 fsm:
-  require_lidar: true
   stable_frames_required: 3
   lost_frames_limit: 5
-  arrive_required_frames: 4
   centered_required_frames: 3
   max_search_sec: 60
   max_task_sec: 240
   min_state_frames: 2
+
+success:
+  require_lidar: true
+  center_px: 70
+  min_distance: 0.58
+  max_distance: 0.75
+  min_area_ratio: 0.16
+  center_only_enabled: false
+  arrive_frames: 4
+  verify_frames: 4
   qwen_verify_required: true
   qwen_verify_timeout_sec: 12.0
   qwen_verify_fail_policy: search
@@ -116,12 +124,6 @@ safety:
   turn_zero_vx_wz: 0.05
   turn_slow_vx_wz: 0.035
   turn_slow_vx_scale: 0.5
-
-arrive:
-  center_px: 70
-  arrive_required_frames: 4
-  arrive_min_distance: 0.58
-  arrive_max_distance: 0.75
 
 search:
   scan_wz: 0.04

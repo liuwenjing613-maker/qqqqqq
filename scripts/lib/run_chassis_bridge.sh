@@ -35,6 +35,7 @@ run_chassis_bridge() {
     --max-pwm-delta "${CHASSIS_MAX_PWM_DELTA:-3.0}" \
     --wheel-layout "${CHASSIS_PWM_WHEEL_LAYOUT:-fl-rl-fr-rr}" \
     --motor-signs "${CHASSIS_MOTOR_SIGNS:-1,1,1,1}" \
+    --motor-trims "${CHASSIS_MOTOR_TRIMS:-1.0,1.0,1.0,1.0}" \
     --publish-odom \
     --odom-topic /odom \
     --odom-frame odom \

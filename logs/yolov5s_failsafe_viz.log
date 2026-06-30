@@ -130,3 +130,50 @@
 [INFO] [1782798589.871372709] [failsafe_nav_foxglove_viz]: viz frames published=60 dropped=0
 [INFO] [1782798594.840905471] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
 [INFO] [1782798599.820035061] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
+[INFO] [1782798604.824829779] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
+[INFO] [1782798609.821086441] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
+[INFO] [1782798614.832548226] [failsafe_nav_foxglove_viz]: viz frames published=60 dropped=0
+[INFO] [1782798619.847981712] [failsafe_nav_foxglove_viz]: viz frames published=57 dropped=0
+[INFO] [1782798624.882493157] [failsafe_nav_foxglove_viz]: viz frames published=57 dropped=0
+[INFO] [1782798629.844325688] [failsafe_nav_foxglove_viz]: viz frames published=58 dropped=0
+[INFO] [1782798634.813140094] [failsafe_nav_foxglove_viz]: viz frames published=56 dropped=0
+[INFO] [1782798639.825402470] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
+[INFO] [1782798644.843672219] [failsafe_nav_foxglove_viz]: viz frames published=57 dropped=0
+[INFO] [1782798649.839536790] [failsafe_nav_foxglove_viz]: viz frames published=55 dropped=0
+[INFO] [1782798654.808131809] [failsafe_nav_foxglove_viz]: viz frames published=58 dropped=0
+[INFO] [1782798659.871441356] [failsafe_nav_foxglove_viz]: viz frames published=60 dropped=0
+[INFO] [1782798664.872183299] [failsafe_nav_foxglove_viz]: viz frames published=60 dropped=0
+[INFO] [1782798669.819944811] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
+[INFO] [1782798674.801656042] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
+[INFO] [1782798679.814861784] [failsafe_nav_foxglove_viz]: viz frames published=60 dropped=0
+[INFO] [1782798684.830840779] [failsafe_nav_foxglove_viz]: viz frames published=59 dropped=0
+[INFO] [1782798689.873675699] [failsafe_nav_foxglove_viz]: viz frames published=58 dropped=0
+[INFO] [1782798694.814751852] [failsafe_nav_foxglove_viz]: viz frames published=54 dropped=0
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/src/apps/failsafe_nav_foxglove_viz.py", line 596, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/src/apps/failsafe_nav_foxglove_viz.py", line 586, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 748, in _spin_once_impl
+    raise handler.exception()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 254, in __call__
+    self._handler.send(None)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 447, in handler
+    await call_coroutine(entity, arg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 372, in _execute_subscription
+    await await_or_execute(sub.callback, msg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 107, in await_or_execute
+    return callback(*args)
+  File "/root/rdk_x5_vln_robot/src/apps/failsafe_nav_foxglove_viz.py", line 355, in compressed_image_cb
+    self._on_new_frame(frame, msg.header)
+  File "/root/rdk_x5_vln_robot/src/apps/failsafe_nav_foxglove_viz.py", line 364, in _on_new_frame
+    self._publish_debug_image()
+  File "/root/rdk_x5_vln_robot/src/apps/failsafe_nav_foxglove_viz.py", line 381, in _publish_debug_image
+    self.compressed_pub.publish(out)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py", line 70, in publish
+    self.__publisher.publish(msg)
+rclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389

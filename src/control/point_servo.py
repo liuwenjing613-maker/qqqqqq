@@ -17,6 +17,7 @@ class PointServoConfig:
     kp_turn: float = 0.12
     center_deadband: float = 0.06
     turn_only_threshold: float = 0.20
+    turn_only_vx: float = 0.04
     cmd_wz_deadband: float = 0.006
 
 
@@ -69,7 +70,7 @@ class PointServo:
             )
 
         return PointServoResult(
-            ServoCommand(vx=0.0, wz=wz),
+            ServoCommand(vx=self.cfg.turn_only_vx, wz=wz),
             "TURN_ONLY",
             "target_turn_only",
             ex,
