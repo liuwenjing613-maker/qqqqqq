@@ -354,6 +354,8 @@ class M1PwmCmdVelBridge(Node):
                     dy_body = vy * dt
                     dyaw = wz * dt
 
+                    # 用发布后的 base_link 朝向参与 x/y 积分；
+                    # 否则只改变 TF 箭头，不改变 map/odom 中的位置运动方向。
                     published_yaw_before = math.atan2(
                         math.sin(self.odom_yaw + self.base_yaw_offset),
                         math.cos(self.odom_yaw + self.base_yaw_offset),

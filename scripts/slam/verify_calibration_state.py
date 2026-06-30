@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 EXPECTED: Dict[str, Any] = {
     "motor_trims": [1.15, 1.15, 1.0, 1.0],
-    "odom_vx_scale": -0.68,
+    "odom_vx_scale": 0.68,
     "odom_vy_scale": 1.0,
     "odom_wz_scale": -0.58,
     "odom_use_vy": False,
