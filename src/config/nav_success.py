@@ -59,19 +59,33 @@ def load_success_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         arrive_frames,
     )
 
+    legacy_min = _as_float(
+        success.get("min_distance", arrive.get("arrive_min_distance", 0.58)),
+        0.58,
+    )
+    legacy_max = _as_float(
+        success.get("max_distance", arrive.get("arrive_max_distance", 0.75)),
+        0.75,
+    )
+    hard_stop = _as_float(safety.get("hard_stop_distance", 0.35), 0.35)
+
     return {
         "require_lidar": _as_bool(
             success.get("require_lidar", fsm.get("require_lidar", safety.get("require_lidar", True))),
             True,
         ),
         "center_px": _as_float(success.get("center_px", arrive.get("center_px", 70)), 70.0),
-        "min_distance": _as_float(
-            success.get("min_distance", arrive.get("arrive_min_distance", 0.58)),
-            0.58,
+        "min_safe_distance": _as_float(
+            success.get("min_safe_distance", success.get("min_distance", max(legacy_min, hard_stop))),
+            max(legacy_min, hard_stop),
         ),
-        "max_distance": _as_float(
-            success.get("max_distance", arrive.get("arrive_max_distance", 0.75)),
-            0.75,
+        "stop_distance": _as_float(
+            success.get("stop_distance", success.get("max_distance", legacy_max)),
+            legacy_max,
+        ),
+        "verify_distance_max": _as_float(
+            success.get("verify_distance_max", success.get("stop_distance", legacy_max) + 0.10),
+            legacy_max + 0.10,
         ),
         "min_area_ratio": _as_float(
             success.get("min_area_ratio", arrive.get("arrive_area_ratio", 0.16)),
@@ -93,5 +107,9 @@ def load_success_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "qwen_verify_fail_policy": str(
             success.get("qwen_verify_fail_policy", fsm.get("qwen_verify_fail_policy", "search"))
+        ),
+        "emergency_stop_distance": _as_float(
+            safety.get("emergency_stop_distance", 0.25),
+            0.25,
         ),
     }
