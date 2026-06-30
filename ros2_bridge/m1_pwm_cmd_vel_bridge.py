@@ -353,10 +353,17 @@ class M1PwmCmdVelBridge(Node):
                     dx_body = vx * dt
                     dy_body = vy * dt
                     dyaw = wz * dt
-                    yaw_mid = self.odom_yaw + 0.5 * dyaw
+
+                    published_yaw_before = math.atan2(
+                        math.sin(self.odom_yaw + self.base_yaw_offset),
+                        math.cos(self.odom_yaw + self.base_yaw_offset),
+                    )
+
+                    yaw_mid = published_yaw_before + 0.5 * dyaw
 
                     self.odom_x += dx_body * math.cos(yaw_mid) - dy_body * math.sin(yaw_mid)
                     self.odom_y += dx_body * math.sin(yaw_mid) + dy_body * math.cos(yaw_mid)
+
                     self.odom_yaw += dyaw
                     self.odom_yaw = math.atan2(
                         math.sin(self.odom_yaw), math.cos(self.odom_yaw)
@@ -451,6 +458,8 @@ class M1PwmCmdVelBridge(Node):
                 "odom_use_vy": self.odom_use_vy,
                 "odom_vxy_deadzone": self.odom_vxy_deadzone,
                 "odom_wz_deadzone": self.odom_wz_deadzone,
+                "base_yaw_offset": self.base_yaw_offset,
+                "base_yaw_offset_deg": math.degrees(self.base_yaw_offset),
                 "time": time.time(),
             }
         self.state_pub.publish(String(data=json.dumps(state, ensure_ascii=False)))
