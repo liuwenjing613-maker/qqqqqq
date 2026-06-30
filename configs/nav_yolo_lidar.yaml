@@ -12,6 +12,9 @@ point_topic: /nav_target_point
 target_words:
   - bottle
 
+lidar_front_deg: 25.0
+camera_lidar_yaw_offset_deg: 270.0
+
 topics:
   image_raw: /image_raw
   scan: /scan
@@ -85,9 +88,9 @@ success:
   require_lidar: true
   center_px: 70
   min_safe_distance: 0.35
-  stop_distance: 0.75
+  stop_distance: 0.90
   verify_distance_max: 0.85
-  min_area_ratio: 0.16
+  min_area_ratio: 0.08
   center_only_enabled: false
   arrive_frames: 2
   verify_frames: 2
@@ -118,10 +121,19 @@ search:
   scan_wz: 0.04
   pulse_sec: 0.20
   observe_sec: 0.60
-  free_space_enabled: false
+  loss_memory_sec: 4.0
+  free_space_after_loss_sec: 8.0
+  free_space_enabled: true
   free_space_enable_after_sec: 10.0
   free_space_vx: 0.015
-  free_space_min_clearance: 1.0
+  free_space_min_clearance: 0.45
+  turn_lock_sec: 6.0
+  lidar_turn_min_delta: 0.15
+  lidar_turn_side_deg: 45.0
+  lidar_fallback_on_no_memory: true
+
+track:
+  blocked_hold_on_target: true
 
 freshness:
   image_stale_sec: 0.40
