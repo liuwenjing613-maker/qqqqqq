@@ -1,0 +1,469 @@
+[INFO] [1781598842.294202642] [run_mvp_task]: ===== MVP TASK START =====
+[INFO] [1781598842.296554849] [run_mvp_task]: instruction: find the green bottle
+[INFO] [1781598842.299499057] [run_mvp_task]: backend: yolo_world
+[INFO] [1781598842.302301431] [run_mvp_task]: servo: max_vx=0.04 max_wz=0.055 kp_turn=0.1 turn_th=0.3 fwd_th=0.18 arrive_area=0.16 slowdown_area=0.07 wz_deadzone=0.08 cmd_wz_deadzone=0.012 fwd_turn_scale=0.6
+[INFO] [1781598842.305807513] [run_mvp_task]: fsm: stable_frames=2 lost_limit=14 recovery_scan_wz=0.04
+[INFO] [1781598842.309068262] [run_mvp_task]: lost recovery: hold<= 3f, observe<= 7f, scan<= 25f, replan=2.00s, hold_scale=0.40, hold_max_wz=0.035, pulse=2f/6f
+[INFO] [1781598842.311639720] [run_mvp_task]: det_topic: /hobot_yolo_world
+[INFO] [1781598842.314180302] [run_mvp_task]: target_words_topic: /target_words
+[INFO] [1781598842.318602634] [run_mvp_task]: yolo_prompts: ['bottle', 'cup', 'wine glass']
+[INFO] [1781598842.323037508] [run_mvp_task]: target_classes: ['bottle', 'cup', 'wine glass']
+[INFO] [1781598842.327709173] [run_mvp_task]: min_score: 0.006
+[INFO] [1781598842.331362880] [run_mvp_task]: min_red_ratio: 0.045
+[INFO] [1781598842.333605879] [run_mvp_task]: max_area_ratio: 0.24
+[INFO] [1781598842.335757712] [run_mvp_task]: require_red_verify: False
+[INFO] [1781598842.338516461] [run_mvp_task]: stamp_sync max_delta=0.2s buffer=60
+[INFO] [1781598842.341609627] [run_mvp_task]: Mock Qwen output:
+[INFO] [1781598842.344377543] [run_mvp_task]: {"timestamp": 1781598842.091404, "instruction": "find the green bottle", "target_category": "bottle", "target_description": "bottle", "possible_yolo_world_prompts": ["bottle", "cup", "wine glass"], "target_classes": ["bottle", "cup", "wine glass"], "target_visible": null, "semantic_region": null, "search_direction": null, "confidence": 0.9, "need_replan": false, "action_hint": "approach_slowly", "reason": "Mock Qwen output for red backpack MVP semantic-to-vision bridge."}
+[INFO] [1781598842.371797826] [run_mvp_task]: frame=1 fsm=PARSE_TASK servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[WARN] [1781598842.394140277] [run_mvp_task]: stamp sync skip: no frame for det stamp, delta 0.604s > 0.2s (frame_buf=2)
+[INFO] [1781598842.399518734] [run_mvp_task]: frame=2 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.414594854] [run_mvp_task]: frame=3 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.432599640] [run_mvp_task]: frame=4 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.447054802] [run_mvp_task]: frame=5 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.460165048] [run_mvp_task]: frame=6 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.476840710] [run_mvp_task]: frame=7 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.491537247] [run_mvp_task]: frame=8 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.539826815] [run_mvp_task]: frame=9 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.591613924] [run_mvp_task]: frame=10 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.640158117] [run_mvp_task]: frame=11 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.686141145] [run_mvp_task]: frame=12 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.767140244] [run_mvp_task]: frame=13 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=stamp_sync_failed
+[INFO] [1781598842.791569112] [run_mvp_task]: frame=14 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_detection
+[INFO] [1781598842.841734471] [run_mvp_task]: frame=15 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_detection
+[INFO] [1781598842.892271247] [run_mvp_task]: frame=16 fsm=RECOVERY_SCAN servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_detection
+[INFO] [1781598842.940818357] [run_mvp_task]: frame=17 fsm=RECOVERY_SCAN servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_detection
+[INFO] [1781598843.003735629] [run_mvp_task]: frame=18 fsm=RECOVERY_SCAN servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_detection
+[INFO] [1781598843.043714658] [run_mvp_task]: frame=19 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 150] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598843.091655352] [run_mvp_task]: frame=20 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 462, 70, 150] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.014 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598843.141263545] [run_mvp_task]: frame=21 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 462, 70, 150] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.014 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598843.189588905] [run_mvp_task]: frame=22 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 462, 70, 150] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.014 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598843.245460721] [run_mvp_task]: frame=23 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598843.301217287] [run_mvp_task]: frame=24 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598843.360583976] [run_mvp_task]: frame=25 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598843.407719837] [run_mvp_task]: frame=26 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.442298701] [run_mvp_task]: frame=27 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.500947474] [run_mvp_task]: frame=28 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.549343959] [run_mvp_task]: frame=29 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.588983489] [run_mvp_task]: frame=30 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598843.640544223] [run_mvp_task]: frame=31 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598843.690655707] [run_mvp_task]: frame=32 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.738441192] [run_mvp_task]: frame=33 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.807522379] [run_mvp_task]: frame=34 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.842947118] [run_mvp_task]: frame=35 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.890336686] [run_mvp_task]: frame=36 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598843.942118920] [run_mvp_task]: frame=37 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598844.022419645] [run_mvp_task]: frame=38 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 78, 154] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598844.046282805] [run_mvp_task]: frame=39 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 78, 154] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598844.092286499] [run_mvp_task]: frame=40 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.016 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598844.139348526] [run_mvp_task]: frame=41 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.016 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598844.190965718] [run_mvp_task]: frame=42 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.016 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598844.258979197] [run_mvp_task]: frame=43 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598844.292169853] [run_mvp_task]: frame=44 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598844.340076421] [run_mvp_task]: frame=45 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598844.388219615] [run_mvp_task]: frame=46 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598844.466550465] [run_mvp_task]: frame=47 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598844.495570498] [run_mvp_task]: frame=48 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 146] cx=738 ex=+0.077 side=右 area=0.011 class=bottle score=0.011 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598844.549661356] [run_mvp_task]: frame=49 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598844.595164675] [run_mvp_task]: frame=50 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598844.637317246] [run_mvp_task]: frame=51 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598844.691111229] [run_mvp_task]: frame=52 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598844.741612921] [run_mvp_task]: frame=53 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598844.788660157] [run_mvp_task]: frame=54 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598844.837975100] [run_mvp_task]: frame=55 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598844.886121460] [run_mvp_task]: frame=56 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598844.946776607] [run_mvp_task]: frame=57 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598845.005909881] [run_mvp_task]: frame=58 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.046590993] [run_mvp_task]: frame=59 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.088413522] [run_mvp_task]: frame=60 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.138070715] [run_mvp_task]: frame=61 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.193174489] [run_mvp_task]: frame=62 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.247739264] [run_mvp_task]: frame=63 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.285548210] [run_mvp_task]: frame=64 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 80, 152] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598845.337028569] [run_mvp_task]: frame=65 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 80, 152] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598845.387268387] [run_mvp_task]: frame=66 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 80, 152] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598845.435505622] [run_mvp_task]: frame=67 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598845.487721772] [run_mvp_task]: frame=68 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598845.535345091] [run_mvp_task]: frame=69 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598845.584825576] [run_mvp_task]: frame=70 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.636933393] [run_mvp_task]: frame=71 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.687400669] [run_mvp_task]: frame=72 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.739493027] [run_mvp_task]: frame=73 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.787134804] [run_mvp_task]: frame=74 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598845.833428290] [run_mvp_task]: frame=75 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598845.887871273] [run_mvp_task]: frame=76 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.937742091] [run_mvp_task]: frame=77 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598845.987690367] [run_mvp_task]: frame=78 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.036308268] [run_mvp_task]: frame=79 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.085678753] [run_mvp_task]: frame=80 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.142190360] [run_mvp_task]: frame=81 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.189208096] [run_mvp_task]: frame=82 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598846.238162789] [run_mvp_task]: frame=83 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598846.305708851] [run_mvp_task]: frame=84 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.336730883] [run_mvp_task]: frame=85 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.404696904] [run_mvp_task]: frame=86 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.438659435] [run_mvp_task]: frame=87 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.484705962] [run_mvp_task]: frame=88 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598846.537162029] [run_mvp_task]: frame=89 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598846.605422633] [run_mvp_task]: frame=90 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598846.651254535] [run_mvp_task]: frame=91 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598846.689038232] [run_mvp_task]: frame=92 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598846.736206842] [run_mvp_task]: frame=93 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598846.785676868] [run_mvp_task]: frame=94 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.836242103] [run_mvp_task]: frame=95 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.913342079] [run_mvp_task]: frame=96 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.945489402] [run_mvp_task]: frame=97 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598846.987045931] [run_mvp_task]: frame=98 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[698, 464, 76, 154] cx=736 ex=+0.075 side=右 area=0.013 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.042577580] [run_mvp_task]: frame=99 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[698, 464, 76, 154] cx=736 ex=+0.075 side=右 area=0.013 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.106265685] [run_mvp_task]: frame=100 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[698, 464, 76, 154] cx=736 ex=+0.075 side=右 area=0.013 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.136582551] [run_mvp_task]: frame=101 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598847.206191779] [run_mvp_task]: frame=102 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598847.238328769] [run_mvp_task]: frame=103 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.288178045] [run_mvp_task]: frame=104 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.353319275] [run_mvp_task]: frame=105 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598847.392904263] [run_mvp_task]: frame=106 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598847.436275499] [run_mvp_task]: frame=107 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598847.487495233] [run_mvp_task]: frame=108 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598847.533202927] [run_mvp_task]: frame=109 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598847.592003701] [run_mvp_task]: frame=110 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598847.640064144] [run_mvp_task]: frame=111 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598847.687115754] [run_mvp_task]: frame=112 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 80, 154] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.010 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.734391073] [run_mvp_task]: frame=113 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 80, 154] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.010 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.786427473] [run_mvp_task]: frame=114 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 80, 154] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.010 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.839424374] [run_mvp_task]: frame=115 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 462, 70, 150] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.886678567] [run_mvp_task]: frame=116 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598847.938151760] [run_mvp_task]: frame=117 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598847.989513494] [run_mvp_task]: frame=118 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.037943895] [run_mvp_task]: frame=119 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.119887870] [run_mvp_task]: frame=120 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598848.153002359] [run_mvp_task]: frame=121 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598848.185899932] [run_mvp_task]: frame=122 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598848.237860083] [run_mvp_task]: frame=123 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598848.286438609] [run_mvp_task]: frame=124 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598848.337674968] [run_mvp_task]: frame=125 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 78, 152] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.400568824] [run_mvp_task]: frame=126 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 78, 152] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.443235436] [run_mvp_task]: frame=127 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598848.486947422] [run_mvp_task]: frame=128 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598848.538446114] [run_mvp_task]: frame=129 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598848.607089135] [run_mvp_task]: frame=130 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[704, 464, 70, 148] cx=739 ex=+0.077 side=右 area=0.011 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.642822748] [run_mvp_task]: frame=131 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[704, 464, 70, 148] cx=739 ex=+0.077 side=右 area=0.011 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.688358151] [run_mvp_task]: frame=132 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 156] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.733804262] [run_mvp_task]: frame=133 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 156] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.814335653] [run_mvp_task]: frame=134 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 156] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.836855730] [run_mvp_task]: frame=135 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598848.888692214] [run_mvp_task]: frame=136 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[704, 464, 68, 144] cx=738 ex=+0.077 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.937306448] [run_mvp_task]: frame=137 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[704, 464, 68, 144] cx=738 ex=+0.077 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598848.984968350] [run_mvp_task]: frame=138 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[704, 464, 68, 144] cx=738 ex=+0.077 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.065560534] [run_mvp_task]: frame=139 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.106594354] [run_mvp_task]: frame=140 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.145638884] [run_mvp_task]: frame=141 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.188481704] [run_mvp_task]: frame=142 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.236066064] [run_mvp_task]: frame=143 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.292338213] [run_mvp_task]: frame=144 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.357648651] [run_mvp_task]: frame=145 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.385365684] [run_mvp_task]: frame=146 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.437479001] [run_mvp_task]: frame=147 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.489958110] [run_mvp_task]: frame=148 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.555655131] [run_mvp_task]: frame=149 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598849.592166703] [run_mvp_task]: frame=150 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598849.639347438] [run_mvp_task]: frame=151 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.689336464] [run_mvp_task]: frame=152 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.741558240] [run_mvp_task]: frame=153 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598849.788394975] [run_mvp_task]: frame=154 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.839085709] [run_mvp_task]: frame=155 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.888303361] [run_mvp_task]: frame=156 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598849.936620971] [run_mvp_task]: frame=157 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598849.986137289] [run_mvp_task]: frame=158 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.034806815] [run_mvp_task]: frame=159 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.104660085] [run_mvp_task]: frame=160 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[392, 156, 252, 318] cx=518 ex=-0.095 side=左 area=0.087 class=cup score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598850.154512611] [run_mvp_task]: frame=161 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[392, 156, 252, 318] cx=518 ex=-0.095 side=左 area=0.087 class=cup score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598850.188774017] [run_mvp_task]: frame=162 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[392, 156, 252, 318] cx=518 ex=-0.095 side=左 area=0.087 class=cup score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598850.244880375] [run_mvp_task]: frame=163 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[392, 156, 252, 318] cx=518 ex=-0.095 side=左 area=0.087 class=cup score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598850.289996736] [run_mvp_task]: frame=164 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598850.338688304] [run_mvp_task]: frame=165 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598850.387496789] [run_mvp_task]: frame=166 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598850.436364232] [run_mvp_task]: frame=167 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.519930123] [run_mvp_task]: frame=168 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.537336700] [run_mvp_task]: frame=169 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.584229894] [run_mvp_task]: frame=170 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.643635626] [run_mvp_task]: frame=171 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598850.684882738] [run_mvp_task]: frame=172 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598850.741791303] [run_mvp_task]: frame=173 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.806251075] [run_mvp_task]: frame=174 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598850.838046190] [run_mvp_task]: frame=175 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598850.888789549] [run_mvp_task]: frame=176 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598850.937814867] [run_mvp_task]: frame=177 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598850.988720018] [run_mvp_task]: frame=178 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[400, 156, 232, 316] cx=516 ex=-0.097 side=左 area=0.080 class=cup score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598851.042633293] [run_mvp_task]: frame=179 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[400, 156, 232, 316] cx=516 ex=-0.097 side=左 area=0.080 class=cup score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598851.087452654] [run_mvp_task]: frame=180 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598851.135767139] [run_mvp_task]: frame=181 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598851.197573328] [run_mvp_task]: frame=182 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598851.240188815] [run_mvp_task]: frame=183 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.305416503] [run_mvp_task]: frame=184 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.338586243] [run_mvp_task]: frame=185 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.385557436] [run_mvp_task]: frame=186 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.448217125] [run_mvp_task]: frame=187 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598851.494579069] [run_mvp_task]: frame=188 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598851.540642805] [run_mvp_task]: frame=189 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.586770207] [run_mvp_task]: frame=190 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.632638651] [run_mvp_task]: frame=191 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.688007092] [run_mvp_task]: frame=192 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.757771446] [run_mvp_task]: frame=193 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598851.795491434] [run_mvp_task]: frame=194 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598851.837365421] [run_mvp_task]: frame=195 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598851.885164698] [run_mvp_task]: frame=196 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598851.947058262] [run_mvp_task]: frame=197 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598851.986446124] [run_mvp_task]: frame=198 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.037074609] [run_mvp_task]: frame=199 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598852.089170426] [run_mvp_task]: frame=200 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598852.139798452] [run_mvp_task]: frame=201 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598852.201255308] [run_mvp_task]: frame=202 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.239431671] [run_mvp_task]: frame=203 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.286886781] [run_mvp_task]: frame=204 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.336803724] [run_mvp_task]: frame=205 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598852.387005208] [run_mvp_task]: frame=206 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598852.458663894] [run_mvp_task]: frame=207 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598852.490124134] [run_mvp_task]: frame=208 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598852.537912286] [run_mvp_task]: frame=209 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.594112227] [run_mvp_task]: frame=210 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.655378750] [run_mvp_task]: frame=211 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.708881983] [run_mvp_task]: frame=212 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598852.745062638] [run_mvp_task]: frame=213 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598852.787634542] [run_mvp_task]: frame=214 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.833942069] [run_mvp_task]: frame=215 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.888567052] [run_mvp_task]: frame=216 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598852.937000245] [run_mvp_task]: frame=217 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598852.988642104] [run_mvp_task]: frame=218 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.037916755] [run_mvp_task]: frame=219 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.083830491] [run_mvp_task]: frame=220 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.134927475] [run_mvp_task]: frame=221 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598853.186278959] [run_mvp_task]: frame=222 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598853.242607733] [run_mvp_task]: frame=223 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.285119095] [run_mvp_task]: frame=224 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.335693288] [run_mvp_task]: frame=225 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.403746975] [run_mvp_task]: frame=226 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.439338214] [run_mvp_task]: frame=227 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.490183490] [run_mvp_task]: frame=228 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 86, 150] cx=743 ex=+0.080 side=右 area=0.014 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598853.537328683] [run_mvp_task]: frame=229 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 86, 150] cx=743 ex=+0.080 side=右 area=0.014 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598853.586880918] [run_mvp_task]: frame=230 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 86, 150] cx=743 ex=+0.080 side=右 area=0.014 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598853.639525318] [run_mvp_task]: frame=231 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 82, 150] cx=741 ex=+0.079 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598853.686453845] [run_mvp_task]: frame=232 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598853.737058080] [run_mvp_task]: frame=233 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598853.788804605] [run_mvp_task]: frame=234 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598853.836941590] [run_mvp_task]: frame=235 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.890994782] [run_mvp_task]: frame=236 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.945295223] [run_mvp_task]: frame=237 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598853.985285627] [run_mvp_task]: frame=238 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.036316445] [run_mvp_task]: frame=239 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598854.086573887] [run_mvp_task]: frame=240 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598854.139162496] [run_mvp_task]: frame=241 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.188255814] [run_mvp_task]: frame=242 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.238292465] [run_mvp_task]: frame=243 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 74, 154] cx=737 ex=+0.076 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598854.287853658] [run_mvp_task]: frame=244 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 74, 154] cx=737 ex=+0.076 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598854.357016595] [run_mvp_task]: frame=245 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 74, 154] cx=737 ex=+0.076 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598854.387779877] [run_mvp_task]: frame=246 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 154] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.013 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598854.441216110] [run_mvp_task]: frame=247 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 154] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.013 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598854.489777595] [run_mvp_task]: frame=248 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598854.538409705] [run_mvp_task]: frame=249 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598854.602025602] [run_mvp_task]: frame=250 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598854.638048466] [run_mvp_task]: frame=251 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.706422528] [run_mvp_task]: frame=252 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.737513393] [run_mvp_task]: frame=253 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.784298212] [run_mvp_task]: frame=254 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.847511401] [run_mvp_task]: frame=255 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598854.898471635] [run_mvp_task]: frame=256 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598854.938362206] [run_mvp_task]: frame=257 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598854.985952733] [run_mvp_task]: frame=258 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598855.034218009] [run_mvp_task]: frame=259 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598855.100562822] [run_mvp_task]: frame=260 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598855.137217352] [run_mvp_task]: frame=261 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.195615167] [run_mvp_task]: frame=262 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.235468155] [run_mvp_task]: frame=263 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.284353723] [run_mvp_task]: frame=264 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598855.352399202] [run_mvp_task]: frame=265 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598855.387976482] [run_mvp_task]: frame=266 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 86, 152] cx=743 ex=+0.080 side=右 area=0.014 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598855.434942301] [run_mvp_task]: frame=267 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.488408076] [run_mvp_task]: frame=268 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.538461686] [run_mvp_task]: frame=269 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.601734041] [run_mvp_task]: frame=270 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598855.638963654] [run_mvp_task]: frame=271 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598855.688682847] [run_mvp_task]: frame=272 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 78, 154] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598855.737080249] [run_mvp_task]: frame=273 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 78, 154] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598855.805752644] [run_mvp_task]: frame=274 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 78, 154] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598855.834927510] [run_mvp_task]: frame=275 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.888987452] [run_mvp_task]: frame=276 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.938242436] [run_mvp_task]: frame=277 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598855.984835630] [run_mvp_task]: frame=278 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.038063613] [run_mvp_task]: frame=279 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.087834723] [run_mvp_task]: frame=280 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.139146082] [run_mvp_task]: frame=281 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.189653733] [run_mvp_task]: frame=282 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598856.235427094] [run_mvp_task]: frame=283 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598856.289951660] [run_mvp_task]: frame=284 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.341509477] [run_mvp_task]: frame=285 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 78, 154] cx=739 ex=+0.077 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598856.399144918] [run_mvp_task]: frame=286 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598856.435935448] [run_mvp_task]: frame=287 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598856.485034641] [run_mvp_task]: frame=288 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598856.541014332] [run_mvp_task]: frame=289 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.588605609] [run_mvp_task]: frame=290 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.652994380] [run_mvp_task]: frame=291 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.686172537] [run_mvp_task]: frame=292 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.736756479] [run_mvp_task]: frame=293 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598856.804883250] [run_mvp_task]: frame=294 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598856.837279656] [run_mvp_task]: frame=295 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.883897725] [run_mvp_task]: frame=296 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.936793417] [run_mvp_task]: frame=297 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598856.986415568] [run_mvp_task]: frame=298 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.053190464] [run_mvp_task]: frame=299 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.109256197] [run_mvp_task]: frame=300 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.135993813] [run_mvp_task]: frame=301 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598857.186381339] [run_mvp_task]: frame=302 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598857.254663985] [run_mvp_task]: frame=303 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.305772719] [run_mvp_task]: frame=304 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.357917411] [run_mvp_task]: frame=305 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.388574902] [run_mvp_task]: frame=306 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598857.442715093] [run_mvp_task]: frame=307 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598857.500235325] [run_mvp_task]: frame=308 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598857.540066771] [run_mvp_task]: frame=309 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598857.592909296] [run_mvp_task]: frame=310 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598857.642705572] [run_mvp_task]: frame=311 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598857.685703892] [run_mvp_task]: frame=312 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.762510702] [run_mvp_task]: frame=313 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.786035236] [run_mvp_task]: frame=314 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.842938218] [run_mvp_task]: frame=315 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598857.896588993] [run_mvp_task]: frame=316 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598857.934079482] [run_mvp_task]: frame=317 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598858.004969626] [run_mvp_task]: frame=318 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[396, 158, 240, 318] cx=516 ex=-0.097 side=左 area=0.083 class=cup score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598858.061494150] [run_mvp_task]: frame=319 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.087545059] [run_mvp_task]: frame=320 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.135169961] [run_mvp_task]: frame=321 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.187924111] [run_mvp_task]: frame=322 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598858.236815471] [run_mvp_task]: frame=323 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598858.290359954] [run_mvp_task]: frame=324 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598858.348364228] [run_mvp_task]: frame=325 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598858.390943756] [run_mvp_task]: frame=326 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598858.439370741] [run_mvp_task]: frame=327 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598858.498813014] [run_mvp_task]: frame=328 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 72, 150] cx=736 ex=+0.075 side=右 area=0.012 class=bottle score=0.010 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598858.537978919] [run_mvp_task]: frame=329 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 72, 150] cx=736 ex=+0.075 side=右 area=0.012 class=bottle score=0.010 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598858.585917821] [run_mvp_task]: frame=330 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.635586305] [run_mvp_task]: frame=331 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.687696831] [run_mvp_task]: frame=332 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.741103022] [run_mvp_task]: frame=333 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598858.791018423] [run_mvp_task]: frame=334 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598858.837207784] [run_mvp_task]: frame=335 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.883870186] [run_mvp_task]: frame=336 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598858.940998793] [run_mvp_task]: frame=337 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598859.007599606] [run_mvp_task]: frame=338 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.040216888] [run_mvp_task]: frame=339 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.087452373] [run_mvp_task]: frame=340 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.133120192] [run_mvp_task]: frame=341 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.195739839] [run_mvp_task]: frame=342 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598859.241523575] [run_mvp_task]: frame=343 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 466, 82, 152] cx=741 ex=+0.079 side=右 area=0.014 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598859.294230350] [run_mvp_task]: frame=344 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598859.336408587] [run_mvp_task]: frame=345 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598859.385041030] [run_mvp_task]: frame=346 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598859.454788092] [run_mvp_task]: frame=347 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.011 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598859.491561122] [run_mvp_task]: frame=348 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.011 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598859.540434024] [run_mvp_task]: frame=349 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598859.585841885] [run_mvp_task]: frame=350 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598859.634582078] [run_mvp_task]: frame=351 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598859.704576598] [run_mvp_task]: frame=352 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.749300834] [run_mvp_task]: frame=353 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.785839156] [run_mvp_task]: frame=354 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.837014473] [run_mvp_task]: frame=355 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598859.887050666] [run_mvp_task]: frame=356 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598859.955111520] [run_mvp_task]: frame=357 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.014 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598860.001272005] [run_mvp_task]: frame=358 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.014 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598860.055873905] [run_mvp_task]: frame=359 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 152] cx=737 ex=+0.076 side=右 area=0.012 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598860.087675978] [run_mvp_task]: frame=360 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 152] cx=737 ex=+0.076 side=右 area=0.012 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598860.138438588] [run_mvp_task]: frame=361 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 152] cx=737 ex=+0.076 side=右 area=0.012 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598860.185344281] [run_mvp_task]: frame=362 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598860.247270095] [run_mvp_task]: frame=363 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598860.288208583] [run_mvp_task]: frame=364 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598860.334846568] [run_mvp_task]: frame=365 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.388140885] [run_mvp_task]: frame=366 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.434763579] [run_mvp_task]: frame=367 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.486206604] [run_mvp_task]: frame=368 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.536828297] [run_mvp_task]: frame=369 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598860.584435157] [run_mvp_task]: frame=370 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598860.640391306] [run_mvp_task]: frame=371 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.688720708] [run_mvp_task]: frame=372 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.739019984] [run_mvp_task]: frame=373 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.787292927] [run_mvp_task]: frame=374 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.833740330] [run_mvp_task]: frame=375 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.889325854] [run_mvp_task]: frame=376 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598860.942576129] [run_mvp_task]: frame=377 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598860.985321241] [run_mvp_task]: frame=378 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598861.037260725] [run_mvp_task]: frame=379 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598861.087496292] [run_mvp_task]: frame=380 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598861.166709143] [run_mvp_task]: frame=381 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.012 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598861.189566219] [run_mvp_task]: frame=382 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.012 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598861.248014451] [run_mvp_task]: frame=383 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598861.288229522] [run_mvp_task]: frame=384 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598861.338397714] [run_mvp_task]: frame=385 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598861.388890199] [run_mvp_task]: frame=386 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598861.436348642] [run_mvp_task]: frame=387 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598861.486416460] [run_mvp_task]: frame=388 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598861.536173319] [run_mvp_task]: frame=389 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598861.586941304] [run_mvp_task]: frame=390 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598861.644113536] [run_mvp_task]: frame=391 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598861.690528855] [run_mvp_task]: frame=392 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598861.740125339] [run_mvp_task]: frame=393 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598861.786052867] [run_mvp_task]: frame=394 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598861.836508726] [run_mvp_task]: frame=395 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 148] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598861.886964044] [run_mvp_task]: frame=396 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598861.945781984] [run_mvp_task]: frame=397 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598861.986420054] [run_mvp_task]: frame=398 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.042412954] [run_mvp_task]: frame=399 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.113681765] [run_mvp_task]: frame=400 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.140976923] [run_mvp_task]: frame=401 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 148] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598862.188916741] [run_mvp_task]: frame=402 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.236473352] [run_mvp_task]: frame=403 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.282933004] [run_mvp_task]: frame=404 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.342716027] [run_mvp_task]: frame=405 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.389141846] [run_mvp_task]: frame=406 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.439123955] [run_mvp_task]: frame=407 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.487837648] [run_mvp_task]: frame=408 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.536578592] [run_mvp_task]: frame=409 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598862.595348282] [run_mvp_task]: frame=410 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598862.641204142] [run_mvp_task]: frame=411 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 70, 146] cx=737 ex=+0.076 side=右 area=0.011 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598862.684491171] [run_mvp_task]: frame=412 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.739650403] [run_mvp_task]: frame=413 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.788355972] [run_mvp_task]: frame=414 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598862.840966413] [run_mvp_task]: frame=415 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.923828013] [run_mvp_task]: frame=416 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.940583257] [run_mvp_task]: frame=417 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598862.988588076] [run_mvp_task]: frame=418 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598863.039502185] [run_mvp_task]: frame=419 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598863.087369420] [run_mvp_task]: frame=420 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 80, 148] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.139971279] [run_mvp_task]: frame=421 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 80, 148] cx=740 ex=+0.078 side=右 area=0.013 class=bottle score=0.007 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.191279180] [run_mvp_task]: frame=422 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.239103248] [run_mvp_task]: frame=423 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.291262940] [run_mvp_task]: frame=424 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.358982002] [run_mvp_task]: frame=425 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 146] cx=738 ex=+0.077 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.397350365] [run_mvp_task]: frame=426 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[702, 464, 72, 146] cx=738 ex=+0.077 side=右 area=0.011 class=bottle score=0.008 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.446574142] [run_mvp_task]: frame=427 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.490694461] [run_mvp_task]: frame=428 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.541102737] [run_mvp_task]: frame=429 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 466, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.006 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.588364181] [run_mvp_task]: frame=430 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598863.643618747] [run_mvp_task]: frame=431 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598863.686137567] [run_mvp_task]: frame=432 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598863.733290303] [run_mvp_task]: frame=433 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598863.790759076] [run_mvp_task]: frame=434 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598863.840473269] [run_mvp_task]: frame=435 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 152] cx=738 ex=+0.077 side=右 area=0.013 class=bottle score=0.009 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.887630421] [run_mvp_task]: frame=436 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.013 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.937095531] [run_mvp_task]: frame=437 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.013 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598863.985866224] [run_mvp_task]: frame=438 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[700, 464, 76, 150] cx=738 ex=+0.077 side=右 area=0.012 class=bottle score=0.013 cmd_vx=0.040 cmd_wz=+0.000
+[INFO] [1781598864.056860244] [run_mvp_task]: frame=439 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598864.089165067] [run_mvp_task]: frame=440 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598864.134036428] [run_mvp_task]: frame=441 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=no_detection
+[INFO] [1781598864.185265204] [run_mvp_task]: frame=442 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598864.236861979] [run_mvp_task]: frame=443 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598864.308984665] [run_mvp_task]: frame=444 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598864.344184529] [run_mvp_task]: frame=445 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598864.386897516] [run_mvp_task]: frame=446 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598864.436537167] [run_mvp_task]: frame=447 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=no_detection
+[INFO] [1781598864.497441065] [run_mvp_task]: frame=448 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=no_detection
+[INFO] [1781598864.552216964] [run_mvp_task]: frame=449 fsm=OBSERVE servo=ARRIVED_STOP action=SERVO_CMD bbox=[342, 0, 324, 516] cx=504 ex=-0.106 side=左 area=0.181 class=bottle score=0.006 cmd_vx=0.000 cmd_wz=+0.000
+[INFO] [1781598864.593732410] [run_mvp_task]: frame=450 fsm=SUCCESS servo=ARRIVED_STOP action=SUCCESS_STOP bbox=[342, 0, 324, 516] cx=504 ex=-0.106 side=左 area=0.181 class=bottle score=0.006 cmd_vx=0.000 cmd_wz=+0.000
+[INFO] [1781598864.598376658] [run_mvp_task]: ===== TASK SUCCESS, elapsed=22.45s =====

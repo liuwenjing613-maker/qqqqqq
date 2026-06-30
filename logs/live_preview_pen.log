@@ -1,0 +1,152 @@
+===== YOLO live preview =====
+PROJECT_DIR=/root/rdk_x5_vln_robot
+TARGET_WORDS=pen
+TARGET_CLASSES=pen
+IMAGE_TOPIC=/image_raw
+DET_TOPIC=/hobot_yolo_world
+WEB_PORT=8088
+[live_preview] starting existing diagnostic YOLO chain...
+[live_preview] yolo chain pid=17970
+[live_preview] waiting 8 seconds for camera/YOLO startup...
+[live_preview] open browser: http://192.168.137.165:8088
+[INFO] [1782733025.623905271] [yolo_live_browser_preview]: ===== yolo_live_browser_preview =====
+[INFO] [1782733025.626243711] [yolo_live_browser_preview]: image_topic=/image_raw
+[INFO] [1782733025.628398731] [yolo_live_browser_preview]: det_topic=/hobot_yolo_world
+[INFO] [1782733025.630766421] [yolo_live_browser_preview]: target_classes=['pen']
+[INFO] [1782733025.633342571] [yolo_live_browser_preview]: min_score=0.001 raw_min_score=0.0 max_area_ratio=0.4
+[INFO] [1782733025.635610551] [yolo_live_browser_preview]: require_red_verify=False min_red_ratio=0.06
+[INFO] [1782733025.637862073] [yolo_live_browser_preview]: sync_max_delta_sec=0.5 show_all_boxes=True
+[INFO] [1782733025.648701803] [yolo_live_browser_preview]: Open browser: http://<board_ip>:8088  (example: http://192.168.137.100:8088)
+[INFO] [1782733025.653155304] [yolo_live_browser_preview]: HTTP server listening on 0.0.0.0:8088
+[WARN] [1782733045.227909888] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733046.354439464] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733047.407846190] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733048.507595575] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733049.597412813] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733050.648411500] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733051.705895847] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733052.805606812] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733053.899256829] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733055.002192608] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733056.149362543] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733057.201440870] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733058.306027840] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733059.350797741] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733060.360651024] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733061.530256561] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733062.652725045] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733063.753040714] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733064.858057440] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733065.955973426] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733067.076379515] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733068.157787837] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733069.256045680] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733070.364702997] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733071.405816644] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733072.506980790] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733073.606352404] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733074.656978327] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733075.660744410] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733076.761825700] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733077.863503727] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733078.962116550] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733080.009113883] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733081.011762198] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733082.084830598] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733083.109224123] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733084.160144188] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733085.311671352] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733086.456167160] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733087.461541103] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733088.559559793] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733089.662048373] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733090.705703821] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733091.710674604] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733092.773647989] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733093.806249012] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733094.860962663] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733095.916843228] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733096.979663784] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733098.059194678] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733099.162588908] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733100.260426760] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733101.299662764] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733102.361376348] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733103.412573240] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733104.571424354] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733105.613545302] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733106.704608474] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733107.714856693] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733108.809000740] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733109.810183902] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733110.889937899] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733111.952613882] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733113.055428067] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733114.111733417] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733115.160155304] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733116.207398514] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733117.382823952] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733118.409759755] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733119.455849985] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733120.460048379] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733121.536980755] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733122.605614960] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733123.711149255] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733124.758656809] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733125.758733872] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733126.812183319] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733127.957963266] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733128.960710266] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733129.965715264] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733131.056635863] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733132.107092049] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733133.163900367] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733134.256970399] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733135.358155329] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733136.460498437] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733137.509436224] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733138.602773743] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733139.713097615] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733140.810348263] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733141.905776466] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733142.962801489] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733143.962185624] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733145.069132604] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733146.176398747] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733147.210856650] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733148.239724239] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733149.305461726] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733150.362005309] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733151.509088255] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733152.554712663] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733153.610418289] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733154.661021983] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733155.758472641] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733156.812265262] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733157.860943745] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733158.917882087] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733159.929327343] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733161.020637869] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733162.061007161] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733163.112387886] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733164.161364843] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[WARN] [1782733165.189858987] [yolo_live_browser_preview]: [MVP_REJECT] reason=waiting_multiframe_votes vote=0/6 raw=0 [none]
+[INFO] [1782733166.149346004] [yolo_live_browser_preview]: summary: frames=1048 dets=949 mvp_found=0
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/debug_tools/yolo_live_browser_preview.py", line 525, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/debug_tools/yolo_live_browser_preview.py", line 511, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+[live_preview] cleanup...

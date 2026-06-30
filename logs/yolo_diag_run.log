@@ -1,0 +1,376 @@
+============================================================
+ RDK X5 VLN Robot - YOLO-World Diagnostic Mode
+ (camera + detection only, NO chassis / NO /cmd_vel)
+============================================================
+PROJECT_DIR            = /root/rdk_x5_vln_robot
+CAMERA_DEV             = /dev/video0
+YOLO_IMAGE_TOPIC       = /image_raw
+DET_TOPIC              = /hobot_yolo_world
+TARGET_WORDS_TOPIC     = /target_words
+TARGET_WORDS           = backpack,handbag,suitcase
+TARGET_CLASSES         = backpack,handbag,suitcase
+SCORE_THRESHOLD (node) = 0.001
+MIN_SCORE (MVP filter) = 0.002
+MIN_RED_RATIO (HSV)    = 0.06
+MAX_AREA_RATIO         = 0.15
+RAW_MIN_SCORE (draw)   = 0.0
+SAVE_DIR               = /root/rdk_x5_vln_robot/check_bbox
+SAVE_INTERVAL          = 15
+============================================================
+Legend in saved images:
+  GREEN  = final MVP target (only one box shown by default)
+  RED    = best rejected candidate when no MVP (debug)
+  Use SHOW_ALL_BOXES=1 for full raw overlay
+============================================================
+[0/6] stop old processes...
+[STOP] stopping robot-related processes...
+[STOP] publish zero /cmd_vel once...
+[STOP] done.
+[1/6] start camera: hobot_usb_cam -> /image
+[2/6] start image bridge: /image -> /image_raw
+[3/6] publish target words BEFORE YOLO -> /target_words
+[4/6] start YOLO-World (diag thresholds): /image_raw -> /hobot_yolo_world
+[5/6] check topics...
+Type: sensor_msgs/msg/CompressedImage
+Publisher count: 1
+Subscription count: 1
+Type: sensor_msgs/msg/Image
+Publisher count: 1
+Subscription count: 1
+Type: std_msgs/msg/String
+Publisher count: 1
+Subscription count: 1
+Type: ai_msgs/msg/PerceptionTargets
+Publisher count: 1
+Subscription count: 0
+[6/6] start diagnostic preview (foreground, Ctrl+C to stop)...
+  snapshots -> /root/rdk_x5_vln_robot/check_bbox
+  yolo log    -> /root/rdk_x5_vln_robot/logs/yolo_diag_yolo_world.log
+  preview log -> /root/rdk_x5_vln_robot/logs/yolo_diag_preview.log
+[INFO] [1781270130.129155026] [yolo_world_diag_preview]: ===== yolo_world_diag_preview =====
+[INFO] [1781270130.135717482] [yolo_world_diag_preview]: image_topic=/image_raw
+[INFO] [1781270130.138593314] [yolo_world_diag_preview]: det_topic=/hobot_yolo_world
+[INFO] [1781270130.141058896] [yolo_world_diag_preview]: target_classes=['backpack', 'handbag', 'suitcase']
+[INFO] [1781270130.143623312] [yolo_world_diag_preview]: mvp_min=0.002 raw_min=0.0 red_min=0.06 max_area=0.15
+[INFO] [1781270130.145729144] [yolo_world_diag_preview]: require_red_verify=True
+[INFO] [1781270130.148082519] [yolo_world_diag_preview]: save_dir=/root/rdk_x5_vln_robot/check_bbox save_interval=15
+[INFO] [1781270130.185162004] [yolo_world_diag_preview]: frame#1 raw=0
+[INFO] [1781270131.102564227] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211531_f15_NO_MVP.jpg
+[INFO] [1781270131.206385103] [yolo_world_diag_preview]: frame#17 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270132.014614535] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211531_f30_NO_MVP.jpg
+[INFO] [1781270132.244724611] [yolo_world_diag_preview]: frame#34 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270132.891305606] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211532_f45_NO_MVP.jpg
+[INFO] [1781270133.250051715] [yolo_world_diag_preview]: frame#52 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270133.742358604] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211533_f60_NO_MVP.jpg
+[INFO] [1781270134.251708736] [yolo_world_diag_preview]: frame#69 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270134.651321870] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211534_f75_NO_MVP.jpg
+[INFO] [1781270135.305257320] [yolo_world_diag_preview]: frame#87 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270135.638714605] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211535_f90_NO_MVP.jpg
+[INFO] [1781270136.349675033] [yolo_world_diag_preview]: frame#105 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270136.394882140] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211536_f105_NO_MVP.jpg
+[INFO] [1781270137.237173348] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211537_f120_NO_MVP.jpg
+[INFO] [1781270137.365629214] [yolo_world_diag_preview]: frame#123 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270138.011214542] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211537_f135_NO_MVP.jpg
+[INFO] [1781270138.399505429] [yolo_world_diag_preview]: frame#143 raw=3 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270138.788414817] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211538_f150_NO_MVP.jpg
+[INFO] [1781270139.444973973] [yolo_world_diag_preview]: frame#163 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270139.586885625] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211539_f165_NO_MVP.jpg
+[INFO] [1781270140.450394282] [yolo_world_diag_preview]: frame#178 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270140.598248598] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211540_f180_NO_MVP.jpg
+[INFO] [1781270141.402933279] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211541_f195_NO_MVP.jpg
+[INFO] [1781270141.488314786] [yolo_world_diag_preview]: frame#197 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270142.241536820] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211542_f210_NO_MVP.jpg
+[INFO] [1781270142.500826300] [yolo_world_diag_preview]: frame#216 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270143.037559461] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211542_f225_NO_MVP.jpg
+[INFO] [1781270143.501496360] [yolo_world_diag_preview]: frame#234 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270143.845074890] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211543_f240_NO_MVP.jpg
+[INFO] [1781270144.547523484] [yolo_world_diag_preview]: frame#254 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270144.634134700] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211544_f255_NO_MVP.jpg
+[INFO] [1781270145.384721692] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211545_f270_NO_MVP.jpg
+[INFO] [1781270145.547450502] [yolo_world_diag_preview]: frame#273 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270146.188077704] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211546_f285_NO_MVP.jpg
+[INFO] [1781270146.594572917] [yolo_world_diag_preview]: frame#292 raw=1 [suitcase:0.004(red=0.00)]
+[INFO] [1781270147.188855888] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211547_f300_NO_MVP.jpg
+[INFO] [1781270147.594400392] [yolo_world_diag_preview]: frame#308 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270147.998715897] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211547_f315_NO_MVP.jpg
+[INFO] [1781270148.597779657] [yolo_world_diag_preview]: frame#328 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270148.764318382] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211548_f330_NO_MVP.jpg
+[INFO] [1781270149.590200384] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211549_f345_NO_MVP.jpg
+[INFO] [1781270149.630006451] [yolo_world_diag_preview]: frame#346 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270150.418682468] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211550_f360_NO_MVP.jpg
+[INFO] [1781270150.646290669] [yolo_world_diag_preview]: frame#365 raw=0
+[INFO] [1781270151.201508487] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211551_f375_NO_MVP.jpg
+[INFO] [1781270151.655626555] [yolo_world_diag_preview]: frame#384 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270152.042438858] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211551_f390_NO_MVP.jpg
+[INFO] [1781270152.698673927] [yolo_world_diag_preview]: frame#402 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270152.889671600] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211552_f405_NO_MVP.jpg
+[INFO] [1781270153.716317476] [yolo_world_diag_preview]: frame#419 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270153.798571026] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211553_f420_NO_MVP.jpg
+[INFO] [1781270154.589215999] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211554_f435_NO_MVP.jpg
+[INFO] [1781270154.744248270] [yolo_world_diag_preview]: frame#438 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270155.458446190] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211555_f450_NO_MVP.jpg
+[INFO] [1781270155.748444073] [yolo_world_diag_preview]: frame#456 raw=0
+[INFO] [1781270156.301915808] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211556_f465_NO_MVP.jpg
+[INFO] [1781270156.767364078] [yolo_world_diag_preview]: frame#473 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270157.190478532] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211557_f480_NO_MVP.jpg
+[INFO] [1781270157.803559701] [yolo_world_diag_preview]: frame#492 raw=0
+[INFO] [1781270158.005852994] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211557_f495_NO_MVP.jpg
+[INFO] [1781270158.834978325] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211558_f510_NO_MVP.jpg
+[INFO] [1781270158.875685059] [yolo_world_diag_preview]: frame#511 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270159.593859351] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211559_f525_NO_MVP.jpg
+[INFO] [1781270159.929398632] [yolo_world_diag_preview]: frame#531 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270160.500537526] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211600_f540_NO_MVP.jpg
+[INFO] [1781270160.945439595] [yolo_world_diag_preview]: frame#548 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270161.391664831] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211601_f555_NO_MVP.jpg
+[INFO] [1781270161.950353771] [yolo_world_diag_preview]: frame#564 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270162.349842733] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211602_f570_NO_MVP.jpg
+[INFO] [1781270162.995900846] [yolo_world_diag_preview]: frame#583 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270163.144844827] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211603_f585_NO_MVP.jpg
+[INFO] [1781270163.998964938] [yolo_world_diag_preview]: frame#600 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270164.045227211] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211604_f600_NO_MVP.jpg
+[INFO] [1781270164.839543804] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211604_f615_NO_MVP.jpg
+[INFO] [1781270165.002413029] [yolo_world_diag_preview]: frame#619 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270165.588221707] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211605_f630_NO_MVP.jpg
+[INFO] [1781270166.011537993] [yolo_world_diag_preview]: frame#639 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270166.339007401] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211606_f645_NO_MVP.jpg
+[INFO] [1781270167.051234069] [yolo_world_diag_preview]: frame#660 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270167.095750426] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211607_f660_NO_MVP.jpg
+[INFO] [1781270167.989212019] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211607_f675_NO_MVP.jpg
+[INFO] [1781270168.068187653] [yolo_world_diag_preview]: frame#677 raw=3 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270168.787835193] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211608_f690_NO_MVP.jpg
+[INFO] [1781270169.099624023] [yolo_world_diag_preview]: frame#696 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270169.593474696] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211609_f705_NO_MVP.jpg
+[INFO] [1781270170.103209571] [yolo_world_diag_preview]: frame#716 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270170.342046307] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211610_f720_NO_MVP.jpg
+[INFO] [1781270171.109552951] [yolo_world_diag_preview]: frame#734 raw=3 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270171.249874643] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211611_f735_NO_MVP.jpg
+[INFO] [1781270172.040438777] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211611_f750_NO_MVP.jpg
+[INFO] [1781270172.132883906] [yolo_world_diag_preview]: frame#752 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270172.844058239] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211612_f765_NO_MVP.jpg
+[INFO] [1781270173.142575075] [yolo_world_diag_preview]: frame#770 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270173.806155511] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211613_f780_NO_MVP.jpg
+[INFO] [1781270174.222853214] [yolo_world_diag_preview]: frame#788 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270174.598869560] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211614_f795_NO_MVP.jpg
+[INFO] [1781270175.249980542] [yolo_world_diag_preview]: frame#809 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270175.343544170] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211615_f810_NO_MVP.jpg
+[INFO] [1781270176.084157407] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211616_f825_NO_MVP.jpg
+[INFO] [1781270176.300229735] [yolo_world_diag_preview]: frame#829 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270177.035433348] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211616_f840_NO_MVP.jpg
+[INFO] [1781270177.349752135] [yolo_world_diag_preview]: frame#845 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270177.963503091] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211617_f855_NO_MVP.jpg
+[INFO] [1781270178.417851820] [yolo_world_diag_preview]: frame#863 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270178.791549416] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211618_f870_NO_MVP.jpg
+[INFO] [1781270179.454735517] [yolo_world_diag_preview]: frame#883 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270179.594692501] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211619_f885_NO_MVP.jpg
+[INFO] [1781270180.571215555] [yolo_world_diag_preview]: frame#899 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270180.661978143] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211620_f900_NO_MVP.jpg
+[INFO] [1781270181.598534089] [yolo_world_diag_preview]: frame#914 raw=3 [suitcase:0.002(red=0.00), suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270181.693126341] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211621_f915_NO_MVP.jpg
+[INFO] [1781270182.512445460] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211622_f930_NO_MVP.jpg
+[INFO] [1781270182.602117673] [yolo_world_diag_preview]: frame#932 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270183.330291079] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211623_f945_NO_MVP.jpg
+[INFO] [1781270183.607845214] [yolo_world_diag_preview]: frame#950 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270184.250215531] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211624_f960_NO_MVP.jpg
+[INFO] [1781270184.645005034] [yolo_world_diag_preview]: frame#963 raw=3 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270185.298580346] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211625_f975_NO_MVP.jpg
+[INFO] [1781270185.651182658] [yolo_world_diag_preview]: frame#982 raw=2 [suitcase:0.002(red=0.00), suitcase:0.002(red=0.00)]
+[INFO] [1781270186.141925996] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211626_f990_NO_MVP.jpg
+[INFO] [1781270186.692834641] [yolo_world_diag_preview]: frame#1000 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270186.987913310] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211626_f1005_NO_MVP.jpg
+[INFO] [1781270187.701057055] [yolo_world_diag_preview]: frame#1019 raw=0
+[INFO] [1781270187.791349434] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211627_f1020_NO_MVP.jpg
+[INFO] [1781270188.585217812] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211628_f1035_NO_MVP.jpg
+[INFO] [1781270188.716941590] [yolo_world_diag_preview]: frame#1038 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270189.543408746] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211629_f1050_NO_MVP.jpg
+[INFO] [1781270189.743916787] [yolo_world_diag_preview]: frame#1054 raw=2 [suitcase:0.002(red=0.00), suitcase:0.002(red=0.00)]
+[INFO] [1781270190.494487807] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211630_f1065_NO_MVP.jpg
+[INFO] [1781270190.754751574] [yolo_world_diag_preview]: frame#1068 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270191.602873345] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211631_f1080_NO_MVP.jpg
+[INFO] [1781270191.797238638] [yolo_world_diag_preview]: frame#1084 raw=0
+[INFO] [1781270192.548411408] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211632_f1095_NO_MVP.jpg
+[INFO] [1781270192.846119658] [yolo_world_diag_preview]: frame#1100 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270193.522552250] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211633_f1110_NO_MVP.jpg
+[INFO] [1781270194.057977693] [yolo_world_diag_preview]: frame#1111 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270194.992666926] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211634_f1125_NO_MVP.jpg
+[INFO] [1781270195.146949111] [yolo_world_diag_preview]: frame#1127 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270195.846766485] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211635_f1140_NO_MVP.jpg
+[INFO] [1781270196.163164102] [yolo_world_diag_preview]: frame#1145 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270196.685586008] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211636_f1155_NO_MVP.jpg
+[INFO] [1781270197.195901169] [yolo_world_diag_preview]: frame#1165 raw=2 [suitcase:0.003(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270197.546805521] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211637_f1170_NO_MVP.jpg
+[INFO] [1781270198.202738162] [yolo_world_diag_preview]: frame#1183 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270198.344515103] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211638_f1185_NO_MVP.jpg
+[INFO] [1781270199.245757265] [yolo_world_diag_preview]: frame#1200 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270199.292030871] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211639_f1200_NO_MVP.jpg
+[INFO] [1781270200.093391158] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211640_f1215_NO_MVP.jpg
+[INFO] [1781270200.306698652] [yolo_world_diag_preview]: frame#1219 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270200.937332261] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211640_f1230_NO_MVP.jpg
+[INFO] [1781270201.332747886] [yolo_world_diag_preview]: frame#1238 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270201.776053116] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211641_f1245_NO_MVP.jpg
+[INFO] [1781270202.355054747] [yolo_world_diag_preview]: frame#1253 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270202.738124127] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211642_f1260_NO_MVP.jpg
+[INFO] [1781270203.399248181] [yolo_world_diag_preview]: frame#1273 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270203.542493037] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211643_f1275_NO_MVP.jpg
+[INFO] [1781270204.300110384] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211644_f1290_NO_MVP.jpg
+[INFO] [1781270204.416207043] [yolo_world_diag_preview]: frame#1293 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270205.084453302] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211645_f1305_NO_MVP.jpg
+[INFO] [1781270205.441239901] [yolo_world_diag_preview]: frame#1313 raw=2 [suitcase:0.003(red=0.00), suitcase:0.002(red=0.00)]
+[INFO] [1781270205.839645108] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211645_f1320_NO_MVP.jpg
+[INFO] [1781270206.446227643] [yolo_world_diag_preview]: frame#1332 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270206.647295974] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211646_f1335_NO_MVP.jpg
+[INFO] [1781270207.435875765] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211647_f1350_NO_MVP.jpg
+[INFO] [1781270207.478374831] [yolo_world_diag_preview]: frame#1351 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270208.238637550] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211648_f1365_NO_MVP.jpg
+[INFO] [1781270208.497590023] [yolo_world_diag_preview]: frame#1371 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270209.185854023] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211649_f1380_NO_MVP.jpg
+[INFO] [1781270209.547827869] [yolo_world_diag_preview]: frame#1387 raw=0
+[INFO] [1781270209.984759017] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211649_f1395_NO_MVP.jpg
+[INFO] [1781270210.559615648] [yolo_world_diag_preview]: frame#1406 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270210.792834549] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211650_f1410_NO_MVP.jpg
+[INFO] [1781270211.532023360] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211651_f1425_NO_MVP.jpg
+[INFO] [1781270211.570722885] [yolo_world_diag_preview]: frame#1426 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270212.343928848] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211652_f1440_NO_MVP.jpg
+[INFO] [1781270212.653286924] [yolo_world_diag_preview]: frame#1445 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270213.287882904] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211653_f1455_NO_MVP.jpg
+[INFO] [1781270213.693737148] [yolo_world_diag_preview]: frame#1463 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270214.163306323] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211654_f1470_NO_MVP.jpg
+[INFO] [1781270214.709132048] [yolo_world_diag_preview]: frame#1477 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270215.368488725] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211655_f1485_NO_MVP.jpg
+[INFO] [1781270215.725633406] [yolo_world_diag_preview]: frame#1489 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270216.385902083] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211656_f1500_NO_MVP.jpg
+[INFO] [1781270216.743328722] [yolo_world_diag_preview]: frame#1506 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270217.237541385] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211657_f1515_NO_MVP.jpg
+[INFO] [1781270217.749363333] [yolo_world_diag_preview]: frame#1526 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270218.046791915] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211657_f1530_NO_MVP.jpg
+[INFO] [1781270218.749329114] [yolo_world_diag_preview]: frame#1543 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270218.889801471] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211658_f1545_NO_MVP.jpg
+[INFO] [1781270219.688021545] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211659_f1560_NO_MVP.jpg
+[INFO] [1781270219.798108040] [yolo_world_diag_preview]: frame#1562 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270220.538445264] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211700_f1575_NO_MVP.jpg
+[INFO] [1781270220.813980146] [yolo_world_diag_preview]: frame#1581 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270221.334364340] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211701_f1590_NO_MVP.jpg
+[INFO] [1781270221.861198906] [yolo_world_diag_preview]: frame#1599 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270222.335668202] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211702_f1605_NO_MVP.jpg
+[INFO] [1781270222.894267420] [yolo_world_diag_preview]: frame#1617 raw=3 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270223.089540337] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211703_f1620_NO_MVP.jpg
+[INFO] [1781270223.901381738] [yolo_world_diag_preview]: frame#1635 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270223.946625760] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211703_f1635_NO_MVP.jpg
+[INFO] [1781270224.916278218] [yolo_world_diag_preview]: frame#1649 raw=3 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270225.024677171] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211704_f1650_NO_MVP.jpg
+[INFO] [1781270225.888729591] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211705_f1665_NO_MVP.jpg
+[INFO] [1781270225.933678155] [yolo_world_diag_preview]: frame#1666 raw=0
+[INFO] [1781270226.741733849] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211706_f1680_NO_MVP.jpg
+[INFO] [1781270226.958451464] [yolo_world_diag_preview]: frame#1684 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270227.641348378] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211707_f1695_NO_MVP.jpg
+[INFO] [1781270227.995865183] [yolo_world_diag_preview]: frame#1702 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270228.489588804] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211708_f1710_NO_MVP.jpg
+[INFO] [1781270228.995760919] [yolo_world_diag_preview]: frame#1718 raw=0
+[INFO] [1781270229.441293726] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211709_f1725_NO_MVP.jpg
+[INFO] [1781270230.104716190] [yolo_world_diag_preview]: frame#1736 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270230.361042162] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211710_f1740_NO_MVP.jpg
+[INFO] [1781270231.128138997] [yolo_world_diag_preview]: frame#1752 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270231.330838118] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211711_f1755_NO_MVP.jpg
+[INFO] [1781270232.141450059] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211712_f1770_NO_MVP.jpg
+[INFO] [1781270232.183358999] [yolo_world_diag_preview]: frame#1771 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270232.940501922] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211712_f1785_NO_MVP.jpg
+[INFO] [1781270233.195232978] [yolo_world_diag_preview]: frame#1791 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270233.788222429] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211713_f1800_NO_MVP.jpg
+[INFO] [1781270234.196211711] [yolo_world_diag_preview]: frame#1809 raw=0
+[INFO] [1781270234.530547066] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211714_f1815_NO_MVP.jpg
+[INFO] [1781270235.202027900] [yolo_world_diag_preview]: frame#1827 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270235.386107362] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211715_f1830_NO_MVP.jpg
+[INFO] [1781270236.191307762] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211716_f1845_NO_MVP.jpg
+[INFO] [1781270236.251208069] [yolo_world_diag_preview]: frame#1846 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270237.258775090] [yolo_world_diag_preview]: frame#1852 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270237.836946755] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211717_f1860_NO_MVP.jpg
+[INFO] [1781270238.297797805] [yolo_world_diag_preview]: frame#1867 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270238.790157466] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211718_f1875_NO_MVP.jpg
+[INFO] [1781270239.363150592] [yolo_world_diag_preview]: frame#1887 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270239.535653391] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211719_f1890_NO_MVP.jpg
+[INFO] [1781270240.421406506] [yolo_world_diag_preview]: frame#1905 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270240.474798316] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211720_f1905_NO_MVP.jpg
+[INFO] [1781270241.447906558] [yolo_world_diag_preview]: frame#1919 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270241.532895855] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211721_f1920_NO_MVP.jpg
+[INFO] [1781270242.396326478] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211722_f1935_NO_MVP.jpg
+[INFO] [1781270242.500588433] [yolo_world_diag_preview]: frame#1937 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270243.354760185] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211723_f1950_NO_MVP.jpg
+[INFO] [1781270243.611158864] [yolo_world_diag_preview]: frame#1954 raw=3 [suitcase:0.002(red=0.00), suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270244.289045110] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211724_f1965_NO_MVP.jpg
+[INFO] [1781270244.658793490] [yolo_world_diag_preview]: frame#1973 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270245.044213405] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211725_f1980_NO_MVP.jpg
+[INFO] [1781270245.694460662] [yolo_world_diag_preview]: frame#1992 raw=1 [suitcase:0.003(red=0.00)]
+[INFO] [1781270245.885659620] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211725_f1995_NO_MVP.jpg
+[INFO] [1781270246.768813442] [yolo_world_diag_preview]: frame#2010 raw=1 [suitcase:0.004(red=0.00)]
+[INFO] [1781270246.812937589] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211726_f2010_NO_MVP.jpg
+[INFO] [1781270247.738894184] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211727_f2025_NO_MVP.jpg
+[INFO] [1781270247.783692539] [yolo_world_diag_preview]: frame#2026 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270248.589838186] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211728_f2040_NO_MVP.jpg
+[INFO] [1781270248.796144887] [yolo_world_diag_preview]: frame#2044 raw=0
+[INFO] [1781270249.438073147] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211729_f2055_NO_MVP.jpg
+[INFO] [1781270249.841544262] [yolo_world_diag_preview]: frame#2063 raw=0
+[INFO] [1781270250.231367882] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211730_f2070_NO_MVP.jpg
+[INFO] [1781270250.894272674] [yolo_world_diag_preview]: frame#2081 raw=3 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270251.206717996] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211731_f2085_NO_MVP.jpg
+[INFO] [1781270251.929159761] [yolo_world_diag_preview]: frame#2093 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270252.451642240] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211732_f2100_NO_MVP.jpg
+[INFO] [1781270252.945167065] [yolo_world_diag_preview]: frame#2110 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270253.284484707] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211733_f2115_NO_MVP.jpg
+[INFO] [1781270253.957523452] [yolo_world_diag_preview]: frame#2126 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270254.294983887] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211734_f2130_NO_MVP.jpg
+[INFO] [1781270254.990999872] [yolo_world_diag_preview]: frame#2143 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270255.134853767] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211735_f2145_NO_MVP.jpg
+[INFO] [1781270255.901609346] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211735_f2160_NO_MVP.jpg
+[INFO] [1781270255.995473679] [yolo_world_diag_preview]: frame#2162 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270256.734041937] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211736_f2175_NO_MVP.jpg
+[INFO] [1781270257.048695965] [yolo_world_diag_preview]: frame#2182 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270257.483218148] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211737_f2190_NO_MVP.jpg
+[INFO] [1781270258.098764918] [yolo_world_diag_preview]: frame#2201 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270258.341373727] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211738_f2205_NO_MVP.jpg
+[INFO] [1781270259.106555389] [yolo_world_diag_preview]: frame#2219 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270259.196606224] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211739_f2220_NO_MVP.jpg
+[INFO] [1781270260.045775849] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211740_f2235_NO_MVP.jpg
+[INFO] [1781270260.129696270] [yolo_world_diag_preview]: frame#2237 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270260.936882371] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211740_f2250_NO_MVP.jpg
+[INFO] [1781270261.146735820] [yolo_world_diag_preview]: frame#2255 raw=2 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270261.684953332] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211741_f2265_NO_MVP.jpg
+[INFO] [1781270262.149030126] [yolo_world_diag_preview]: frame#2272 raw=0
+[INFO] [1781270262.690454720] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211742_f2280_NO_MVP.jpg
+[INFO] [1781270263.224375566] [yolo_world_diag_preview]: frame#2288 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270263.749739625] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211743_f2295_NO_MVP.jpg
+[INFO] [1781270264.257237566] [yolo_world_diag_preview]: frame#2304 raw=0
+[INFO] [1781270264.588481294] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211744_f2310_NO_MVP.jpg
+[INFO] [1781270265.298502854] [yolo_world_diag_preview]: frame#2323 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270265.434969335] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211745_f2325_NO_MVP.jpg
+[INFO] [1781270266.289060581] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211746_f2340_NO_MVP.jpg
+[INFO] [1781270266.328889021] [yolo_world_diag_preview]: frame#2341 raw=2 [suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270267.243553990] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211747_f2355_NO_MVP.jpg
+[INFO] [1781270267.349316234] [yolo_world_diag_preview]: frame#2357 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270268.093449820] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211748_f2370_NO_MVP.jpg
+[INFO] [1781270268.411089554] [yolo_world_diag_preview]: frame#2374 raw=0
+[INFO] [1781270269.096854915] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211749_f2385_NO_MVP.jpg
+[INFO] [1781270269.441104845] [yolo_world_diag_preview]: frame#2392 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270269.904749763] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211749_f2400_NO_MVP.jpg
+[INFO] [1781270270.457893767] [yolo_world_diag_preview]: frame#2406 raw=1 [suitcase:0.004(red=0.00)]
+[INFO] [1781270271.616459792] [yolo_world_diag_preview]: frame#2414 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270271.745726693] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211751_f2415_NO_MVP.jpg
+[INFO] [1781270272.678106735] [yolo_world_diag_preview]: frame#2424 raw=3 [suitcase:0.002(red=0.00), suitcase:0.001(red=0.00), suitcase:0.001(red=0.00)]
+[INFO] [1781270273.083749095] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211753_f2430_NO_MVP.jpg
+[INFO] [1781270273.717945604] [yolo_world_diag_preview]: frame#2440 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270274.058265827] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211754_f2445_NO_MVP.jpg
+[INFO] [1781270274.747639852] [yolo_world_diag_preview]: frame#2452 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270275.606266051] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211755_f2460_NO_MVP.jpg
+[INFO] [1781270276.170191090] [yolo_world_diag_preview]: frame#2462 raw=1 [suitcase:0.004(red=0.00)]
+[INFO] [1781270277.245234692] [yolo_world_diag_preview]: frame#2472 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270277.559985176] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211757_f2475_NO_MVP.jpg
+[INFO] [1781270278.261610445] [yolo_world_diag_preview]: frame#2485 raw=0
+[INFO] [1781270278.696490167] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211758_f2490_NO_MVP.jpg
+[INFO] [1781270279.337556254] [yolo_world_diag_preview]: frame#2495 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270280.503433147] [yolo_world_diag_preview]: frame#2504 raw=1 [suitcase:0.002(red=0.00)]
+[INFO] [1781270280.642141418] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211800_f2505_NO_MVP.jpg
+[INFO] [1781270282.159134237] [yolo_world_diag_preview]: frame#2518 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270282.531231319] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211802_f2520_NO_MVP.jpg
+[INFO] [1781270283.222596842] [yolo_world_diag_preview]: frame#2529 raw=1 [suitcase:0.001(red=0.00)]
+[INFO] [1781270283.906941451] [yolo_world_diag_preview]: saved: /root/rdk_x5_vln_robot/check_bbox/yolo_diag_20260612_211803_f2535_NO_MVP.jpg
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389
+[INFO] [1781270283.913201698] [yolo_world_diag_preview]: summary: frames=2535 dets=1667 mvp_found=0
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389

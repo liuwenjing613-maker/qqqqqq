@@ -1,0 +1,104 @@
+[WARN] [1781274639.758583120] [hobot_yolo_world]: This is hobot yolo world!
+[WARN] [1781274639.877212998] [hobot_yolo_world]: Parameter:
+ feed_type(0:local, 1:sub): 1
+ image: config/yolo_world_test.jpg
+ dump_render_img: 0
+ is_shared_mem_sub: 0
+ score_threshold: 0.001
+ iou_threshold: 0.45
+ nms_top_k: 50
+ texts: backpack,handbag,suitcase
+ ai_msg_pub_topic_name: /hobot_yolo_world
+ ros_img_sub_topic_name: /image_raw
+ ros_string_sub_topic_name: /target_words
+[WARN] [1781274640.120643167] [hobot_yolo_world]: Parameter:
+ model_file_name: config/yolo_world.bin
+ model_name: 
+[WARN] [1781274640.120953501] [hobot_yolo_world]: model_file_name_: config/yolo_world.bin, task_num: 4
+[BPU_PLAT]BPU Platform Version(1.3.6)! soc info(x5)
+[HBRT] set log level as 0. version = 3.15.55.0
+[DNN] Runtime version = 1.24.5_(3.15.55 HBRT)
+[A][DNN][packed_model.cpp:247][Model](2026-06-12,22:30:40.766.273) [HorizonRT] The model builder version = 1.23.5
+[WARN] [1781274641.130876250] [hobot_yolo_world]: Get model name: yolo_world_pad_pretrain_norm_new from load model.
+[WARN] [1781274641.131334542] [hobot_yolo_world]: Create ai msg publisher with topic_name: /hobot_yolo_world
+[WARN] [1781274641.170121654] [hobot_yolo_world]: Create string subscription with topic_name: /target_words
+[WARN] [1781274641.174608611] [hobot_yolo_world]: Create img subscription with topic_name: /image_raw
+[W][DNN]bpu_model_info.cpp:491][Version](2026-06-12,22:30:41.117.710) Model: yolo_world_pad_pretrain_norm_new. Inconsistency between the hbrt library version 3.15.55.0 and the model build version 3.15.47.0 detected, in order to ensure correct model results, it is recommended to use compilation tools and the BPU SDK from the same OpenExplorer package.
+[WARN] [1781274643.991682346] [hobot_yolo_world]: Sub img fps: -1.00, Smart fps: 7.32, pre process time ms: 29, infer time ms: 718, post process time ms: 1
+[WARN] [1781274645.050204246] [hobot_yolo_world]: Sub img fps: 18.77, Smart fps: 6.62, pre process time ms: 44, infer time ms: 405, post process time ms: 2
+[WARN] [1781274646.184046455] [hobot_yolo_world]: Sub img fps: 21.51, Smart fps: 6.18, pre process time ms: 53, infer time ms: 641, post process time ms: 2
+[WARN] [1781274647.239274314] [hobot_yolo_world]: Sub img fps: 20.13, Smart fps: 5.69, pre process time ms: 30, infer time ms: 483, post process time ms: 2
+[WARN] [1781274648.303291213] [hobot_yolo_world]: Sub img fps: 19.03, Smart fps: 6.59, pre process time ms: 38, infer time ms: 567, post process time ms: 2
+[WARN] [1781274649.530110807] [hobot_yolo_world]: Sub img fps: 19.65, Smart fps: 5.70, pre process time ms: 40, infer time ms: 712, post process time ms: 2
+[WARN] [1781274650.603466578] [hobot_yolo_world]: Sub img fps: 19.65, Smart fps: 5.59, pre process time ms: 53, infer time ms: 900, post process time ms: 1
+[WARN] [1781274651.744007826] [hobot_yolo_world]: Sub img fps: 20.23, Smart fps: 7.02, pre process time ms: 52, infer time ms: 632, post process time ms: 1
+[WARN] [1781274653.058707891] [hobot_yolo_world]: Sub img fps: 21.28, Smart fps: 5.33, pre process time ms: 49, infer time ms: 816, post process time ms: 1
+[WARN] [1781274654.297213149] [hobot_yolo_world]: Sub img fps: 20.13, Smart fps: 5.65, pre process time ms: 43, infer time ms: 811, post process time ms: 2
+[WARN] [1781274655.448673352] [hobot_yolo_world]: Sub img fps: 20.77, Smart fps: 6.95, pre process time ms: 55, infer time ms: 605, post process time ms: 1
+[WARN] [1781274656.843981182] [hobot_yolo_world]: Sub img fps: 18.48, Smart fps: 5.02, pre process time ms: 56, infer time ms: 855, post process time ms: 1
+[WARN] [1781274657.916638578] [hobot_yolo_world]: Sub img fps: 18.92, Smart fps: 7.46, pre process time ms: 67, infer time ms: 640, post process time ms: 1
+[WARN] [1781274658.986530100] [hobot_yolo_world]: Sub img fps: 20.94, Smart fps: 5.61, pre process time ms: 46, infer time ms: 651, post process time ms: 2
+[WARN] [1781274660.301694540] [hobot_yolo_world]: Sub img fps: 20.31, Smart fps: 5.32, pre process time ms: 41, infer time ms: 813, post process time ms: 2
+[WARN] [1781274661.372363728] [hobot_yolo_world]: Sub img fps: 20.39, Smart fps: 6.54, pre process time ms: 50, infer time ms: 564, post process time ms: 2
+[WARN] [1781274662.442159542] [hobot_yolo_world]: Sub img fps: 18.46, Smart fps: 6.54, pre process time ms: 44, infer time ms: 624, post process time ms: 2
+[WARN] [1781274663.610861572] [hobot_yolo_world]: Sub img fps: 20.73, Smart fps: 5.14, pre process time ms: 58, infer time ms: 590, post process time ms: 1
+[WARN] [1781274664.658605101] [hobot_yolo_world]: Sub img fps: 20.81, Smart fps: 6.69, pre process time ms: 37, infer time ms: 641, post process time ms: 2
+[WARN] [1781274665.814849011] [hobot_yolo_world]: Sub img fps: 19.00, Smart fps: 6.06, pre process time ms: 64, infer time ms: 657, post process time ms: 2
+[WARN] [1781274666.824022761] [hobot_yolo_world]: Sub img fps: 19.88, Smart fps: 6.94, pre process time ms: 37, infer time ms: 494, post process time ms: 3
+[WARN] [1781274667.864002293] [hobot_yolo_world]: Sub img fps: 19.88, Smart fps: 3.85, pre process time ms: 45, infer time ms: 1025, post process time ms: 1
+[WARN] [1781274669.269909329] [hobot_yolo_world]: Sub img fps: 16.28, Smart fps: 6.41, pre process time ms: 73, infer time ms: 883, post process time ms: 1
+[WARN] [1781274670.415129200] [hobot_yolo_world]: Sub img fps: 19.72, Smart fps: 6.11, pre process time ms: 39, infer time ms: 627, post process time ms: 2
+[WARN] [1781274671.732400807] [hobot_yolo_world]: Sub img fps: 20.19, Smart fps: 6.08, pre process time ms: 40, infer time ms: 816, post process time ms: 2
+[WARN] [1781274672.814902616] [hobot_yolo_world]: Sub img fps: 20.43, Smart fps: 6.47, pre process time ms: 46, infer time ms: 574, post process time ms: 1
+[WARN] [1781274673.833861322] [hobot_yolo_world]: Sub img fps: 18.94, Smart fps: 5.89, pre process time ms: 40, infer time ms: 839, post process time ms: 1
+[WARN] [1781274674.886400516] [hobot_yolo_world]: Sub img fps: 17.58, Smart fps: 6.65, pre process time ms: 41, infer time ms: 559, post process time ms: 2
+[WARN] [1781274676.024648557] [hobot_yolo_world]: Sub img fps: 19.51, Smart fps: 5.28, pre process time ms: 46, infer time ms: 720, post process time ms: 2
+[WARN] [1781274677.032991807] [hobot_yolo_world]: Sub img fps: 19.90, Smart fps: 6.94, pre process time ms: 80, infer time ms: 426, post process time ms: 1
+[WARN] [1781274678.248670823] [hobot_yolo_world]: Sub img fps: 19.90, Smart fps: 4.94, pre process time ms: 45, infer time ms: 807, post process time ms: 2
+[WARN] [1781274679.396682444] [hobot_yolo_world]: Sub img fps: 18.79, Smart fps: 6.97, pre process time ms: 67, infer time ms: 629, post process time ms: 1
+[WARN] [1781274680.467318882] [hobot_yolo_world]: Sub img fps: 18.96, Smart fps: 5.61, pre process time ms: 46, infer time ms: 654, post process time ms: 2
+[WARN] [1781274681.779688074] [hobot_yolo_world]: Sub img fps: 17.93, Smart fps: 5.34, pre process time ms: 59, infer time ms: 805, post process time ms: 2
+[WARN] [1781274682.854929636] [hobot_yolo_world]: Sub img fps: 18.20, Smart fps: 7.44, pre process time ms: 36, infer time ms: 536, post process time ms: 1
+[WARN] [1781274684.167725661] [hobot_yolo_world]: Sub img fps: 17.95, Smart fps: 5.33, pre process time ms: 65, infer time ms: 814, post process time ms: 1
+[WARN] [1781274685.239393099] [hobot_yolo_world]: Sub img fps: 19.00, Smart fps: 7.47, pre process time ms: 43, infer time ms: 560, post process time ms: 2
+[WARN] [1781274686.635032055] [hobot_yolo_world]: Sub img fps: 19.55, Smart fps: 5.02, pre process time ms: 42, infer time ms: 897, post process time ms: 2
+[WARN] [1781274687.718173864] [hobot_yolo_world]: Sub img fps: 20.35, Smart fps: 7.39, pre process time ms: 42, infer time ms: 580, post process time ms: 2
+[WARN] [1781274689.116525778] [hobot_yolo_world]: Sub img fps: 18.46, Smart fps: 5.01, pre process time ms: 61, infer time ms: 900, post process time ms: 2
+[WARN] [1781274690.263596191] [hobot_yolo_world]: Sub img fps: 20.92, Smart fps: 6.11, pre process time ms: 44, infer time ms: 734, post process time ms: 2
+[WARN] [1781274691.348344833] [hobot_yolo_world]: Sub img fps: 20.29, Smart fps: 6.45, pre process time ms: 61, infer time ms: 652, post process time ms: 2
+[WARN] [1781274692.408433317] [hobot_yolo_world]: Sub img fps: 18.61, Smart fps: 5.66, pre process time ms: 56, infer time ms: 899, post process time ms: 1
+[WARN] [1781274693.567390185] [hobot_yolo_world]: Sub img fps: 20.94, Smart fps: 6.04, pre process time ms: 46, infer time ms: 728, post process time ms: 2
+[WARN] [1781274694.973701596] [hobot_yolo_world]: Sub img fps: 20.53, Smart fps: 5.70, pre process time ms: 44, infer time ms: 823, post process time ms: 4
+[WARN] [1781274696.035420746] [hobot_yolo_world]: Sub img fps: 19.19, Smart fps: 6.59, pre process time ms: 78, infer time ms: 629, post process time ms: 2
+[WARN] [1781274697.111103849] [hobot_yolo_world]: Sub img fps: 19.86, Smart fps: 6.51, pre process time ms: 51, infer time ms: 571, post process time ms: 2
+[WARN] [1781274698.177274247] [hobot_yolo_world]: Sub img fps: 20.10, Smart fps: 5.63, pre process time ms: 44, infer time ms: 719, post process time ms: 2
+[WARN] [1781274699.254591934] [hobot_yolo_world]: Sub img fps: 21.61, Smart fps: 5.57, pre process time ms: 28, infer time ms: 658, post process time ms: 2
+[WARN] [1781274700.566547709] [hobot_yolo_world]: Sub img fps: 18.89, Smart fps: 6.10, pre process time ms: 37, infer time ms: 727, post process time ms: 1
+[WARN] [1781274701.798550970] [hobot_yolo_world]: Sub img fps: 18.87, Smart fps: 5.69, pre process time ms: 42, infer time ms: 793, post process time ms: 2
+[WARN] [1781274702.953038631] [hobot_yolo_world]: Sub img fps: 20.21, Smart fps: 6.07, pre process time ms: 42, infer time ms: 724, post process time ms: 3
+[WARN] [1781274704.111595374] [hobot_yolo_world]: Sub img fps: 18.91, Smart fps: 6.90, pre process time ms: 42, infer time ms: 661, post process time ms: 1
+[WARN] [1781274705.174548107] [hobot_yolo_world]: Sub img fps: 19.32, Smart fps: 5.65, pre process time ms: 58, infer time ms: 643, post process time ms: 2
+[WARN] [1781274706.245064587] [hobot_yolo_world]: Sub img fps: 19.76, Smart fps: 6.54, pre process time ms: 43, infer time ms: 641, post process time ms: 2
+[WARN] [1781274707.326386356] [hobot_yolo_world]: Sub img fps: 19.86, Smart fps: 6.48, pre process time ms: 84, infer time ms: 579, post process time ms: 2
+[WARN] [1781274708.651060752] [hobot_yolo_world]: Sub img fps: 21.88, Smart fps: 5.29, pre process time ms: 44, infer time ms: 885, post process time ms: 2
+[WARN] [1781274709.793681250] [hobot_yolo_world]: Sub img fps: 14.68, Smart fps: 6.13, pre process time ms: 46, infer time ms: 655, post process time ms: 2
+[WARN] [1781274710.868437854] [hobot_yolo_world]: Sub img fps: 18.45, Smart fps: 7.45, pre process time ms: 57, infer time ms: 548, post process time ms: 2
+[WARN] [1781274712.112821028] [hobot_yolo_world]: Sub img fps: 18.45, Smart fps: 4.82, pre process time ms: 89, infer time ms: 894, post process time ms: 1
+[WARN] [1781274713.146043437] [hobot_yolo_world]: Sub img fps: 17.63, Smart fps: 7.74, pre process time ms: 77, infer time ms: 504, post process time ms: 2
+s time ms: 2
+[WARN] [1781274697.688077325] [hobot_yolo_world]: Sub img fps: 17.98, Smart fps: 6.50, pre process time ms: 38, infer time ms: 565, post process time ms: 2
+[WARN] [1781274698.837872321] [hobot_yolo_world]: Sub img fps: 18.90, Smart fps: 6.96, pre process time ms: 36, infer time ms: 656, post process time ms: 1
+[WARN] [1781274699.988495858] [hobot_yolo_world]: Sub img fps: 21.65, Smart fps: 6.09, pre process time ms: 68, infer time ms: 648, post process time ms: 2
+[WARN] [1781274701.000849816] [hobot_yolo_world]: Sub img fps: 20.92, Smart fps: 5.92, pre process time ms: 24, infer time ms: 589, post process time ms: 1
+[WARN] [1781274702.048927387] [hobot_yolo_world]: Sub img fps: 17.61, Smart fps: 5.73, pre process time ms: 51, infer time ms: 659, post process time ms: 1
+[WARN] [1781274703.199810258] [hobot_yolo_world]: Sub img fps: 17.96, Smart fps: 6.08, pre process time ms: 22, infer time ms: 575, post process time ms: 1
+[WARN] [1781274704.273132362] [hobot_yolo_world]: Sub img fps: 20.45, Smart fps: 7.46, pre process time ms: 44, infer time ms: 550, post process time ms: 3
+[WARN] [1781274705.343804801] [hobot_yolo_world]: Sub img fps: 20.45, Smart fps: 4.67, pre process time ms: 21, infer time ms: 737, post process time ms: 1
+[WARN] [1781274706.418868863] [hobot_yolo_world]: Sub img fps: 21.83, Smart fps: 5.58, pre process time ms: 33, infer time ms: 493, post process time ms: 1
+[WARN] [1781274707.483106054] [hobot_yolo_world]: Sub img fps: 21.83, Smart fps: 6.58, pre process time ms: 31, infer time ms: 655, post process time ms: 2
+[WARN] [1781274708.642342297] [hobot_yolo_world]: Sub img fps: 19.50, Smart fps: 5.18, pre process time ms: 48, infer time ms: 494, post process time ms: 2
+[WARN] [1781274709.711801444] [hobot_yolo_world]: Sub img fps: 17.61, Smart fps: 6.55, pre process time ms: 31, infer time ms: 573, post process time ms: 1
+[WARN] [1781274710.792349421] [hobot_yolo_world]: Sub img fps: 16.19, Smart fps: 6.48, pre process time ms: 43, infer time ms: 583, post process time ms: 2
+[WARN] [1781274712.115942443] [hobot_yolo_world]: Sub img fps: 18.63, Smart fps: 5.29, pre process time ms: 35, infer time ms: 499, post process time ms: 1
+[WARN] [1781274713.272527437] [hobot_yolo_world]: Sub img fps: 18.54, Smart fps: 6.92, pre process time ms: 33, infer time ms: 630, post process time ms: 2
+[WARN] [1781274714.419669142] [hobot_yolo_world]: Sub img fps: 18.43, Smart fps: 5.23, pre process time ms: 51, infer time ms: 800, post process time ms: 1

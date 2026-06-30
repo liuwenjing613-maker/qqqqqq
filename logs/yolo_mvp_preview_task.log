@@ -1,0 +1,771 @@
+[INFO] [1781876567.681304221] [run_mvp_task]: target_words publish disabled (external publisher expected)
+[INFO] [1781876567.685273470] [run_mvp_task]: ===== MVP TASK START =====
+[INFO] [1781876567.688701302] [run_mvp_task]: instruction: find the bottle
+[INFO] [1781876567.691726927] [run_mvp_task]: backend: yolo_world
+[INFO] [1781876567.694776134] [run_mvp_task]: servo: max_vx=0.004 max_wz=0.055 kp_turn=0.1 turn_th=0.3 fwd_th=0.18 arrive_area=0.16 slowdown_area=0.07 wz_deadzone=0.08 cmd_wz_deadzone=0.012 fwd_turn_scale=0.6
+[INFO] [1781876567.698091800] [run_mvp_task]: fsm: stable_frames=3 lost_limit=20 recovery_scan_wz=0.04
+[INFO] [1781876567.701486965] [run_mvp_task]: lost recovery: hold<= 3f, observe<= 7f, scan<= 25f, replan=2.00s, hold_scale=0.40, hold_max_wz=0.035, pulse=2f/6f
+[INFO] [1781876567.704625215] [run_mvp_task]: det_topic: /hobot_yolo_world
+[INFO] [1781876567.707377797] [run_mvp_task]: target_words_topic: /target_words
+[INFO] [1781876567.710461088] [run_mvp_task]: yolo_prompts: ['bottle', 'cup', 'wine glass']
+[INFO] [1781876567.714839420] [run_mvp_task]: target_classes: ['bottle']
+[INFO] [1781876567.718192919] [run_mvp_task]: min_score: 0.001
+[INFO] [1781876567.721057252] [run_mvp_task]: min_red_ratio: 0.045
+[INFO] [1781876567.724825709] [run_mvp_task]: max_area_ratio: 0.24
+[INFO] [1781876567.728221500] [run_mvp_task]: require_red_verify: False
+[INFO] [1781876567.731472957] [run_mvp_task]: stamp_sync max_delta=0.5s buffer=60
+[INFO] [1781876567.734445540] [run_mvp_task]: multi_frame_voter: enabled window=10 min_votes=3 lost_hold=3
+[INFO] [1781876567.737724372] [run_mvp_task]: Mock Qwen output:
+[INFO] [1781876567.740947038] [run_mvp_task]: {"timestamp": 1781876567.4749565, "instruction": "find the bottle", "target_category": "bottle", "target_description": "bottle", "possible_yolo_world_prompts": ["bottle", "cup", "wine glass"], "target_classes": ["bottle", "cup", "wine glass"], "target_visible": null, "semantic_region": null, "search_direction": null, "confidence": 0.9, "need_replan": false, "action_hint": "approach_slowly", "reason": "Mock Qwen output for red backpack MVP semantic-to-vision bridge."}
+[INFO] [1781876567.767486447] [run_mvp_task]: frame=1 fsm=PARSE_TASK servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876567.783696567] [run_mvp_task]: frame=2 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876567.824698598] [run_mvp_task]: frame=3 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876567.966973683] [run_mvp_task]: frame=4 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876568.120278556] [run_mvp_task]: frame=5 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876568.277128096] [run_mvp_task]: frame=6 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876568.368519237] [run_mvp_task]: frame=7 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876568.514924987] [run_mvp_task]: frame=8 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876568.668594611] [run_mvp_task]: frame=9 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876568.770612499] [run_mvp_task]: frame=10 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876568.914836458] [run_mvp_task]: frame=11 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876569.358728500] [run_mvp_task]: frame=12 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876569.458628889] [run_mvp_task]: frame=13 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876569.606044639] [run_mvp_task]: frame=14 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876569.680661118] [run_mvp_task]: frame=15 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876569.770073968] [run_mvp_task]: frame=16 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876569.914886886] [run_mvp_task]: frame=17 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876570.019599440] [run_mvp_task]: frame=18 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876570.113668038] [run_mvp_task]: frame=19 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=no_det_msg
+[INFO] [1781876570.237665087] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876570.242586252] [run_mvp_task]: frame=20 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876570.377992964] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876570.383905171] [run_mvp_task]: frame=21 fsm=OBSERVE servo=LOST_STOP action=WAIT_TARGET_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876570.525379423] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0192
+[INFO] [1781876570.528698213] [run_mvp_task]: frame=22 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876570.671392715] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0164
+[INFO] [1781876570.675095797] [run_mvp_task]: frame=23 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876570.784636475] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0189
+[INFO] [1781876570.789660390] [run_mvp_task]: frame=24 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876570.879605198] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0172
+[INFO] [1781876570.883492447] [run_mvp_task]: frame=25 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876570.972958255] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0156
+[INFO] [1781876570.976583546] [run_mvp_task]: frame=26 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.124664421] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0109
+[INFO] [1781876571.128515212] [run_mvp_task]: frame=27 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.269589422] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0142
+[INFO] [1781876571.273491421] [run_mvp_task]: frame=28 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.374303476] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0204 bbox=[856, 472, 52, 108] area_ratio=0.0061 red_ratio=0.0137
+[INFO] [1781876571.378355725] [run_mvp_task]: frame=29 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.020 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.484324112] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0119 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0223
+[INFO] [1781876571.488619735] [run_mvp_task]: frame=30 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.012 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.577322752] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0119 bbox=[856, 470, 50, 108] area_ratio=0.0059 red_ratio=0.0078
+[INFO] [1781876571.607405160] [run_mvp_task]: frame=31 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 50, 108] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.012 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.722152878] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0119 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0180
+[INFO] [1781876571.725986294] [run_mvp_task]: frame=32 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.012 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.881795958] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0119 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0196
+[INFO] [1781876571.885831499] [run_mvp_task]: frame=33 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.012 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876571.973402599] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0134 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0214
+[INFO] [1781876571.976914182] [run_mvp_task]: frame=34 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.013 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.069253281] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0183
+[INFO] [1781876572.073352821] [run_mvp_task]: frame=35 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.232527068] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0144
+[INFO] [1781876572.235825776] [run_mvp_task]: frame=36 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.374966237] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0242
+[INFO] [1781876572.380140110] [run_mvp_task]: frame=37 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.517870655] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0182
+[INFO] [1781876572.522971528] [run_mvp_task]: frame=38 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.620097501] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 472, 52, 108] area_ratio=0.0061 red_ratio=0.0240
+[INFO] [1781876572.623597875] [run_mvp_task]: frame=39 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.720136723] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0164
+[INFO] [1781876572.725634221] [run_mvp_task]: frame=40 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.821645194] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0171
+[INFO] [1781876572.825910652] [run_mvp_task]: frame=41 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876572.989231231] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0210
+[INFO] [1781876572.993208438] [run_mvp_task]: frame=42 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876573.123519151] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0109
+[INFO] [1781876573.145274062] [run_mvp_task]: frame=43 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876573.278227149] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0221 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0109
+[INFO] [1781876573.282133565] [run_mvp_task]: frame=44 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876573.370691582] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0159 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0142
+[INFO] [1781876573.374369956] [run_mvp_task]: frame=45 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.016 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876573.469395471] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0159 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0164
+[INFO] [1781876573.477129177] [run_mvp_task]: frame=46 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.016 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876573.617903054] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0159 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0210
+[INFO] [1781876573.624698010] [run_mvp_task]: frame=47 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.016 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876573.769979886] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0159 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0239
+[INFO] [1781876573.775965093] [run_mvp_task]: frame=48 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.016 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876573.930535966] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0159 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0247
+[INFO] [1781876573.934704215] [run_mvp_task]: frame=49 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.016 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876574.019931899] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[856, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0157
+[INFO] [1781876574.025020023] [run_mvp_task]: frame=50 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876574.123425287] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0116
+[INFO] [1781876574.127949619] [run_mvp_task]: frame=51 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876574.273421995] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0063
+[INFO] [1781876574.277464077] [run_mvp_task]: frame=52 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876574.426479244] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0063
+[INFO] [1781876574.431984992] [run_mvp_task]: frame=53 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876574.577957159] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[573, 128, 194, 469] area_ratio=0.0987 red_ratio=0.0002
+[INFO] [1781876574.581557117] [run_mvp_task]: frame=54 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[573, 128, 194, 469] cx=670 ex=+0.023 side=右 area=0.099 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876574.721635911] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[799, 402, 80, 180] area_ratio=0.0156 red_ratio=0.0210
+[INFO] [1781876574.725282326] [run_mvp_task]: frame=55 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[799, 402, 80, 180] cx=839 ex=+0.155 side=右 area=0.016 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876574.872119660] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[845, 456, 58, 122] area_ratio=0.0077 red_ratio=0.0162
+[INFO] [1781876574.877620617] [run_mvp_task]: frame=56 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[845, 456, 58, 122] cx=874 ex=+0.183 side=右 area=0.008 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.020697702] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[854, 467, 53, 111] area_ratio=0.0064 red_ratio=0.0162
+[INFO] [1781876575.024524117] [run_mvp_task]: frame=57 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[854, 467, 53, 111] cx=880 ex=+0.188 side=右 area=0.006 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.120970798] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[856, 469, 52, 110] area_ratio=0.0062 red_ratio=0.0182
+[INFO] [1781876575.124598381] [run_mvp_task]: frame=58 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 469, 52, 110] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.225769769] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0244 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0153
+[INFO] [1781876575.247999096] [run_mvp_task]: frame=59 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.024 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.371559311] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0194 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0203
+[INFO] [1781876575.376649018] [run_mvp_task]: frame=60 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.019 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.521831227] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0194 bbox=[856, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0170
+[INFO] [1781876575.525944393] [run_mvp_task]: frame=61 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.019 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.620620950] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0181
+[INFO] [1781876575.623821532] [run_mvp_task]: frame=62 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.747659372] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0172
+[INFO] [1781876575.751045163] [run_mvp_task]: frame=63 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876575.878278419] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0078
+[INFO] [1781876575.882107876] [run_mvp_task]: frame=64 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.036725583] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 472, 52, 108] area_ratio=0.0061 red_ratio=0.0134
+[INFO] [1781876576.040817623] [run_mvp_task]: frame=65 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.172164211] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0265
+[INFO] [1781876576.176131794] [run_mvp_task]: frame=66 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.331179583] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0143
+[INFO] [1781876576.335023791] [run_mvp_task]: frame=67 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.499312369] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0143
+[INFO] [1781876576.502560035] [run_mvp_task]: frame=68 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.632155790] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0232
+[INFO] [1781876576.635606873] [run_mvp_task]: frame=69 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.772093334] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[856, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0130
+[INFO] [1781876576.775391750] [run_mvp_task]: frame=70 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.869381932] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0103 bbox=[858, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0258
+[INFO] [1781876576.872701931] [run_mvp_task]: frame=71 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[858, 472, 50, 106] cx=883 ex=+0.190 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876576.975616152] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0103 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0098
+[INFO] [1781876576.979982526] [run_mvp_task]: frame=72 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.066818335] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0086 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0156
+[INFO] [1781876577.072579583] [run_mvp_task]: frame=73 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.246651784] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0086 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0148
+[INFO] [1781876577.250807992] [run_mvp_task]: frame=74 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.372005207] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0086 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0148
+[INFO] [1781876577.375596206] [run_mvp_task]: frame=75 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.470968971] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0086 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0185
+[INFO] [1781876577.474104512] [run_mvp_task]: frame=76 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.619605055] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0086 bbox=[856, 472, 52, 108] area_ratio=0.0061 red_ratio=0.0182
+[INFO] [1781876577.622812929] [run_mvp_task]: frame=77 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.706967280] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0086 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0137
+[INFO] [1781876577.712520820] [run_mvp_task]: frame=78 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.825743580] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0074 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0212
+[INFO] [1781876577.830751745] [run_mvp_task]: frame=79 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.007 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876577.925330344] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 50, 108] area_ratio=0.0059 red_ratio=0.0159
+[INFO] [1781876577.929698384] [run_mvp_task]: frame=80 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 50, 108] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.020247025] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0205
+[INFO] [1781876578.024442357] [run_mvp_task]: frame=81 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.145974907] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0148
+[INFO] [1781876578.150557572] [run_mvp_task]: frame=82 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.267257289] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0158
+[INFO] [1781876578.271044413] [run_mvp_task]: frame=83 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.372434843] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0192
+[INFO] [1781876578.376449675] [run_mvp_task]: frame=84 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.518966343] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0239
+[INFO] [1781876578.523128967] [run_mvp_task]: frame=85 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.675783966] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0085
+[INFO] [1781876578.679276798] [run_mvp_task]: frame=86 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.756817735] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0118
+[INFO] [1781876578.766627149] [run_mvp_task]: frame=87 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.866557704] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0146
+[INFO] [1781876578.873587619] [run_mvp_task]: frame=88 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876578.967676509] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0146 bbox=[856, 470, 52, 110] area_ratio=0.0062 red_ratio=0.0278
+[INFO] [1781876578.971881133] [run_mvp_task]: frame=89 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 110] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.053450860] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0096 bbox=[858, 472, 50, 107] area_ratio=0.0058 red_ratio=0.0219
+[INFO] [1781876579.060869441] [run_mvp_task]: frame=90 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[858, 472, 50, 107] cx=883 ex=+0.190 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.169130161] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0096 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0198
+[INFO] [1781876579.172531743] [run_mvp_task]: frame=91 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.270184216] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0096 bbox=[856, 472, 50, 108] area_ratio=0.0059 red_ratio=0.0122
+[INFO] [1781876579.274638506] [run_mvp_task]: frame=92 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 50, 108] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.375651478] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0060 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0276
+[INFO] [1781876579.379651351] [run_mvp_task]: frame=93 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.006 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.526118977] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0060 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0276
+[INFO] [1781876579.531867934] [run_mvp_task]: frame=94 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.006 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.675984643] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0055 bbox=[858, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0241
+[INFO] [1781876579.679414684] [run_mvp_task]: frame=95 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[858, 472, 52, 106] cx=884 ex=+0.191 side=右 area=0.006 class=bottle score=0.005 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.810184855] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0055 bbox=[858, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0241
+[INFO] [1781876579.818004603] [run_mvp_task]: frame=96 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[858, 472, 52, 106] cx=884 ex=+0.191 side=右 area=0.006 class=bottle score=0.005 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876579.973324268] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0067 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0187
+[INFO] [1781876579.977036350] [run_mvp_task]: frame=97 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.007 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.108872188] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0067 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0187
+[INFO] [1781876580.113113354] [run_mvp_task]: frame=98 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.007 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.223584489] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0067 bbox=[856, 472, 52, 108] area_ratio=0.0061 red_ratio=0.0192
+[INFO] [1781876580.227697155] [run_mvp_task]: frame=99 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.007 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.331483750] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0228
+[INFO] [1781876580.334955458] [run_mvp_task]: frame=100 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.469435878] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0228
+[INFO] [1781876580.472862252] [run_mvp_task]: frame=101 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.566080060] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0173
+[INFO] [1781876580.569824808] [run_mvp_task]: frame=102 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.669555530] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0143
+[INFO] [1781876580.673482113] [run_mvp_task]: frame=103 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.819294572] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0236
+[INFO] [1781876580.824206904] [run_mvp_task]: frame=104 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876580.970761904] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 472, 52, 108] area_ratio=0.0061 red_ratio=0.0249
+[INFO] [1781876580.973813153] [run_mvp_task]: frame=105 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876581.071067876] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0125
+[INFO] [1781876581.074415417] [run_mvp_task]: frame=106 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876581.167952265] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[858, 470, 50, 108] area_ratio=0.0059 red_ratio=0.0146
+[INFO] [1781876581.172233181] [run_mvp_task]: frame=107 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[858, 470, 50, 108] cx=883 ex=+0.190 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876581.269595653] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0053
+[INFO] [1781876581.273142736] [run_mvp_task]: frame=108 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876581.432146983] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0137 bbox=[856, 470, 50, 106] area_ratio=0.0058 red_ratio=0.0094
+[INFO] [1781876581.435725982] [run_mvp_task]: frame=109 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.014 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876581.517005667] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0092 bbox=[1150, 536, 52, 64] area_ratio=0.0036 red_ratio=0.0000
+[INFO] [1781876581.520256250] [run_mvp_task]: frame=110 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1150, 536, 52, 64] cx=1176 ex=+0.419 side=右 area=0.004 class=bottle score=0.009 cmd_vx=0.000 cmd_wz=-0.042
+[INFO] [1781876581.611610807] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[915, 483, 50, 99] area_ratio=0.0054 red_ratio=0.0200
+[INFO] [1781876581.619200555] [run_mvp_task]: frame=111 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[915, 483, 50, 99] cx=940 ex=+0.234 side=右 area=0.005 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876581.731472773] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[868, 473, 50, 106] area_ratio=0.0058 red_ratio=0.0094
+[INFO] [1781876581.736012856] [run_mvp_task]: frame=112 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[868, 473, 50, 106] cx=893 ex=+0.198 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876581.815038708] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[858, 471, 52, 108] area_ratio=0.0061 red_ratio=0.0148
+[INFO] [1781876581.820426373] [run_mvp_task]: frame=113 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[858, 471, 52, 108] cx=884 ex=+0.191 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876581.977937538] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[856, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0096
+[INFO] [1781876581.981568828] [run_mvp_task]: frame=114 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876582.097805712] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0175
+[INFO] [1781876582.100847961] [run_mvp_task]: frame=115 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876582.169854942] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0267
+[INFO] [1781876582.173828232] [run_mvp_task]: frame=116 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876582.319424441] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[856, 470, 50, 106] area_ratio=0.0058 red_ratio=0.0153
+[INFO] [1781876582.323878357] [run_mvp_task]: frame=117 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 50, 106] cx=881 ex=+0.188 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876582.422482662] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[856, 472, 52, 106] area_ratio=0.0060 red_ratio=0.0107
+[INFO] [1781876582.426049328] [run_mvp_task]: frame=118 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 472, 52, 106] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876582.568786205] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[856, 470, 52, 108] area_ratio=0.0061 red_ratio=0.0155
+[INFO] [1781876582.572852287] [run_mvp_task]: frame=119 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[856, 470, 52, 108] cx=882 ex=+0.189 side=右 area=0.006 class=bottle score=0.010 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876582.738129532] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0100 bbox=[1150, 537, 52, 65] area_ratio=0.0037 red_ratio=0.0000
+[INFO] [1781876582.742046114] [run_mvp_task]: frame=120 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1150, 537, 52, 65] cx=1176 ex=+0.419 side=右 area=0.004 class=bottle score=0.010 cmd_vx=0.000 cmd_wz=-0.042
+[INFO] [1781876582.827685465] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0089 bbox=[915, 483, 52, 99] area_ratio=0.0056 red_ratio=0.0155
+[INFO] [1781876582.831369756] [run_mvp_task]: frame=121 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[915, 483, 52, 99] cx=941 ex=+0.235 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876582.918475023] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0089 bbox=[868, 474, 52, 106] area_ratio=0.0060 red_ratio=0.0176
+[INFO] [1781876582.922711772] [run_mvp_task]: frame=122 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[868, 474, 52, 106] cx=894 ex=+0.198 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876583.068818356] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0089 bbox=[860, 471, 52, 108] area_ratio=0.0061 red_ratio=0.0249
+[INFO] [1781876583.073076813] [run_mvp_task]: frame=123 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[860, 471, 52, 108] cx=886 ex=+0.192 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876583.175499826] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0089 bbox=[860, 470, 50, 108] area_ratio=0.0059 red_ratio=0.0187
+[INFO] [1781876583.181683449] [run_mvp_task]: frame=124 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[860, 470, 50, 108] cx=885 ex=+0.191 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876583.319971577] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0089 bbox=[866, 472, 50, 106] area_ratio=0.0058 red_ratio=0.0217
+[INFO] [1781876583.329539282] [run_mvp_task]: frame=125 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[866, 472, 50, 106] cx=891 ex=+0.196 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876583.465993744] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0090 bbox=[872, 472, 50, 104] area_ratio=0.0056 red_ratio=0.0194
+[INFO] [1781876583.471562284] [run_mvp_task]: frame=126 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[872, 472, 50, 104] cx=897 ex=+0.201 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=-0.012
+[INFO] [1781876583.588307335] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0090 bbox=[882, 470, 52, 106] area_ratio=0.0060 red_ratio=0.0152
+[INFO] [1781876583.591975750] [run_mvp_task]: frame=127 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[882, 470, 52, 106] cx=908 ex=+0.209 side=右 area=0.006 class=bottle score=0.009 cmd_vx=0.004 cmd_wz=-0.013
+[INFO] [1781876583.668595645] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[895, 470, 50, 106] area_ratio=0.0058 red_ratio=0.0126
+[INFO] [1781876583.672777061] [run_mvp_task]: frame=128 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[895, 470, 50, 106] cx=920 ex=+0.219 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.013
+[INFO] [1781876583.822743185] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[910, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876583.826247893] [run_mvp_task]: frame=129 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[910, 468, 50, 106] cx=935 ex=+0.230 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876583.921440282] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[913, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876583.924604407] [run_mvp_task]: frame=130 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[913, 468, 50, 106] cx=938 ex=+0.233 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876584.073175240] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876584.077866613] [run_mvp_task]: frame=131 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[914, 468, 50, 106] cx=939 ex=+0.234 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876584.170762962] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876584.174224128] [run_mvp_task]: frame=132 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[914, 468, 50, 106] cx=939 ex=+0.234 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876584.273002309] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876584.277368182] [run_mvp_task]: frame=133 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[914, 468, 50, 106] cx=939 ex=+0.234 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876584.400712314] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876584.404948313] [run_mvp_task]: frame=134 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[914, 468, 50, 106] cx=939 ex=+0.234 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876584.505521618] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876584.509231159] [run_mvp_task]: frame=135 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[914, 468, 50, 106] cx=939 ex=+0.234 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876584.614199213] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[INFO] [1781876584.619636336] [run_mvp_task]: frame=136 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[914, 468, 50, 106] cx=939 ex=+0.234 side=右 area=0.006 class=bottle score=0.025 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876584.703370229] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[WARN] [1781876584.706852062] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[914, 468, 50, 106]
+[INFO] [1781876584.712739560] [run_mvp_task]: frame=137 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[914, 468, 50, 106] cx=939 area=0.006 vote_reason=hold_last_target
+[INFO] [1781876584.807775616] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[WARN] [1781876584.812684073] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[914, 468, 50, 106]
+[INFO] [1781876584.817876614] [run_mvp_task]: frame=138 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[914, 468, 50, 106] cx=939 area=0.006 vote_reason=hold_last_target
+[INFO] [1781876584.907753797] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0254 bbox=[914, 468, 50, 106] area_ratio=0.0058 red_ratio=0.0030
+[WARN] [1781876584.913136920] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[914, 468, 50, 106]
+[INFO] [1781876584.919532043] [run_mvp_task]: frame=139 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[914, 468, 50, 106] cx=939 area=0.006 vote_reason=hold_last_target
+[INFO] [1781876585.057281421] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876585.061901753] [run_mvp_task]: frame=140 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876585.207389796] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876585.211488211] [run_mvp_task]: frame=141 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876585.355261962] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876585.359718919] [run_mvp_task]: frame=142 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876585.504194296] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876585.507720170] [run_mvp_task]: frame=143 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876585.654223795] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876585.658936419] [run_mvp_task]: frame=144 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876585.755509433] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876585.761041682] [run_mvp_task]: frame=145 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876585.853978447] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876585.859137279] [run_mvp_task]: frame=146 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.004790613] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.009016653] [run_mvp_task]: frame=147 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.151464947] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.155492362] [run_mvp_task]: frame=148 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.315210609] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.320381483] [run_mvp_task]: frame=149 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.406702250] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.412872706] [run_mvp_task]: frame=150 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.555774166] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.559981582] [run_mvp_task]: frame=151 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.707943998] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.712840122] [run_mvp_task]: frame=152 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.814010260] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.819878592] [run_mvp_task]: frame=153 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876586.957903095] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876586.962960177] [run_mvp_task]: frame=154 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876587.106858220] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876587.110865968] [run_mvp_task]: frame=155 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876587.259079135] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876587.264345050] [run_mvp_task]: frame=156 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876587.407434052] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876587.413643883] [run_mvp_task]: frame=157 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876587.561147842] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 137, 164, 542] area_ratio=0.0964 red_ratio=0.0001
+[INFO] [1781876587.568649298] [run_mvp_task]: frame=158 fsm=OBSERVE servo=TURN_ONLY action=SERVO_CMD bbox=[4, 137, 164, 542] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876587.713627632] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 139, 164, 540] area_ratio=0.0961 red_ratio=0.0001
+[INFO] [1781876587.724070337] [run_mvp_task]: frame=159 fsm=OBSERVE servo=TURN_ONLY action=SERVO_CMD bbox=[4, 139, 164, 540] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876587.812711938] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 143, 164, 537] area_ratio=0.0956 red_ratio=0.0000
+[INFO] [1781876587.820222644] [run_mvp_task]: frame=160 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 143, 164, 537] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876587.904246662] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 144, 164, 536] area_ratio=0.0954 red_ratio=0.0000
+[INFO] [1781876587.908554661] [run_mvp_task]: frame=161 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 144, 164, 536] cx=86 ex=-0.433 side=左 area=0.095 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.005649883] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 144, 164, 536] area_ratio=0.0954 red_ratio=0.0000
+[INFO] [1781876588.012008506] [run_mvp_task]: frame=162 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 144, 164, 536] cx=86 ex=-0.433 side=左 area=0.095 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.163807464] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 144, 164, 536] area_ratio=0.0954 red_ratio=0.0000
+[INFO] [1781876588.168617671] [run_mvp_task]: frame=163 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 144, 164, 536] cx=86 ex=-0.433 side=左 area=0.095 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.310036089] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 144, 164, 536] area_ratio=0.0954 red_ratio=0.0000
+[INFO] [1781876588.317057837] [run_mvp_task]: frame=164 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 144, 164, 536] cx=86 ex=-0.433 side=左 area=0.095 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.466220504] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 144, 164, 536] area_ratio=0.0954 red_ratio=0.0000
+[INFO] [1781876588.475756209] [run_mvp_task]: frame=165 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 144, 164, 536] cx=86 ex=-0.433 side=左 area=0.095 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.603905548] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 144, 164, 536] area_ratio=0.0954 red_ratio=0.0000
+[INFO] [1781876588.608113505] [run_mvp_task]: frame=166 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 144, 164, 536] cx=86 ex=-0.433 side=左 area=0.095 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.710586101] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 144, 164, 536] area_ratio=0.0954 red_ratio=0.0000
+[INFO] [1781876588.721020682] [run_mvp_task]: frame=167 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 144, 164, 536] cx=86 ex=-0.433 side=左 area=0.095 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.816226863] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 138, 167, 539] area_ratio=0.0977 red_ratio=0.0001
+[INFO] [1781876588.825559527] [run_mvp_task]: frame=168 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 138, 167, 539] cx=88 ex=-0.432 side=左 area=0.098 class=bottle score=0.002 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876588.914524627] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 138, 167, 539] area_ratio=0.0977 red_ratio=0.0001
+[WARN] [1781876588.920253751] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[4, 138, 167, 539]
+[INFO] [1781876588.924063416] [run_mvp_task]: frame=169 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[4, 138, 167, 539] cx=88 area=0.098 vote_reason=hold_last_target
+[INFO] [1781876589.056866587] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 138, 167, 539] area_ratio=0.0977 red_ratio=0.0001
+[WARN] [1781876589.060881961] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[4, 138, 167, 539]
+[INFO] [1781876589.066666543] [run_mvp_task]: frame=170 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[4, 138, 167, 539] cx=88 area=0.098 vote_reason=hold_last_target
+[INFO] [1781876589.208604086] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0019 bbox=[4, 138, 167, 539] area_ratio=0.0977 red_ratio=0.0001
+[WARN] [1781876589.213212918] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[4, 138, 167, 539]
+[INFO] [1781876589.218957000] [run_mvp_task]: frame=171 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[4, 138, 167, 539] cx=88 area=0.098 vote_reason=hold_last_target
+[INFO] [1781876589.364286292] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876589.371435915] [run_mvp_task]: frame=172 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876589.453850976] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876589.458091599] [run_mvp_task]: frame=173 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876589.557422446] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876589.562646987] [run_mvp_task]: frame=174 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876589.706214988] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876589.710206570] [run_mvp_task]: frame=175 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876589.855206613] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876589.859723861] [run_mvp_task]: frame=176 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876589.960922874] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876589.967111164] [run_mvp_task]: frame=177 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876590.058066930] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876590.064525554] [run_mvp_task]: frame=178 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876590.210710054] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876590.216662719] [run_mvp_task]: frame=179 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876590.353837930] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876590.358307346] [run_mvp_task]: frame=180 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876590.457156860] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876590.462921441] [run_mvp_task]: frame=181 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876590.609575692] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876590.614612190] [run_mvp_task]: frame=182 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876590.764396690] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[INFO] [1781876590.768445022] [run_mvp_task]: frame=183 fsm=OBSERVE servo=TURN_ONLY action=SERVO_CMD bbox=[4, 140, 164, 538] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.001 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876590.906845441] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[INFO] [1781876590.910702982] [run_mvp_task]: frame=184 fsm=OBSERVE servo=TURN_ONLY action=SERVO_CMD bbox=[4, 140, 164, 538] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.001 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876591.010400121] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[INFO] [1781876591.020621534] [run_mvp_task]: frame=185 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 140, 164, 538] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.001 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876591.185569030] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[INFO] [1781876591.189918820] [run_mvp_task]: frame=186 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 140, 164, 538] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.001 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876591.307141329] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[INFO] [1781876591.310204745] [run_mvp_task]: frame=187 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 140, 164, 538] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.001 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876591.404422510] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[INFO] [1781876591.408173342] [run_mvp_task]: frame=188 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[4, 140, 164, 538] cx=86 ex=-0.433 side=左 area=0.096 class=bottle score=0.001 cmd_vx=0.000 cmd_wz=+0.043
+[INFO] [1781876591.503294190] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[WARN] [1781876591.506724856] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[4, 140, 164, 538]
+[INFO] [1781876591.511872271] [run_mvp_task]: frame=189 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[4, 140, 164, 538] cx=86 area=0.096 vote_reason=hold_last_target
+[INFO] [1781876591.606140120] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[WARN] [1781876591.612174826] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[4, 140, 164, 538]
+[INFO] [1781876591.619692574] [run_mvp_task]: frame=190 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[4, 140, 164, 538] cx=86 area=0.096 vote_reason=hold_last_target
+[INFO] [1781876591.758215285] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0012 bbox=[4, 140, 164, 538] area_ratio=0.0957 red_ratio=0.0000
+[WARN] [1781876591.763449284] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[4, 140, 164, 538]
+[INFO] [1781876591.767089491] [run_mvp_task]: frame=191 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[4, 140, 164, 538] cx=86 area=0.096 vote_reason=hold_last_target
+[INFO] [1781876591.858090965] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876591.862755631] [run_mvp_task]: frame=192 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.003730091] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.007875881] [run_mvp_task]: frame=193 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.104415438] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.110579894] [run_mvp_task]: frame=194 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.208120408] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.214175615] [run_mvp_task]: frame=195 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.355427867] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.359457407] [run_mvp_task]: frame=196 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.506261366] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.510173240] [run_mvp_task]: frame=197 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.656555449] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.660786031] [run_mvp_task]: frame=198 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.812573530] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.818038820] [run_mvp_task]: frame=199 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876592.954069532] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876592.957724697] [run_mvp_task]: frame=200 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876593.069655124] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0904 bbox=[902, 0, 168, 584] area_ratio=0.1065 red_ratio=0.0000
+[INFO] [1781876593.073119873] [run_mvp_task]: frame=201 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[902, 0, 168, 584] cx=986 ex=+0.270 side=右 area=0.106 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.016
+[INFO] [1781876593.204649169] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0904 bbox=[902, 0, 168, 584] area_ratio=0.1065 red_ratio=0.0000
+[INFO] [1781876593.208611460] [run_mvp_task]: frame=202 fsm=OBSERVE servo=FORWARD action=SERVO_CMD bbox=[902, 0, 168, 584] cx=986 ex=+0.270 side=右 area=0.106 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.016
+[INFO] [1781876593.312665472] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0904 bbox=[902, 0, 168, 584] area_ratio=0.1065 red_ratio=0.0000
+[INFO] [1781876593.318279637] [run_mvp_task]: frame=203 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[902, 0, 168, 584] cx=986 ex=+0.270 side=右 area=0.106 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.016
+[INFO] [1781876593.455988349] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0904 bbox=[902, 0, 168, 584] area_ratio=0.1065 red_ratio=0.0000
+[INFO] [1781876593.460317347] [run_mvp_task]: frame=204 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[902, 0, 168, 584] cx=986 ex=+0.270 side=右 area=0.106 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.016
+[INFO] [1781876593.558603695] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0904 bbox=[902, 0, 168, 584] area_ratio=0.1065 red_ratio=0.0000
+[INFO] [1781876593.565814901] [run_mvp_task]: frame=205 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[902, 0, 168, 584] cx=986 ex=+0.270 side=右 area=0.106 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.016
+[INFO] [1781876593.664904123] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0904 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0188
+[INFO] [1781876593.674341704] [run_mvp_task]: frame=206 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876593.819765663] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0073
+[INFO] [1781876593.823325120] [run_mvp_task]: frame=207 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876593.961596081] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0076
+[INFO] [1781876593.968100371] [run_mvp_task]: frame=208 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.062823303] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0153
+[INFO] [1781876594.068256718] [run_mvp_task]: frame=209 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.165761482] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0112
+[INFO] [1781876594.173487230] [run_mvp_task]: frame=210 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.311901524] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[636, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0084
+[INFO] [1781876594.319065939] [run_mvp_task]: frame=211 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 50, 100] cx=661 ex=+0.016 side=右 area=0.005 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.412356537] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[636, 474, 48, 100] area_ratio=0.0052 red_ratio=0.0202
+[INFO] [1781876594.418501869] [run_mvp_task]: frame=212 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 100] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.512510176] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0188
+[INFO] [1781876594.519802841] [run_mvp_task]: frame=213 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.614502064] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0122
+[INFO] [1781876594.620513854] [run_mvp_task]: frame=214 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.780092892] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0724 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0155
+[INFO] [1781876594.783641891] [run_mvp_task]: frame=215 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.072 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.866109410] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0595 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0155
+[INFO] [1781876594.869730825] [run_mvp_task]: frame=216 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.059 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876594.974567212] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0595 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0155
+[INFO] [1781876594.979033128] [run_mvp_task]: frame=217 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.059 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876595.067076311] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0595 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0143
+[INFO] [1781876595.072800643] [run_mvp_task]: frame=218 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.059 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876595.220138352] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0595 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0163
+[INFO] [1781876595.227450724] [run_mvp_task]: frame=219 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.059 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876595.372450184] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0595 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0129
+[INFO] [1781876595.376423266] [run_mvp_task]: frame=220 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.059 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876595.465633574] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0595 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0127
+[INFO] [1781876595.472138072] [run_mvp_task]: frame=221 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.059 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876595.555856465] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0161 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0163
+[INFO] [1781876595.559713048] [run_mvp_task]: frame=222 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.016 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876595.720878169] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0063
+[INFO] [1781876595.724413584] [run_mvp_task]: frame=223 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876595.863304670] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0090
+[INFO] [1781876595.868733585] [run_mvp_task]: frame=224 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.021604584] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[636, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0162
+[INFO] [1781876596.027561249] [run_mvp_task]: frame=225 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 50, 100] cx=661 ex=+0.016 side=右 area=0.005 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.114274683] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[636, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0163
+[INFO] [1781876596.119706265] [run_mvp_task]: frame=226 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 50, 102] cx=661 ex=+0.016 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.224089194] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[636, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0128
+[INFO] [1781876596.227890109] [run_mvp_task]: frame=227 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 50, 100] cx=661 ex=+0.016 side=右 area=0.005 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.366170445] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0110
+[INFO] [1781876596.370785236] [run_mvp_task]: frame=228 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.517133319] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0124
+[INFO] [1781876596.521708818] [run_mvp_task]: frame=229 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.616003458] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0076
+[INFO] [1781876596.622456165] [run_mvp_task]: frame=230 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.762418542] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0328 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0071
+[INFO] [1781876596.770091331] [run_mvp_task]: frame=231 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876596.865859513] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0078
+[INFO] [1781876596.870371428] [run_mvp_task]: frame=232 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.017817220] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0112
+[INFO] [1781876597.021432552] [run_mvp_task]: frame=233 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 100] cx=659 ex=+0.015 side=右 area=0.005 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.117339775] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0129
+[INFO] [1781876597.121844816] [run_mvp_task]: frame=234 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 48, 102] cx=658 ex=+0.014 side=右 area=0.005 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.214258331] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 50, 104] area_ratio=0.0056 red_ratio=0.0252
+[INFO] [1781876597.221949329] [run_mvp_task]: frame=235 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 104] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.320351260] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0141
+[INFO] [1781876597.324706259] [run_mvp_task]: frame=236 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.466933427] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0112
+[INFO] [1781876597.471599342] [run_mvp_task]: frame=237 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.620200467] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0112
+[INFO] [1781876597.624679716] [run_mvp_task]: frame=238 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.712869982] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0169
+[INFO] [1781876597.718084023] [run_mvp_task]: frame=239 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.814857287] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[636, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0084
+[INFO] [1781876597.820249536] [run_mvp_task]: frame=240 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 50, 102] cx=661 ex=+0.016 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876597.963652037] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0540 bbox=[634, 474, 50, 104] area_ratio=0.0056 red_ratio=0.0133
+[INFO] [1781876597.968531202] [run_mvp_task]: frame=241 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 104] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.054 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.069281174] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0147 bbox=[636, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0198
+[INFO] [1781876598.072557339] [run_mvp_task]: frame=242 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 50, 102] cx=661 ex=+0.016 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.166193438] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0147 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0131
+[INFO] [1781876598.170968812] [run_mvp_task]: frame=243 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.270675492] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0147 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0131
+[INFO] [1781876598.274293658] [run_mvp_task]: frame=244 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.361483341] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0348 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0084
+[INFO] [1781876598.368365673] [run_mvp_task]: frame=245 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.035 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.528089919] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0348 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0169
+[INFO] [1781876598.535341084] [run_mvp_task]: frame=246 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.035 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.627736975] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0348 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0169
+[INFO] [1781876598.631860682] [run_mvp_task]: frame=247 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.035 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.729740112] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0084
+[INFO] [1781876598.733625695] [run_mvp_task]: frame=248 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.853127203] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0063
+[INFO] [1781876598.857022410] [run_mvp_task]: frame=249 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876598.972112961] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[636, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0171
+[INFO] [1781876598.975931918] [run_mvp_task]: frame=250 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 50, 102] cx=661 ex=+0.016 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.115925087] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0122
+[INFO] [1781876599.120834961] [run_mvp_task]: frame=251 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.216065725] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0218
+[INFO] [1781876599.221464391] [run_mvp_task]: frame=252 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.320728863] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0067
+[INFO] [1781876599.325640111] [run_mvp_task]: frame=253 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.413640711] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0100
+[INFO] [1781876599.420246585] [run_mvp_task]: frame=254 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.519043640] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0071
+[INFO] [1781876599.523155306] [run_mvp_task]: frame=255 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.660278642] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0092
+[INFO] [1781876599.670242347] [run_mvp_task]: frame=256 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.766202237] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0370 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0147
+[INFO] [1781876599.770714236] [run_mvp_task]: frame=257 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.037 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.868996958] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0235 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0147
+[INFO] [1781876599.873577582] [run_mvp_task]: frame=258 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.023 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876599.973604595] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0235 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0122
+[INFO] [1781876599.978890344] [run_mvp_task]: frame=259 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.023 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876600.120866012] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0235 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0065
+[INFO] [1781876600.128190385] [run_mvp_task]: frame=260 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.023 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876600.213300819] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0235 bbox=[634, 476, 48, 102] area_ratio=0.0053 red_ratio=0.0161
+[INFO] [1781876600.220831859] [run_mvp_task]: frame=261 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 48, 102] cx=658 ex=+0.014 side=右 area=0.005 class=bottle score=0.023 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876600.314806791] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0235 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0192
+[INFO] [1781876600.319375956] [run_mvp_task]: frame=262 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.023 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876600.468746581] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0332 bbox=[636, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0082
+[INFO] [1781876600.472693746] [run_mvp_task]: frame=263 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 50, 102] cx=661 ex=+0.016 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876600.614394248] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0332 bbox=[636, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0141
+[INFO] [1781876600.619930663] [run_mvp_task]: frame=264 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 50, 102] cx=661 ex=+0.016 side=右 area=0.006 class=bottle score=0.033 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876600.763084164] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[634, 474, 50, 104] area_ratio=0.0056 red_ratio=0.0056
+[INFO] [1781876600.768740454] [run_mvp_task]: frame=265 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 104] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876600.914682497] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[636, 476, 48, 101] area_ratio=0.0053 red_ratio=0.0102
+[INFO] [1781876600.919968078] [run_mvp_task]: frame=266 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 48, 101] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.018307051] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0092
+[INFO] [1781876601.022084925] [run_mvp_task]: frame=267 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.121002188] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0116
+[INFO] [1781876601.125827187] [run_mvp_task]: frame=268 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.218046369] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0073
+[INFO] [1781876601.223698368] [run_mvp_task]: frame=269 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.360662329] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0076
+[INFO] [1781876601.368108494] [run_mvp_task]: frame=270 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.460587134] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[636, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0130
+[INFO] [1781876601.465442008] [run_mvp_task]: frame=271 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 50, 100] cx=661 ex=+0.016 side=右 area=0.005 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.572115311] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[636, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0130
+[INFO] [1781876601.575730977] [run_mvp_task]: frame=272 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 50, 100] cx=661 ex=+0.016 side=右 area=0.005 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.721255936] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[634, 474, 48, 100] area_ratio=0.0052 red_ratio=0.0123
+[INFO] [1781876601.725478018] [run_mvp_task]: frame=273 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 48, 100] cx=658 ex=+0.014 side=右 area=0.005 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876601.870190769] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0798 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0133
+[INFO] [1781876601.874611143] [run_mvp_task]: frame=274 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.080 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.018960393] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0219 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0218
+[INFO] [1781876602.022723351] [run_mvp_task]: frame=275 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.022 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.167307227] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0194
+[INFO] [1781876602.172342225] [run_mvp_task]: frame=276 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.327157098] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[634, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0130
+[INFO] [1781876602.332402305] [run_mvp_task]: frame=277 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 100] cx=659 ex=+0.015 side=右 area=0.005 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.409358033] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[634, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0130
+[INFO] [1781876602.414653532] [run_mvp_task]: frame=278 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 100] cx=659 ex=+0.015 side=右 area=0.005 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.563177157] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0152 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0078
+[INFO] [1781876602.570489155] [run_mvp_task]: frame=279 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.015 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.717677905] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0257 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0151
+[INFO] [1781876602.721854237] [run_mvp_task]: frame=280 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.026 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.808490671] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[634, 474, 50, 100] area_ratio=0.0054 red_ratio=0.0066
+[INFO] [1781876602.814228753] [run_mvp_task]: frame=281 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 100] cx=659 ex=+0.015 side=右 area=0.005 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876602.910648934] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0143
+[INFO] [1781876602.917466015] [run_mvp_task]: frame=282 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.068310098] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0104
+[INFO] [1781876603.071323180] [run_mvp_task]: frame=283 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.214603806] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0098
+[INFO] [1781876603.219923305] [run_mvp_task]: frame=284 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.316176111] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0135
+[INFO] [1781876603.320090693] [run_mvp_task]: frame=285 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.417991249] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0057
+[INFO] [1781876603.423424997] [run_mvp_task]: frame=286 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.524025844] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0076
+[INFO] [1781876603.528853718] [run_mvp_task]: frame=287 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.664559846] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0076
+[INFO] [1781876603.670832761] [run_mvp_task]: frame=288 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.815253762] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0316 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0176
+[INFO] [1781876603.820786635] [run_mvp_task]: frame=289 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876603.970170885] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[634, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0106
+[INFO] [1781876603.974142092] [run_mvp_task]: frame=290 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 48, 102] cx=658 ex=+0.014 side=右 area=0.005 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.113697011] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0147
+[INFO] [1781876604.119813176] [run_mvp_task]: frame=291 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.218363023] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0180
+[INFO] [1781876604.222732355] [run_mvp_task]: frame=292 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.311112122] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0096
+[INFO] [1781876604.320249494] [run_mvp_task]: frame=293 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.421332174] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0043
+[INFO] [1781876604.427478006] [run_mvp_task]: frame=294 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.567645008] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0167
+[INFO] [1781876604.572015840] [run_mvp_task]: frame=295 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.669886271] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[634, 476, 50, 100] area_ratio=0.0054 red_ratio=0.0154
+[INFO] [1781876604.673817020] [run_mvp_task]: frame=296 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 100] cx=659 ex=+0.015 side=右 area=0.005 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.763161328] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0127
+[INFO] [1781876604.770954326] [run_mvp_task]: frame=297 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876604.913258744] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[636, 476, 48, 102] area_ratio=0.0053 red_ratio=0.0198
+[INFO] [1781876604.928148906] [run_mvp_task]: frame=298 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.015063548] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0681 bbox=[636, 474, 48, 102] area_ratio=0.0053 red_ratio=0.0202
+[INFO] [1781876605.019476297] [run_mvp_task]: frame=299 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 48, 102] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.068 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.120517935] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0557 bbox=[636, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0204
+[INFO] [1781876605.149219761] [run_mvp_task]: frame=300 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 474, 50, 102] cx=661 ex=+0.016 side=右 area=0.006 class=bottle score=0.056 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.262087187] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0557 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0155
+[INFO] [1781876605.266136436] [run_mvp_task]: frame=301 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.056 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.413558061] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0323 bbox=[634, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0110
+[INFO] [1781876605.421772142] [run_mvp_task]: frame=302 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 474, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.519353073] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0323 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0110
+[INFO] [1781876605.522559614] [run_mvp_task]: frame=303 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.616758004] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0323 bbox=[634, 476, 50, 102] area_ratio=0.0055 red_ratio=0.0094
+[INFO] [1781876605.622756044] [run_mvp_task]: frame=304 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[634, 476, 50, 102] cx=659 ex=+0.015 side=右 area=0.006 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.766797461] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0323 bbox=[636, 476, 48, 100] area_ratio=0.0052 red_ratio=0.0142
+[INFO] [1781876605.772506210] [run_mvp_task]: frame=305 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[636, 476, 48, 100] cx=660 ex=+0.016 side=右 area=0.005 class=bottle score=0.032 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876605.866861808] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[639, 478, 50, 98] area_ratio=0.0053 red_ratio=0.0186
+[INFO] [1781876605.871591973] [run_mvp_task]: frame=306 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[639, 478, 50, 98] cx=664 ex=+0.019 side=右 area=0.005 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.025739013] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[641, 476, 48, 98] area_ratio=0.0051 red_ratio=0.0166
+[INFO] [1781876606.029758012] [run_mvp_task]: frame=307 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[641, 476, 48, 98] cx=665 ex=+0.020 side=右 area=0.005 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.112661030] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[642, 476, 48, 98] area_ratio=0.0051 red_ratio=0.0166
+[INFO] [1781876606.118577154] [run_mvp_task]: frame=308 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[642, 476, 48, 98] cx=666 ex=+0.020 side=右 area=0.005 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.255767198] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[642, 474, 50, 101] area_ratio=0.0055 red_ratio=0.0194
+[INFO] [1781876606.259737989] [run_mvp_task]: frame=309 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[642, 474, 50, 101] cx=667 ex=+0.021 side=右 area=0.005 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.357909378] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[642, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0194
+[INFO] [1781876606.362665668] [run_mvp_task]: frame=310 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[642, 474, 50, 102] cx=667 ex=+0.021 side=右 area=0.006 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.455737767] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[642, 474, 50, 102] area_ratio=0.0055 red_ratio=0.0194
+[INFO] [1781876606.460823849] [run_mvp_task]: frame=311 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[642, 474, 50, 102] cx=667 ex=+0.021 side=右 area=0.006 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.605874183] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[663, 474, 52, 102] area_ratio=0.0058 red_ratio=0.0107
+[INFO] [1781876606.610128182] [run_mvp_task]: frame=312 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[663, 474, 52, 102] cx=689 ex=+0.038 side=右 area=0.006 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.706643446] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[667, 474, 52, 102] area_ratio=0.0058 red_ratio=0.0107
+[INFO] [1781876606.712125986] [run_mvp_task]: frame=313 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[667, 474, 52, 102] cx=693 ex=+0.041 side=右 area=0.006 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.827540454] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[711, 468, 50, 110] area_ratio=0.0060 red_ratio=0.0130
+[INFO] [1781876606.831801786] [run_mvp_task]: frame=314 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[711, 468, 50, 110] cx=736 ex=+0.075 side=右 area=0.006 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876606.923638385] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0865 bbox=[728, 465, 53, 110] area_ratio=0.0063 red_ratio=0.0101
+[INFO] [1781876606.927101259] [run_mvp_task]: frame=315 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[728, 465, 53, 110] cx=754 ex=+0.089 side=右 area=0.006 class=bottle score=0.087 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876607.073189384] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0413 bbox=[731, 472, 57, 116] area_ratio=0.0072 red_ratio=0.0172
+[INFO] [1781876607.077354300] [run_mvp_task]: frame=316 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[731, 472, 57, 116] cx=760 ex=+0.093 side=右 area=0.007 class=bottle score=0.041 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876607.240483087] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0413 bbox=[732, 474, 58, 118] area_ratio=0.0074 red_ratio=0.0172
+[INFO] [1781876607.243643545] [run_mvp_task]: frame=317 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[732, 474, 58, 118] cx=761 ex=+0.095 side=右 area=0.007 class=bottle score=0.041 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876607.373777675] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0413 bbox=[766, 461, 60, 129] area_ratio=0.0084 red_ratio=0.0247
+[INFO] [1781876607.378589673] [run_mvp_task]: frame=318 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[766, 461, 60, 129] cx=796 ex=+0.122 side=右 area=0.008 class=bottle score=0.041 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876607.508738678] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[779, 459, 63, 135] area_ratio=0.0092 red_ratio=0.0211
+[INFO] [1781876607.514883551] [run_mvp_task]: frame=319 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[779, 459, 63, 135] cx=810 ex=+0.133 side=右 area=0.009 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876607.606444276] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[781, 458, 64, 136] area_ratio=0.0094 red_ratio=0.0211
+[INFO] [1781876607.610746816] [run_mvp_task]: frame=320 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[781, 458, 64, 136] cx=813 ex=+0.135 side=右 area=0.009 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876607.708898538] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[811, 456, 77, 157] area_ratio=0.0131 red_ratio=0.0293
+[INFO] [1781876607.714258245] [run_mvp_task]: frame=321 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[811, 456, 77, 157] cx=850 ex=+0.164 side=右 area=0.013 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876607.864349786] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[817, 456, 79, 161] area_ratio=0.0138 red_ratio=0.0293
+[INFO] [1781876607.870144993] [run_mvp_task]: frame=322 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[817, 456, 79, 161] cx=856 ex=+0.169 side=右 area=0.014 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876608.007972496] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[834, 448, 85, 170] area_ratio=0.0157 red_ratio=0.0129
+[INFO] [1781876608.012039161] [run_mvp_task]: frame=323 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[834, 448, 85, 170] cx=876 ex=+0.185 side=右 area=0.016 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=+0.000
+[INFO] [1781876608.156193370] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[858, 443, 91, 196] area_ratio=0.0194 red_ratio=0.0237
+[INFO] [1781876608.159999744] [run_mvp_task]: frame=324 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[858, 443, 91, 196] cx=904 ex=+0.206 side=右 area=0.019 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.012
+[INFO] [1781876608.312216118] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[888, 436, 100, 215] area_ratio=0.0233 red_ratio=0.0316
+[INFO] [1781876608.316981200] [run_mvp_task]: frame=325 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[888, 436, 100, 215] cx=938 ex=+0.233 side=右 area=0.023 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.014
+[INFO] [1781876608.471557156] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[914, 428, 111, 245] area_ratio=0.0295 red_ratio=0.0247
+[INFO] [1781876608.474902572] [run_mvp_task]: frame=326 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[914, 428, 111, 245] cx=970 ex=+0.257 side=右 area=0.030 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.015
+[INFO] [1781876608.555956383] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[919, 426, 113, 251] area_ratio=0.0308 red_ratio=0.0247
+[INFO] [1781876608.561145256] [run_mvp_task]: frame=327 fsm=VISUAL_SERVO servo=FORWARD action=SERVO_CMD bbox=[919, 426, 113, 251] cx=976 ex=+0.262 side=右 area=0.031 class=bottle score=0.090 cmd_vx=0.004 cmd_wz=-0.016
+[INFO] [1781876608.660690103] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0896 bbox=[977, 402, 138, 303] area_ratio=0.0454 red_ratio=0.0215
+[INFO] [1781876608.666742976] [run_mvp_task]: frame=328 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[977, 402, 138, 303] cx=1046 ex=+0.317 side=右 area=0.045 class=bottle score=0.090 cmd_vx=0.000 cmd_wz=-0.032
+[INFO] [1781876608.753640035] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0863 bbox=[989, 397, 143, 313] area_ratio=0.0486 red_ratio=0.0215
+[INFO] [1781876608.761520325] [run_mvp_task]: frame=329 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[989, 397, 143, 313] cx=1060 ex=+0.329 side=右 area=0.049 class=bottle score=0.086 cmd_vx=0.000 cmd_wz=-0.033
+[INFO] [1781876608.902847076] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0863 bbox=[991, 396, 144, 315] area_ratio=0.0492 red_ratio=0.0215
+[INFO] [1781876608.906369325] [run_mvp_task]: frame=330 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[991, 396, 144, 315] cx=1063 ex=+0.330 side=右 area=0.049 class=bottle score=0.086 cmd_vx=0.000 cmd_wz=-0.033
+[INFO] [1781876609.061091365] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0863 bbox=[1083, 374, 165, 341] area_ratio=0.0611 red_ratio=0.0103
+[INFO] [1781876609.066854530] [run_mvp_task]: frame=331 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1083, 374, 165, 341] cx=1166 ex=+0.411 side=右 area=0.061 class=bottle score=0.086 cmd_vx=0.000 cmd_wz=-0.041
+[INFO] [1781876609.207969074] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0863 bbox=[1101, 369, 169, 347] area_ratio=0.0636 red_ratio=0.0103
+[INFO] [1781876609.212703281] [run_mvp_task]: frame=332 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1101, 369, 169, 347] cx=1186 ex=+0.426 side=右 area=0.064 class=bottle score=0.086 cmd_vx=0.000 cmd_wz=-0.043
+[INFO] [1781876609.353983741] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0863 bbox=[1203, 323, 72, 189] area_ratio=0.0148 red_ratio=0.0025
+[INFO] [1781876609.357190656] [run_mvp_task]: frame=333 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1203, 323, 72, 189] cx=1239 ex=+0.468 side=右 area=0.015 class=bottle score=0.086 cmd_vx=0.000 cmd_wz=-0.047
+[INFO] [1781876609.503268907] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0863 bbox=[1223, 314, 53, 158] area_ratio=0.0091 red_ratio=0.0025
+[INFO] [1781876609.507165906] [run_mvp_task]: frame=334 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1223, 314, 53, 158] cx=1250 ex=+0.476 side=右 area=0.009 class=bottle score=0.086 cmd_vx=0.000 cmd_wz=-0.048
+[INFO] [1781876609.608832002] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0863 bbox=[1227, 312, 49, 152] area_ratio=0.0081 red_ratio=0.0025
+[INFO] [1781876609.614113626] [run_mvp_task]: frame=335 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1227, 312, 49, 152] cx=1252 ex=+0.478 side=右 area=0.008 class=bottle score=0.086 cmd_vx=0.000 cmd_wz=-0.048
+[INFO] [1781876609.713008723] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0423 bbox=[1228, 312, 48, 150] area_ratio=0.0078 red_ratio=0.0025
+[INFO] [1781876609.720276096] [run_mvp_task]: frame=336 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1228, 312, 48, 150] cx=1252 ex=+0.478 side=右 area=0.008 class=bottle score=0.042 cmd_vx=0.000 cmd_wz=-0.048
+[INFO] [1781876609.809150446] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0423 bbox=[1228, 312, 48, 150] area_ratio=0.0078 red_ratio=0.0025
+[INFO] [1781876609.816187069] [run_mvp_task]: frame=337 fsm=VISUAL_SERVO servo=TURN_ONLY action=SERVO_CMD bbox=[1228, 312, 48, 150] cx=1252 ex=+0.478 side=右 area=0.008 class=bottle score=0.042 cmd_vx=0.000 cmd_wz=-0.048
+[INFO] [1781876609.907129835] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0423 bbox=[1228, 312, 48, 150] area_ratio=0.0078 red_ratio=0.0025
+[WARN] [1781876609.912313500] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[1228, 312, 48, 150]
+[INFO] [1781876609.922157372] [run_mvp_task]: frame=338 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[1228, 312, 48, 150] cx=1252 area=0.008 vote_reason=hold_last_target
+[INFO] [1781876610.056662251] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0423 bbox=[1228, 312, 48, 150] area_ratio=0.0078 red_ratio=0.0025
+[WARN] [1781876610.060487833] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[1228, 312, 48, 150]
+[INFO] [1781876610.065719915] [run_mvp_task]: frame=339 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[1228, 312, 48, 150] cx=1252 area=0.008 vote_reason=hold_last_target
+[INFO] [1781876610.154876265] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0423 bbox=[1228, 312, 48, 150] area_ratio=0.0078 red_ratio=0.0025
+[WARN] [1781876610.158727138] [run_mvp_task]: [SERVO_STALE_TARGET] stale target, stop servo to avoid drifting. reason=hold_last_target vote_reason=hold_last_target source=held_old_target bbox=[1228, 312, 48, 150]
+[INFO] [1781876610.164666012] [run_mvp_task]: frame=340 fsm=VISUAL_SERVO action=STALE_TARGET_STOP bbox=[1228, 312, 48, 150] cx=1252 area=0.008 vote_reason=hold_last_target
+[INFO] [1781876610.305729014] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876610.309670721] [run_mvp_task]: frame=341 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876610.405522027] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876610.411101484] [run_mvp_task]: frame=342 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876610.512910414] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876610.518832412] [run_mvp_task]: frame=343 fsm=OBSERVE servo=LOST_STOP action=LOST_HOLD_TURN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876610.606162804] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876610.611018261] [run_mvp_task]: frame=344 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876610.754637387] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876610.759070427] [run_mvp_task]: frame=345 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876610.905018553] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876610.909254677] [run_mvp_task]: frame=346 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.010214398] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.016685688] [run_mvp_task]: frame=347 fsm=OBSERVE servo=LOST_STOP action=LOST_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.104481246] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.108661995] [run_mvp_task]: frame=348 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.261401286] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.268609158] [run_mvp_task]: frame=349 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_PULSE_SCAN target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.406182453] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.410527118] [run_mvp_task]: frame=350 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.554219203] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.557889910] [run_mvp_task]: frame=351 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.657738424] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.662800756] [run_mvp_task]: frame=352 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.762867269] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.771771141] [run_mvp_task]: frame=353 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_OBSERVE_STOP target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876611.909623352] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876611.915314934] [run_mvp_task]: frame=354 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876612.058436144] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876612.063691184] [run_mvp_task]: frame=355 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876612.206355644] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876612.210828017] [run_mvp_task]: frame=356 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876612.362700433] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876612.366680598] [run_mvp_task]: frame=357 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876612.508837975] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876612.515361723] [run_mvp_task]: frame=358 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876612.655151100] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876612.658929099] [run_mvp_task]: frame=359 fsm=OBSERVE servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876612.757598946] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876612.763021903] [run_mvp_task]: frame=360 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876612.906687613] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876612.912111403] [run_mvp_task]: frame=361 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876613.055878237] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876613.060561194] [run_mvp_task]: frame=362 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876613.206465695] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876613.210867568] [run_mvp_task]: frame=363 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876613.354994653] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876613.359682901] [run_mvp_task]: frame=364 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876613.506155193] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876613.510541775] [run_mvp_task]: frame=365 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876613.652721485] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876613.657546817] [run_mvp_task]: frame=366 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876613.801888110] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876613.806458733] [run_mvp_task]: frame=367 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876613.952311984] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876613.956714691] [run_mvp_task]: frame=368 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.055887163] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.061034953] [run_mvp_task]: frame=369 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.154317469] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.159276384] [run_mvp_task]: frame=370 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.302609802] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.306682801] [run_mvp_task]: frame=371 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.404373606] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.409428605] [run_mvp_task]: frame=372 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.508231660] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.517661824] [run_mvp_task]: frame=373 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.659741659] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.664760991] [run_mvp_task]: frame=374 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.799979786] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.805946534] [run_mvp_task]: frame=375 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876614.917097503] [run_mvp_task]: [MVP_REJECT] reason=waiting_multiframe_votes class= score=0.0000 bbox=None area_ratio=0.0000 red_ratio=0.0000
+[INFO] [1781876614.924564334] [run_mvp_task]: frame=376 fsm=RECOVERY_SCAN servo=LOST_STOP action=RECOVERY_REPLAN_WAIT target=LOST reason=waiting_multiframe_votes
+[INFO] [1781876615.060336963] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0038 bbox=[814, 190, 462, 370] area_ratio=0.1855 red_ratio=0.0003
+[INFO] [1781876615.065801128] [run_mvp_task]: frame=377 fsm=OBSERVE servo=ARRIVED_STOP action=SERVO_CMD bbox=[814, 190, 462, 370] cx=1045 ex=+0.316 side=右 area=0.185 class=bottle score=0.004 cmd_vx=0.000 cmd_wz=+0.000
+[INFO] [1781876615.217814376] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0038 bbox=[811, 193, 465, 367] area_ratio=0.1852 red_ratio=0.0003
+[INFO] [1781876615.222188667] [run_mvp_task]: frame=378 fsm=OBSERVE servo=ARRIVED_STOP action=SERVO_CMD bbox=[811, 193, 465, 367] cx=1044 ex=+0.315 side=右 area=0.185 class=bottle score=0.004 cmd_vx=0.000 cmd_wz=+0.000
+[INFO] [1781876615.368751167] [run_mvp_task]: [MVP_TARGET] class=bottle score=0.0038 bbox=[813, 197, 463, 363] area_ratio=0.1824 red_ratio=0.0001
+[INFO] [1781876615.372803916] [run_mvp_task]: frame=379 fsm=SUCCESS servo=ARRIVED_STOP action=SUCCESS_STOP bbox=[813, 197, 463, 363] cx=1044 ex=+0.316 side=右 area=0.182 class=bottle score=0.004 cmd_vx=0.000 cmd_wz=+0.000
+[INFO] [1781876615.375725832] [run_mvp_task]: ===== TASK SUCCESS, elapsed=47.69s =====
