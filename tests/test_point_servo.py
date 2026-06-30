@@ -28,7 +28,7 @@ def test_left_target_turns_positive_wz():
     servo = PointServo(PointServoConfig(image_width=640, kp_turn=0.12, max_wz=0.06))
     res = servo.compute_cmd({"visible": True, "u": 120})
     assert res.state == "TURN_ONLY"
-    assert res.cmd.vx == 0.0
+    assert res.cmd.vx == 0.04
     assert res.cmd.wz > 0.0
 
 
@@ -36,7 +36,7 @@ def test_right_target_turns_negative_wz():
     servo = PointServo(PointServoConfig(image_width=640, kp_turn=0.12, max_wz=0.06))
     res = servo.compute_cmd({"visible": True, "u": 520})
     assert res.state == "TURN_ONLY"
-    assert res.cmd.vx == 0.0
+    assert res.cmd.vx == 0.04
     assert res.cmd.wz < 0.0
 
 

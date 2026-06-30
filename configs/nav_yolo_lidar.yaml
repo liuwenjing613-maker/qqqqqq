@@ -29,57 +29,67 @@ camera:
   image_raw_max_fps: 8
 
 yolo_world:
+  enabled: false
+
+yolov5s_bpu:
   enabled: true
-  feed_type: 1
+  model: /root/rdk_model_zoo/samples/vision/yolov5/model/yolov5s_tag_v7.0_detect_640x640_bayese_nv12.bin
+  runtime_dir: /root/rdk_model_zoo/samples/vision/yolov5/runtime/python
+  zoo_root: /root/rdk_model_zoo
+  input_type: raw
   image_topic: /image_raw
-  det_topic: /hobot_yolo_world
-  score_threshold: 0.02
-  iou_threshold: 0.45
+  out_topic: /target_bbox_json
+  target_words_topic: /target_words
+  target_classes: bottle
+  score_threshold: 0.2
+  nms_threshold: 0.45
+  max_hz: 10.0
 
 yolo_bridge:
-  image_topic: /image_raw
-  det_topic: /hobot_yolo_world
+  enabled: false
   out_topic: /target_bbox_json
   target_classes: bottle
-  min_score: 0.02
+  min_score: 0.2
   max_area_ratio: 0.30
-  require_red_verify: false
-  sync_max_delta_sec: 0.12
-  publish_rate_hz: 10.0
-  voter_window_size: 4
-  voter_min_votes: 2
-  voter_lost_hold_frames: 1
-  voter_iou_threshold: 0.05
-  voter_center_dist_threshold: 0.18
-  voter_smooth_alpha: 0.20
+  voter_window_size: 1
+  voter_min_votes: 1
+  voter_lost_hold_frames: 0
 
 target:
   source: yolo_bbox
   words: ["bottle"]
   classes: ["bottle"]
-  min_score: 0.02
+  min_score: 0.2
   min_area_ratio: 0.0008
   max_area_ratio: 0.30
   accept_unknown_class: false
   accept_stale: false
 
 voter:
-  enabled: true
-  window_size: 4
-  min_votes: 2
-  lost_hold_frames: 1
+  enabled: false
+  window_size: 1
+  min_votes: 1
+  lost_hold_frames: 0
   iou_threshold: 0.05
   smooth_alpha: 0.20
 
 fsm:
-  require_lidar: true
   stable_frames_required: 3
   lost_frames_limit: 5
-  arrive_required_frames: 4
   centered_required_frames: 3
   max_search_sec: 45
-  max_task_sec: 180
+  max_task_sec: 0
   min_state_frames: 2
+
+success:
+  require_lidar: true
+  center_px: 70
+  min_distance: 0.6
+  max_distance: 0.7
+  min_area_ratio: 0.16
+  center_only_enabled: false
+  arrive_frames: 2
+  verify_frames: 2
   qwen_verify_required: false
 
 servo:
@@ -88,25 +98,20 @@ servo:
   max_wz: 0.06
   kp_turn: 0.12
   center_deadband: 0.06
-  turn_only_threshold: 0.20
+  turn_only_threshold: 0.35
+  turn_only_vx: 0.04
   cmd_wz_deadband: 0.006
 
 safety:
   require_lidar: true
-  emergency_stop_distance: 0.45
-  hard_stop_distance: 0.55
+  emergency_stop_distance: 0.25
+  hard_stop_distance: 0.35
   slow_distance: 0.90
   max_cmd_vx: 0.06
   max_cmd_wz: 0.06
   turn_zero_vx_wz: 0.05
   turn_slow_vx_wz: 0.035
   turn_slow_vx_scale: 0.5
-
-arrive:
-  center_px: 70
-  arrive_required_frames: 4
-  arrive_min_distance: 0.58
-  arrive_max_distance: 0.75
 
 search:
   scan_wz: 0.04

@@ -46,10 +46,11 @@ mkdir -p logs
 echo "===== V2 yolo_lidar_nav ====="
 echo "CONFIG=$CONFIG INSTRUCTION=$INSTRUCTION NAV_ONLY=$NAV_ONLY"
 echo "CAMERA_DEV=$CAMERA_DEV CHASSIS_PORT=$CHASSIS_PORT"
-echo "TARGET_WORDS=$TARGET_WORDS TARGET_CLASSES=$TARGET_CLASSES SCORE_THRESHOLD=$SCORE_THRESHOLD"
+echo "DETECTOR_BACKEND=${DETECTOR_BACKEND:-yolo_world} TARGET_WORDS=$TARGET_WORDS TARGET_CLASSES=$TARGET_CLASSES SCORE_THRESHOLD=$SCORE_THRESHOLD"
 echo "[V2] not starting Qwen/Ollama."
 
 pkill -f run_shared_nav.py || true
+pkill -f yolov5s_bpu_web_node.py || true
 pkill -f yolo_world_to_bbox_json.py || true
 pkill -f hobot_yolo_world || true
 pkill -f compressed_to_raw_image.py || true
@@ -87,27 +88,47 @@ source "$PROJECT_DIR/scripts/lidar/source_ydlidar.sh"
 ros2 launch "$PROJECT_DIR/lidar/launch/tmini_plus.launch.py" > logs/yolo_lidar_scan.log 2>&1 &
 sleep 5
 
-echo "[3/6] start YOLO-World..."
-pkill -f hobot_yolo_world || true
-sleep 1
-source_stage10_env
-ros2 run hobot_yolo_world hobot_yolo_world \
-  --ros-args \
-  -p feed_type:="$YOLO_FEED_TYPE" \
-  -p ros_img_sub_topic_name:="$YOLO_IMAGE_TOPIC" \
-  -p ros_string_sub_topic_name:=/target_words \
-  -p ai_msg_pub_topic_name:="$DET_TOPIC" \
-  -p texts:="$TARGET_WORDS" \
-  -p score_threshold:="$SCORE_THRESHOLD" \
-  -p iou_threshold:="$YOLO_IOU_THRESHOLD" \
-  > logs/yolo_lidar_yolo_world.log 2>&1 &
-sleep 4
+if [ "${DETECTOR_BACKEND:-yolo_world}" = "yolov5s_bpu" ]; then
+  echo "[3/5] start YOLOv5s-BPU detector..."
+  pkill -f yolov5s_bpu_web_node.py || true
+  sleep 1
+  python3 "$PROJECT_DIR/src/perception/yolov5s_bpu_web_node.py" \
+    --model "$YOLOV5S_MODEL" \
+    --runtime-dir "$YOLOV5S_RUNTIME_DIR" \
+    --zoo-root "$YOLOV5S_ZOO_ROOT" \
+    --input-type "$YOLOV5S_INPUT_TYPE" \
+    --image-topic "$YOLOV5S_IMAGE_TOPIC" \
+    --out-topic "$YOLOV5S_OUT_TOPIC" \
+    --target-words-topic "$YOLOV5S_TARGET_WORDS_TOPIC" \
+    --target-classes "$TARGET_CLASSES" \
+    --score-thres "$SCORE_THRESHOLD" \
+    --nms-thres "$YOLOV5S_NMS_THRESHOLD" \
+    --max-hz "$YOLOV5S_MAX_HZ" \
+    > logs/yolo_lidar_yolov5s_bpu.log 2>&1 &
+  sleep 4
+else
+  echo "[3/6] start YOLO-World..."
+  pkill -f hobot_yolo_world || true
+  sleep 1
+  source_stage10_env
+  ros2 run hobot_yolo_world hobot_yolo_world \
+    --ros-args \
+    -p feed_type:="$YOLO_FEED_TYPE" \
+    -p ros_img_sub_topic_name:="$YOLO_IMAGE_TOPIC" \
+    -p ros_string_sub_topic_name:=/target_words \
+    -p ai_msg_pub_topic_name:="$DET_TOPIC" \
+    -p texts:="$TARGET_WORDS" \
+    -p score_threshold:="$SCORE_THRESHOLD" \
+    -p iou_threshold:="$YOLO_IOU_THRESHOLD" \
+    > logs/yolo_lidar_yolo_world.log 2>&1 &
+  sleep 4
 
-echo "[4/6] start bbox JSON bridge..."
-python3 "$PROJECT_DIR/src/perception/yolo_world_to_bbox_json.py" \
-  --config "$CONFIG" \
-  > logs/yolo_lidar_bbox_bridge.log 2>&1 &
-sleep 2
+  echo "[4/6] start bbox JSON bridge..."
+  python3 "$PROJECT_DIR/src/perception/yolo_world_to_bbox_json.py" \
+    --config "$CONFIG" \
+    > logs/yolo_lidar_bbox_bridge.log 2>&1 &
+  sleep 2
+fi
 
 echo "[5/6] start chassis bridge..."
 source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"

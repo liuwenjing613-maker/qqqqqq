@@ -30,14 +30,20 @@ target:
   accept_stale: false
 
 fsm:
-  require_lidar: false
   stable_frames_required: 3
   lost_frames_limit: 5
-  arrive_required_frames: 4
   centered_required_frames: 3
   max_search_sec: 30
   max_task_sec: 180
   min_state_frames: 2
+
+success:
+  require_lidar: false
+  center_px: 70
+  min_area_ratio: 0.16
+  center_only_enabled: false
+  arrive_frames: 4
+  verify_frames: 4
   qwen_verify_required: false
 
 servo:
@@ -56,12 +62,6 @@ safety:
   slow_distance: 0.90
   max_cmd_vx: 0.06
   max_cmd_wz: 0.06
-
-arrive:
-  center_px: 70
-  arrive_required_frames: 4
-  arrive_area_ratio: 0.16
-  center_only_arrive_enabled: false
 
 search:
   scan_wz: 0.04

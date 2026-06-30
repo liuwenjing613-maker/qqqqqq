@@ -45,6 +45,7 @@ class NavFSMConfig:
     stable_frames_required: int = 3
     lost_frames_limit: int = 5
     arrive_required_frames: int = 4
+    verify_required_frames: int = 4
     centered_required_frames: int = 3
     max_search_sec: float = 30.0
     max_task_sec: float = 180.0
@@ -114,7 +115,7 @@ class NavStateMachine:
 
         if self.state in (NavState.SUCCESS, NavState.FAILED):
             reason = "terminal"
-        elif task_elapsed > self.cfg.max_task_sec:
+        elif self.cfg.max_task_sec > 0 and task_elapsed > self.cfg.max_task_sec:
             self._enter(NavState.FAILED, obs.now)
             reason = "max_task_sec"
         elif obs.require_lidar and not obs.scan_fresh:
@@ -247,7 +248,7 @@ class NavStateMachine:
                     reason = "waiting_qwen_verify"
             else:
                 self.arrive_verify_frames += 1
-                if self.arrive_verify_frames >= max(1, self.cfg.arrive_required_frames):
+                if self.arrive_verify_frames >= max(1, self.cfg.verify_required_frames):
                     self._enter(NavState.SUCCESS, obs.now)
                     reason = "arrive_verified"
                 else:

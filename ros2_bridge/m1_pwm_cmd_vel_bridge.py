@@ -56,6 +56,14 @@ def parse_motor_signs(text: str) -> Tuple[int, int, int, int]:
     return signs[0], signs[1], signs[2], signs[3]
 
 
+def parse_motor_trims(text: str) -> Tuple[float, float, float, float]:
+    parts = [p.strip() for p in str(text).split(",") if p.strip()]
+    if len(parts) != 4:
+        raise ValueError(f"motor-trims must have 4 comma-separated values, got {text!r}")
+    trims = [float(p) for p in parts]
+    return trims[0], trims[1], trims[2], trims[3]
+
+
 class PwmSmoother:
     def __init__(self, alpha: float, max_delta: float, pwm_max: float):
         self.alpha = float(alpha)
@@ -100,6 +108,7 @@ class M1PwmCmdVelBridge(Node):
         smooth_alpha: float = 0.35,
         max_pwm_delta: float = 3.0,
         motor_signs: str = "1,1,1,1",
+        motor_trims: str = "1.0,1.0,1.0,1.0",
         wheel_layout: str = YAHBOOM_M1_LAYOUT,
         debug: bool = False,
         publish_odom: bool = False,
@@ -149,6 +158,7 @@ class M1PwmCmdVelBridge(Node):
         self.wz_pwm_gain = float(wz_pwm_gain)
         self.debug = bool(debug)
         self.motor_signs = parse_motor_signs(motor_signs)
+        self.motor_trims = parse_motor_trims(motor_trims)
         self.wheel_layout = str(wheel_layout)
 
         self.lock = threading.Lock()
@@ -219,6 +229,9 @@ class M1PwmCmdVelBridge(Node):
             self.get_logger().info("m1_pwm_cmd_vel_bridge started (drive_mode=pwm, no /odom)")
         self.get_logger().info(describe_layout(self.wheel_layout))
         self.get_logger().info(
+            f"motor_signs={list(self.motor_signs)}, motor_trims={list(self.motor_trims)}"
+        )
+        self.get_logger().info(
             f"limits: max_vx={self.max_vx:.3f}, max_wz={self.max_wz:.3f}, "
             f"vx_db={self.vx_pwm_deadband:.1f}, wz_db={self.wz_pwm_deadband:.1f}, "
             f"pwm_max={self.pwm_max:.1f}, vx_gain={self.vx_pwm_gain:.1f}, wz_gain={self.wz_pwm_gain:.1f}"
@@ -276,7 +289,13 @@ class M1PwmCmdVelBridge(Node):
             wheel_layout=self.wheel_layout,
         )
         s1, s2, s3, s4 = self.motor_signs
-        targets = [m1 * s1, m2 * s2, m3 * s3, m4 * s4]
+        t1, t2, t3, t4 = self.motor_trims
+        targets = [
+            clamp(m1 * s1 * t1, -self.pwm_max, self.pwm_max),
+            clamp(m2 * s2 * t2, -self.pwm_max, self.pwm_max),
+            clamp(m3 * s3 * t3, -self.pwm_max, self.pwm_max),
+            clamp(m4 * s4 * t4, -self.pwm_max, self.pwm_max),
+        ]
         pwms = self.pwm_smoother.update(targets)
 
         self.vx_pwm = vx_pwm
@@ -424,6 +443,7 @@ class M1PwmCmdVelBridge(Node):
                 "vx_pwm_gain": self.vx_pwm_gain,
                 "wz_pwm_gain": self.wz_pwm_gain,
                 "motor_signs": list(self.motor_signs),
+                "motor_trims": list(self.motor_trims),
                 "time": time.time(),
             }
         self.state_pub.publish(String(data=json.dumps(state, ensure_ascii=False)))
@@ -460,6 +480,11 @@ def main() -> None:
     parser.add_argument("--smooth-alpha", type=float, default=0.35)
     parser.add_argument("--max-pwm-delta", type=float, default=3.0)
     parser.add_argument("--motor-signs", default="1,1,1,1")
+    parser.add_argument(
+        "--motor-trims",
+        default=os.environ.get("CHASSIS_MOTOR_TRIMS", "1.0,1.0,1.0,1.0"),
+        help="Per-motor PWM scale factors M1,M2,M3,M4 (applied after motor_signs)",
+    )
     parser.add_argument(
         "--wheel-layout",
         default=YAHBOOM_M1_LAYOUT,
@@ -517,6 +542,7 @@ def main() -> None:
         smooth_alpha=args.smooth_alpha,
         max_pwm_delta=args.max_pwm_delta,
         motor_signs=args.motor_signs,
+        motor_trims=args.motor_trims,
         wheel_layout=args.wheel_layout,
         debug=args.debug,
         publish_odom=args.publish_odom,
