@@ -1,0 +1,114 @@
+# =============================================================================
+# MVP YOLO-World green bottle 低分检测 + M1 底盘稳态配置
+# 启动脚本、run_mvp_task.py、底盘桥会自动读取；日常优先只改这里。
+# =============================================================================
+
+# -----------------------------
+# YOLO 低分检测（cup 召回优先；误检时可略升 yolo_min_score）
+# -----------------------------
+yolo_min_score: 0.001
+det_stale_sec: 1.2
+sync_max_delta_sec: 0.5
+
+# YOLO-World cup 检测；不做红色强校验
+min_red_ratio: 0.045
+max_area_ratio: 0.40
+
+# -----------------------------
+# 视觉伺服巡航速度
+# 注意：这是目标可见时的巡航速度，不是启动脉冲
+# -----------------------------
+max_vx: 0.004
+max_wz: 0.055
+kp_turn: 0.10
+
+wz_deadzone: 0.08
+cmd_vx_deadzone: 0.003
+cmd_wz_deadzone: 0.012
+odom_vxy_deadzone: 0.003
+odom_wz_deadzone: 0.015
+forward_turn_scale: 0.60
+turn_threshold: 0.30
+forward_threshold: 0.18
+
+arrive_area_ratio: 0.16
+slowdown_area_ratio: 0.07
+
+# -----------------------------
+# FSM 稳定性
+# -----------------------------
+stable_frames_required: 3
+lost_frames_limit: 20
+
+# -----------------------------
+# 目标丢失后恢复策略
+# A: 1~3 帧，vx=0，保留上一帧小角速度趋势，不触发新的强启动脉冲
+# B: 4~7 帧，完全停止观察，等图像稳定
+# C: 8~25 帧，小步脉冲扫描：转一下、停一下、再看
+# D: 超过 25 帧或约 2 秒，停止等待重规划
+# -----------------------------
+lost_hold_frames: 3
+lost_observe_frames: 7
+recovery_scan_max_frames: 25
+recovery_replan_sec: 2.0
+lost_hold_wz_scale: 0.40
+lost_hold_max_wz: 0.035
+recovery_scan_wz: 0.040
+recovery_pulse_frames: 2
+recovery_observe_frames: 6
+
+# -----------------------------
+# 底盘限制
+# chassis_max_wz 必须 >= kick_wz
+# -----------------------------
+# 底盘串口（Rosmaster M1，全项目唯一入口，改这里即可）
+# 确认方法: python3 v0/test_rosmaster_connection.py --port <端口>  正确时 battery>0
+# 常见设备: /dev/ttyUSB0  /dev/ttyUSB1  /dev/myserial  /dev/rosmaster
+chassis_port: /dev/ttyUSB1
+chassis_max_vx: 0.06
+chassis_max_wz: 0.06
+
+# PWM 底盘桥 (m1_pwm_cmd_vel_bridge.py)
+chassis_pwm_wheel_layout: fl-rl-fr-rr
+chassis_motor_signs: "1,1,1,1"
+chassis_vx_pwm_deadband: 6.0
+chassis_wz_pwm_deadband: 8.0
+chassis_pwm_max: 30.0
+chassis_vx_pwm_gain: 180.0
+chassis_wz_pwm_gain: 120.0
+chassis_pwm_smooth_alpha: 0.35
+chassis_max_pwm_delta: 3.0
+chassis_watchdog_timeout: 0.5
+
+# -----------------------------
+# 启动脉冲
+# 根据实测：vx>=0.05, wz>=0.24 才能稳定启动
+# 所以幅值保留，靠 duration 控制不要转过
+# -----------------------------
+enable_kick_start: true
+kick_vx: 0.055
+kick_wz: 0.240
+kick_duration: 0.045
+kick_cooldown: 0.55
+
+# -----------------------------
+# 底盘输出平滑器
+# -----------------------------
+cmd_smooth_alpha: 0.55
+max_vx_delta: 0.010
+max_wz_delta: 0.008
+control_rate_hz: 20
+
+# -----------------------------
+# M1 MCU sanitize (底盘桥启动时也会执行)
+# -----------------------------
+sanitize_on_start: true
+sanitize_pid_kp: 1.2
+sanitize_pid_ki: 0.05
+sanitize_pid_kd: 0.02
+sanitize_speed_limit_vx: 0.0
+sanitize_speed_limit_wz: 0.0
+sanitize_imu_adjust: false
+sanitize_yaw_pid_zero: true
+sanitize_write_flash: false
+sanitize_settle_sec: 0.8

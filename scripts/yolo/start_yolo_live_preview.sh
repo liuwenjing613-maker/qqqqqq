@@ -16,8 +16,8 @@ if [ -f /opt/tros/humble/setup.bash ]; then
   set -u
 fi
 
-TARGET_WORDS="${TARGET_WORDS:-pen}"
-TARGET_CLASSES="${TARGET_CLASSES:-pen}"
+TARGET_WORDS="${TARGET_WORDS:-bottle}"
+TARGET_CLASSES="${TARGET_CLASSES:-bottle}"
 IMAGE_TOPIC="${IMAGE_TOPIC:-/image_raw}"
 DET_TOPIC="${DET_TOPIC:-/hobot_yolo_world}"
 WEB_PORT="${WEB_PORT:-8088}"
@@ -25,8 +25,10 @@ WEB_HOST="${WEB_HOST:-0.0.0.0}"
 MIN_SCORE="${MIN_SCORE:-0.001}"
 RAW_MIN_SCORE="${RAW_MIN_SCORE:-0.0}"
 MAX_AREA_RATIO="${MAX_AREA_RATIO:-0.40}"
-SYNC_MAX_DELTA_SEC="${SYNC_MAX_DELTA_SEC:-0.5}"
-SHOW_ALL_BOXES="${SHOW_ALL_BOXES:-1}"
+SYNC_MAX_DELTA_SEC="${SYNC_MAX_DELTA_SEC:-0.15}"
+SHOW_ALL_BOXES="${SHOW_ALL_BOXES:-0}"
+PREVIEW_FPS="${PREVIEW_FPS:-12}"
+JPEG_QUALITY="${JPEG_QUALITY:-65}"
 RUN_YOLO_CHAIN="${RUN_YOLO_CHAIN:-1}"
 
 mkdir -p logs
@@ -56,6 +58,7 @@ if [ "$RUN_YOLO_CHAIN" = "1" ]; then
   SHOW_ALL_BOXES="$SHOW_ALL_BOXES" \
   RAW_MIN_SCORE="$RAW_MIN_SCORE" \
   SAVE_INTERVAL="${SAVE_INTERVAL:-30}" \
+  SKIP_DIAG_PREVIEW=1 \
   bash "$PROJECT_DIR/scripts/yolo/start_yolo_diag_raw.sh" \
     > "$PROJECT_DIR/logs/live_preview_yolo_chain.log" 2>&1 &
   CHAIN_PID="$!"
@@ -83,6 +86,8 @@ ARGS=(
   --sync-max-delta-sec "$SYNC_MAX_DELTA_SEC"
   --host "$WEB_HOST"
   --port "$WEB_PORT"
+  --fps "$PREVIEW_FPS"
+  --jpeg-quality "$JPEG_QUALITY"
   --no-red-verify
 )
 

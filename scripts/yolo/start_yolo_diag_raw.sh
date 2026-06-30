@@ -107,6 +107,12 @@ ros2 topic info "$RAW_IMAGE_TOPIC" || true
 ros2 topic info "$TARGET_WORDS_TOPIC" || true
 ros2 topic info "$DET_TOPIC" || true
 
+SKIP_DIAG_PREVIEW="${SKIP_DIAG_PREVIEW:-0}"
+if [ "$SKIP_DIAG_PREVIEW" = "1" ]; then
+  echo "[6/6] SKIP_DIAG_PREVIEW=1 — camera + YOLO only (for browser live preview)."
+  exit 0
+fi
+
 echo "[6/6] start diagnostic preview (foreground, Ctrl+C to stop)..."
 echo "  snapshots -> $SAVE_DIR"
 echo "  yolo log    -> $PROJECT_DIR/logs/yolo_diag_yolo_world.log"

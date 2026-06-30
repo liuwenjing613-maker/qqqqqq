@@ -1,0 +1,162 @@
+mode: qwen_yolo_nav
+instruction: "find the green bottle"
+
+image_topic: /image_raw
+scan_topic: /scan
+cmd_topic: /cmd_vel
+target_bbox_topic: /target_bbox_json
+target_words_topic: /target_words
+state_topic: /nav_state
+point_topic: /nav_target_point
+
+target_words:
+  - bottle
+  - cup
+
+topics:
+  image_raw: /image_raw
+  scan: /scan
+  cmd_vel: /cmd_vel
+  target_bbox_json: /target_bbox_json
+  target_words: /target_words
+  nav_state: /nav_state
+  nav_target_point: /nav_target_point
+
+camera:
+  device: /dev/video0
+  compressed_topic: /image
+  width: 640
+  height: 480
+  image_raw_max_fps: 6
+
+yolo_world:
+  enabled: true
+  feed_type: 1
+  image_topic: /image_raw
+  det_topic: /hobot_yolo_world
+  score_threshold: 0.02
+  iou_threshold: 0.45
+
+yolo_bridge:
+  image_topic: /image_raw
+  det_topic: /hobot_yolo_world
+  out_topic: /target_bbox_json
+  target_classes: bottle,cup
+  min_score: 0.02
+  max_area_ratio: 0.30
+  require_red_verify: false
+  sync_max_delta_sec: 0.12
+  publish_rate_hz: 10.0
+  voter_window_size: 4
+  voter_min_votes: 2
+  voter_lost_hold_frames: 1
+  voter_iou_threshold: 0.05
+  voter_center_dist_threshold: 0.18
+  voter_smooth_alpha: 0.20
+
+qwen:
+  enabled: true
+  role: semantic_prompt_and_verify
+  backend: cloud
+  block_control: false
+  call_interval_sec: 8.0
+  timeout_sec: 12.0
+  verify_on_arrive: true
+  replan_after_search_sec: 12.0
+  default_words: ["bottle", "cup"]
+  default_classes: ["bottle", "cup"]
+
+target:
+  source: yolo_bbox
+  words: ["bottle", "cup"]
+  classes: ["bottle", "cup"]
+  min_score: 0.02
+  min_area_ratio: 0.0008
+  max_area_ratio: 0.30
+  accept_unknown_class: false
+  accept_stale: false
+
+voter:
+  enabled: true
+  window_size: 4
+  min_votes: 2
+  lost_hold_frames: 1
+  iou_threshold: 0.05
+  smooth_alpha: 0.20
+
+fsm:
+  require_lidar: true
+  stable_frames_required: 3
+  lost_frames_limit: 5
+  arrive_required_frames: 4
+  centered_required_frames: 3
+  max_search_sec: 60
+  max_task_sec: 240
+  min_state_frames: 2
+  qwen_verify_required: true
+  qwen_verify_timeout_sec: 12.0
+  qwen_verify_fail_policy: search
+
+servo:
+  max_vx: 0.06
+  steer_vx: 0.04
+  max_wz: 0.06
+  kp_turn: 0.12
+  center_deadband: 0.06
+  turn_only_threshold: 0.20
+  cmd_wz_deadband: 0.006
+
+safety:
+  require_lidar: true
+  emergency_stop_distance: 0.45
+  hard_stop_distance: 0.55
+  slow_distance: 0.90
+  max_cmd_vx: 0.06
+  max_cmd_wz: 0.06
+  turn_zero_vx_wz: 0.05
+  turn_slow_vx_wz: 0.035
+  turn_slow_vx_scale: 0.5
+
+arrive:
+  center_px: 70
+  arrive_required_frames: 4
+  arrive_min_distance: 0.58
+  arrive_max_distance: 0.75
+
+search:
+  scan_wz: 0.04
+  pulse_sec: 0.20
+  observe_sec: 0.60
+  free_space_enabled: false
+  free_space_enable_after_sec: 15.0
+  free_space_vx: 0.015
+  free_space_min_clearance: 1.0
+
+freshness:
+  image_stale_sec: 0.50
+  scan_stale_sec: 0.30
+  bbox_stale_sec: 0.50
+  qwen_result_stale_sec: 20.0
+
+rates:
+  decision_hz: 10
+  control_hz: 20
+  state_pub_hz: 5
+
+chassis:
+  bridge: pwm
+  port: /dev/ttyUSB1
+  max_vx: 0.06
+  max_wz: 0.06
+  watchdog_timeout: 0.5
+  control_rate_hz: 20.0
+  wheel_layout: fl-rl-fr-rr
+  motor_signs: "1,1,1,1"
+  vx_pwm_deadband: 6.0
+  wz_pwm_deadband: 8.0
+  pwm_max: 30.0
+  vx_pwm_gain: 180.0
+  wz_pwm_gain: 120.0
+  pwm_smooth_alpha: 0.35
+  max_pwm_delta: 3.0
+  debug: true

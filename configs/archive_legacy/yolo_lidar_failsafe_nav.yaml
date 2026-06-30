@@ -39,10 +39,10 @@ camera_hfov_deg: 70.0
 camera_lidar_yaw_offset_deg: 0.0
 
 # ===== Target words =====
-instruction: "pen"
+instruction: "bottle"
 
 target_words:
-  - "pen"
+  - "bottle"
 
 context_words:
   - "table"
@@ -82,7 +82,7 @@ yolo_bridge:
   det_topic: "/hobot_yolo_world"
   out_topic: "/target_bbox_json"
   image_topic: "/image_raw"
-  target_classes: "pen"
+  target_classes: "bottle"
   min_score: 0.001
   max_area_ratio: 0.40
   min_red_ratio: 0.06
