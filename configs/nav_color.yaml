@@ -1,0 +1,98 @@
+mode: color_nav
+instruction: "find the red object"
+
+image_topic: /image_raw
+scan_topic: /scan
+cmd_topic: /cmd_vel
+state_topic: /nav_state
+point_topic: /nav_target_point
+
+topics:
+  image_raw: /image_raw
+  scan: /scan
+  cmd_vel: /cmd_vel
+  nav_state: /nav_state
+  nav_target_point: /nav_target_point
+
+camera:
+  device: /dev/video0
+  compressed_topic: /image
+  width: 640
+  height: 480
+  image_raw_max_fps: 8
+
+target:
+  source: color
+  color: red
+  min_area_ratio: 0.004
+  max_area_ratio: 0.35
+  min_score: 0.20
+  accept_stale: false
+
+fsm:
+  require_lidar: false
+  stable_frames_required: 3
+  lost_frames_limit: 5
+  arrive_required_frames: 4
+  centered_required_frames: 3
+  max_search_sec: 30
+  max_task_sec: 180
+  min_state_frames: 2
+  qwen_verify_required: false
+
+servo:
+  max_vx: 0.06
+  steer_vx: 0.04
+  max_wz: 0.06
+  kp_turn: 0.12
+  center_deadband: 0.06
+  turn_only_threshold: 0.20
+  cmd_wz_deadband: 0.006
+
+safety:
+  require_lidar: false
+  emergency_stop_distance: 0.45
+  hard_stop_distance: 0.55
+  slow_distance: 0.90
+  max_cmd_vx: 0.06
+  max_cmd_wz: 0.06
+
+arrive:
+  center_px: 70
+  arrive_required_frames: 4
+  arrive_area_ratio: 0.16
+  center_only_arrive_enabled: false
+
+search:
+  scan_wz: 0.04
+  pulse_sec: 0.20
+  observe_sec: 0.60
+  free_space_enabled: false
+
+freshness:
+  image_stale_sec: 0.40
+  scan_stale_sec: 0.30
+  bbox_stale_sec: 0.45
+
+rates:
+  decision_hz: 10
+  control_hz: 20
+  state_pub_hz: 5
+
+chassis:
+  bridge: pwm
+  port: /dev/ttyUSB0
+  max_vx: 0.06
+  max_wz: 0.06
+  watchdog_timeout: 0.5
+  control_rate_hz: 20.0
+  wheel_layout: fl-rl-fr-rr
+  motor_signs: "1,1,1,1"
+  vx_pwm_deadband: 6.0
+  wz_pwm_deadband: 8.0
+  pwm_max: 30.0
+  vx_pwm_gain: 180.0
+  wz_pwm_gain: 120.0
+  pwm_smooth_alpha: 0.35
+  max_pwm_delta: 3.0
+  debug: true
