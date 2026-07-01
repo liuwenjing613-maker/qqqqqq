@@ -1,0 +1,148 @@
+{
+  "configById": {
+    "Image!nav_overlay": {
+      "imageMode": {
+        "imageTopic": "/yolov5s_bpu/annotated/compressed"
+      },
+      "synchronize": false,
+      "smooth": false,
+      "rotation": 0,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": 0,
+      "maxValue": 1
+    },
+    "Plot!cmd_vx": {
+      "title": "cmd_vel.linear.x",
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/cmd_vel.linear.x",
+          "enabled": true,
+          "color": "#4e98e2"
+        },
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/cmd_vel_sent.linear.x",
+          "enabled": true,
+          "color": "#f5774d"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "Plot!cmd_wz": {
+      "title": "cmd_vel.angular.z",
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/cmd_vel.angular.z",
+          "enabled": true,
+          "color": "#4e98e2"
+        },
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/cmd_vel_sent.angular.z",
+          "enabled": true,
+          "color": "#f5774d"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "3D!nav_scan": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 8,
+        "phi": 60,
+        "thetaOffset": 45,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-none",
+      "followTf": "base_link",
+      "scene": {
+        "enableStats": false,
+        "backgroundColor": "#1a1a1a"
+      },
+      "transforms": {
+        "enable": true,
+        "showLabel": false,
+        "lineWidth": 0.2,
+        "labelSize": 0.05
+      },
+      "topics": {
+        "/scan": {
+          "visible": true,
+          "pointSize": 4,
+          "decayTime": 0
+        },
+        "/scan_filtered": {
+          "visible": false
+        }
+      },
+      "layers": {},
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      }
+    },
+    "RawMessages!nav_state": {
+      "topicPath": "/nav_state",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": {
+        "data": "e"
+      }
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "Image!nav_overlay",
+    "second": {
+      "direction": "column",
+      "first": {
+        "direction": "row",
+        "first": "Plot!cmd_vx",
+        "second": "Plot!cmd_wz",
+        "splitPercentage": 50
+      },
+      "second": {
+        "direction": "column",
+        "first": "3D!nav_scan",
+        "second": "RawMessages!nav_state",
+        "splitPercentage": 62
+      },
+      "splitPercentage": 45
+    },
+    "splitPercentage": 58
+  }
+}

@@ -145,9 +145,25 @@ if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   pkill -f "foxglove_bridge" 2>/dev/null || true
   bash "$PROJECT_DIR/scripts/lidar/start_foxglove.sh" \
     > "$PROJECT_DIR/logs/yolo_lidar_foxglove_bridge.log" 2>&1 &
+  sleep 2
+  if ss -tln 2>/dev/null | grep -q ':8765'; then
+    echo "[foxglove] bridge OK ws://$(hostname -I 2>/dev/null | awk '{print $1}'):8765"
+  else
+    echo "[foxglove] WARN: bridge not listening on 8765; see logs/yolo_lidar_foxglove_bridge.log"
+  fi
+else
+  echo "[foxglove] WARN: foxglove_bridge not installed; skip WebSocket viz."
 fi
 
 echo "[yolo_lidar_nav] started pid=$!"
+echo ""
+echo "===== Foxglove (navigation overlay) ====="
+echo "  1. Connect: ws://$(hostname -I 2>/dev/null | awk '{print $1}'):8765"
+echo "  2. Layout -> Import layout -> ${PROJECT_DIR}/configs/foxglove_yolo_lidar_nav.layout.json"
+echo "  3. Image panel topic MUST be: /yolov5s_bpu/annotated/compressed"
+echo "     (same overlay as browser http://<RDK_IP>:8088/stream.mjpg)"
+echo "  Do NOT use raw /image or /image_raw if you want TARGET/STATE/UV/VEL/front."
+echo ""
 echo "  tail -f logs/yolo_lidar_nav.log"
 echo "  ros2 topic echo /nav_state"
 echo "  ros2 topic echo /target_bbox_json"

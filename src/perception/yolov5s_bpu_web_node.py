@@ -12,6 +12,7 @@ from pathlib import Path
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import String
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge
@@ -163,9 +164,16 @@ class Yolov5sBpuWebNode(Node):
 
         self.model = self.load_model(args)
 
+        # foxglove_bridge subscribes with RELIABLE; match it for annotated overlay stream.
+        foxglove_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+        )
+
         self.pub_json = self.create_publisher(String, args.out_topic, 10)
         self.pub_debug = self.create_publisher(String, args.debug_topic, 10)
-        self.pub_img = self.create_publisher(CompressedImage, args.annotated_topic, 10)
+        self.pub_img = self.create_publisher(CompressedImage, args.annotated_topic, foxglove_qos)
 
         self.sub_words = self.create_subscription(
             String, args.target_words_topic, self.on_target_words, 10
