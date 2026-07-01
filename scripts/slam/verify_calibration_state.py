@@ -16,6 +16,7 @@ EXPECTED: Dict[str, Any] = {
     "odom_use_vy": False,
     "odom_vxy_deadzone": 0.003,
     "odom_wz_deadzone": 0.015,
+    "odom_xy_yaw_offset": 0.0,
 }
 
 

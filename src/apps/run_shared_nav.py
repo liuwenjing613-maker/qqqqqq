@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.config.nav_birth_scan import load_birth_scan_config
 from src.config.nav_success import load_success_config
 from src.config.nav_voter import load_voter_config
 from src.control.point_servo import PointServo, PointServoConfig, ServoCommand, clamp
@@ -81,8 +82,10 @@ class SharedNav(Node):
         safety = section(cfg, "safety")
         success_cfg = load_success_config(cfg)
         voter_cfg = load_voter_config(cfg)
+        birth_scan_cfg = load_birth_scan_config(cfg)
         search = section(cfg, "search")
         track_cfg = section(cfg, "track")
+        chassis_cfg = section(cfg, "chassis")
 
         self.image_width = int(camera.get("width", cfg.get("image_width", cfg.get("camera_width", 640))))
         self.image_height = int(camera.get("height", cfg.get("image_height", cfg.get("camera_height", 480))))
@@ -131,8 +134,18 @@ class SharedNav(Node):
                 emergency_target_recent_sec=float(success_cfg["emergency_target_recent_sec"]),
                 lost_target_servo_sec=self.lost_target_servo_sec,
                 center_only_arrive_enabled=bool(success_cfg["center_only_enabled"]),
+                birth_scan_enabled=bool(birth_scan_cfg["enabled"]),
+                birth_scan_wait_sec=float(birth_scan_cfg["wait_sec"]),
+                birth_scan_wz=float(birth_scan_cfg["scan_wz"]),
+                birth_scan_effective_wz=float(birth_scan_cfg["effective_scan_wz"]),
+                birth_scan_deg=float(birth_scan_cfg["scan_deg"]),
+                birth_scan_turn_dir=float(birth_scan_cfg["turn_dir"]),
             )
         )
+
+        self.birth_scan_wz = float(birth_scan_cfg["scan_wz"])
+        self.birth_scan_turn_dir = float(birth_scan_cfg["turn_dir"])
+        self.chassis_max_wz = float(chassis_cfg.get("max_wz", 0.06))
 
         servo_cfg = section(cfg, "servo")
         self.servo = PointServo(
@@ -259,6 +272,18 @@ class SharedNav(Node):
                 f"window={voter_cfg['window_size']} min_votes={voter_cfg['min_votes']} "
                 f"lost_hold={voter_cfg['lost_hold_frames']}"
             )
+        if birth_scan_cfg["enabled"]:
+            self.get_logger().info(
+                "birth_scan enabled "
+                f"wait={birth_scan_cfg['wait_sec']}s scan_wz={birth_scan_cfg['scan_wz']} "
+                f"scan_deg={birth_scan_cfg['scan_deg']} duration={birth_scan_cfg['scan_duration_sec']:.1f}s"
+            )
+            if float(birth_scan_cfg["scan_wz"]) > self.chassis_max_wz + 1e-6:
+                self.get_logger().warn(
+                    "birth_scan.scan_wz exceeds chassis.max_wz: "
+                    f"{birth_scan_cfg['scan_wz']} > {self.chassis_max_wz}; "
+                    "cmd_vel bridge will clip angular speed unless chassis.max_wz is raised"
+                )
 
     def image_cb(self, msg: Image) -> None:
         self.last_image_time = time.time()
@@ -325,6 +350,7 @@ class SharedNav(Node):
                 self.publish_state(self.fsm.state.value, reason=self.desired_reason, from_control=True)
             return
 
+        self._sync_birth_scan_cmd(time.time())
         safe_cmd, safety = self.apply_safety_layer(self.desired_cmd)
         self.last_safety = safety
         self.last_cmd = safe_cmd
@@ -508,6 +534,12 @@ class SharedNav(Node):
     def command_for_state(self, state: NavState, target: NavTarget, now: float) -> Tuple[ServoCommand, str]:
         if state in (NavState.BOOT, NavState.WAIT_SENSORS):
             return ServoCommand(), f"{state.value.lower()}_stop"
+        if state == NavState.BIRTH_WAIT:
+            return ServoCommand(), "birth_wait_stop"
+        if state == NavState.SCANNING:
+            wz = self.birth_scan_turn_dir * abs(self.birth_scan_wz)
+            vx = self._search_arc_vx()
+            return ServoCommand(vx=vx, wz=wz), "birth_scanning"
         if state == NavState.CANDIDATE_LOCK:
             if self.target_ok(target):
                 lidar_dist = self.effective_lidar_distance(target)
@@ -544,6 +576,17 @@ class SharedNav(Node):
             return self.blocked_recovery_cmd(target, now)
         return ServoCommand(), "unhandled_stop"
 
+    def _sync_birth_scan_cmd(self, now: float) -> None:
+        """Keep birth wait/scan cmd_vel fresh at control rate (decision timer is slower)."""
+        if self.fsm.state not in (NavState.BIRTH_WAIT, NavState.SCANNING):
+            return
+        cmd, reason = self.command_for_state(self.fsm.state, self.last_target, now)
+        self.desired_cmd = self.to_twist(cmd)
+        self.desired_reason = reason
+
+    def _birth_scan_max_wz(self) -> float:
+        return max(self.max_cmd_wz, abs(self.birth_scan_wz))
+
     def apply_safety_layer(self, raw_cmd: Twist) -> Tuple[Twist, Dict[str, Any]]:
         front_min = self.front_min_distance()
         target_dist = self.target_lidar_distance(self.last_target)
@@ -562,7 +605,12 @@ class SharedNav(Node):
         if self.require_lidar and (scan_age is None or scan_age > self.scan_stale_sec):
             info.update({"safe_cmd_vx": 0.0, "safe_cmd_wz": 0.0, "safety_reason": "stale_scan"})
             return safe, info
-        if safety_dist is not None and safety_dist <= self.emergency_stop_distance:
+        birth_scanning = self.desired_reason == "birth_scanning"
+        if (
+            not birth_scanning
+            and safety_dist is not None
+            and safety_dist <= self.emergency_stop_distance
+        ):
             info.update(
                 {
                     "safe_cmd_vx": 0.0,
@@ -577,7 +625,11 @@ class SharedNav(Node):
         wz = float(raw_cmd.angular.z)
         reason = "pass_through"
 
-        if safety_dist is not None and safety_dist <= self.hard_stop_distance:
+        if birth_scanning and safety_dist is not None and safety_dist <= self.emergency_stop_distance:
+            vx = 0.0
+            info["safety_limited"] = True
+            reason = "birth_scan_emergency_vx_only"
+        elif safety_dist is not None and safety_dist <= self.hard_stop_distance:
             vx = 0.0
             info["safety_limited"] = True
             reason = "hard_stop"
@@ -587,7 +639,7 @@ class SharedNav(Node):
             info["safety_limited"] = True
             reason = "slow_zone_scale"
 
-        if abs(wz) > self.turn_zero_vx_wz:
+        if not birth_scanning and abs(wz) > self.turn_zero_vx_wz:
             vx = 0.0
             info["safety_limited"] = True
             reason = "turn_zero_vx"
@@ -597,7 +649,8 @@ class SharedNav(Node):
             reason = "turn_slow_vx"
 
         safe.linear.x = clamp(vx, -self.max_cmd_vx, self.max_cmd_vx)
-        safe.angular.z = clamp(wz, -self.max_cmd_wz, self.max_cmd_wz)
+        max_wz = self._birth_scan_max_wz() if self.desired_reason == "birth_scanning" else self.max_cmd_wz
+        safe.angular.z = clamp(wz, -max_wz, max_wz)
         info.update({"safe_cmd_vx": float(safe.linear.x), "safe_cmd_wz": float(safe.angular.z), "safety_reason": reason})
         return safe, info
 

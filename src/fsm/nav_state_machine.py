@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -7,6 +8,8 @@ from typing import Optional
 class NavState(str, Enum):
     BOOT = "BOOT"
     WAIT_SENSORS = "WAIT_SENSORS"
+    BIRTH_WAIT = "BIRTH_WAIT"
+    SCANNING = "SCANNING"
     SEARCH = "SEARCH"
     CANDIDATE_LOCK = "CANDIDATE_LOCK"
     TRACK = "TRACK"
@@ -70,6 +73,12 @@ class NavFSMConfig:
     emergency_target_recent_sec: float = 1.5
     lost_target_servo_sec: float = 0.6
     center_only_arrive_enabled: bool = False
+    birth_scan_enabled: bool = False
+    birth_scan_wait_sec: float = 5.0
+    birth_scan_wz: float = 0.03
+    birth_scan_effective_wz: float = 0.03
+    birth_scan_deg: float = 360.0
+    birth_scan_turn_dir: float = 1.0
 
 
 @dataclass
@@ -104,6 +113,7 @@ class NavStateMachine:
         self.last_area_ratio: Optional[float] = None
         self.last_height_ratio: Optional[float] = None
         self._last_result_reason = "init"
+        self.birth_phase_completed = False
 
     def reset(self, now: Optional[float] = None) -> None:
         self.state = NavState.BOOT
@@ -121,6 +131,7 @@ class NavStateMachine:
         self.last_area_ratio = None
         self.last_height_ratio = None
         self._last_result_reason = "reset"
+        self.birth_phase_completed = False
 
     def update(self, obs: NavObservation) -> NavFSMResult:
         if self.task_start_time is None:
@@ -147,7 +158,11 @@ class NavStateMachine:
         elif not obs.image_fresh:
             self._enter(NavState.WAIT_SENSORS, obs.now)
             reason = "image_stale"
-        elif obs.emergency and self.state != NavState.ARRIVE_VERIFY:
+        elif (
+            obs.emergency
+            and self.state not in (NavState.ARRIVE_VERIFY, NavState.SCANNING)
+        ):
+            # In-place birth scan: rotating LiDAR briefly sees close returns; do not abort spin.
             self._enter(NavState.BLOCKED, obs.now)
             reason = "emergency"
         elif self.state == NavState.BOOT:
@@ -155,7 +170,10 @@ class NavStateMachine:
             reason = "boot"
         elif self.state == NavState.WAIT_SENSORS:
             if sensors_ok:
-                if target_ok:
+                if self.cfg.birth_scan_enabled and not self.birth_phase_completed:
+                    self._enter(NavState.BIRTH_WAIT, obs.now)
+                    reason = "sensor_ready_birth_wait"
+                elif target_ok:
                     self._enter(NavState.CANDIDATE_LOCK, obs.now)
                     self.stable_frames = 1
                     reason = "sensor_ready_target"
@@ -164,6 +182,35 @@ class NavStateMachine:
                     reason = "sensor_ready_search"
             else:
                 reason = "waiting_sensors"
+        elif self.state == NavState.BIRTH_WAIT:
+            if obs.blocked:
+                self._enter(NavState.BLOCKED, obs.now)
+                reason = "blocked"
+            elif target_ok:
+                self._finish_birth_phase()
+                self._enter(NavState.CANDIDATE_LOCK, obs.now)
+                self.stable_frames = 1
+                reason = "birth_wait_target"
+            elif self._state_elapsed(obs.now) >= self.cfg.birth_scan_wait_sec:
+                self._enter(NavState.SCANNING, obs.now)
+                reason = "birth_wait_timeout_scan"
+            else:
+                reason = "birth_wait"
+        elif self.state == NavState.SCANNING:
+            if obs.blocked:
+                self._enter(NavState.BLOCKED, obs.now)
+                reason = "blocked"
+            elif target_ok:
+                self._finish_birth_phase()
+                self._enter(NavState.CANDIDATE_LOCK, obs.now)
+                self.stable_frames = 1
+                reason = "scanning_target"
+            elif self._state_elapsed(obs.now) >= self._birth_scan_duration_sec():
+                self._finish_birth_phase()
+                self._enter(NavState.SEARCH, obs.now)
+                reason = "scanning_complete"
+            else:
+                reason = "scanning"
         elif self.state == NavState.SEARCH:
             if obs.blocked:
                 self._enter(NavState.BLOCKED, obs.now)
@@ -350,6 +397,13 @@ class NavStateMachine:
         self.last_center_error_px = obs.target_center_error_px
         self.last_area_ratio = obs.target_area_ratio
         self.last_height_ratio = obs.target_height_ratio
+
+    def _birth_scan_duration_sec(self) -> float:
+        wz = max(abs(float(self.cfg.birth_scan_effective_wz)), 1e-6)
+        return math.radians(abs(float(self.cfg.birth_scan_deg))) / wz
+
+    def _finish_birth_phase(self) -> None:
+        self.birth_phase_completed = True
 
     def _enter(self, state: NavState, now: float) -> None:
         if state == self.state:
