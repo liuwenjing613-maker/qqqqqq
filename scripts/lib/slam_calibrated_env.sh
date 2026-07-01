@@ -34,13 +34,13 @@ export CHASSIS_ODOM_VY_SCALE=1.0
 # 只影响 /odom 的 x/y 轨迹积分方向。
 # 用于修正 Foxglove 中“位置轨迹走向”。
 # 默认保持 0.0，不要用它修车头箭头。
-export CHASSIS_ODOM_XY_YAW_OFFSET=0.0
+export CHASSIS_ODOM_XY_YAW_OFFSET=3.141592653589793
 
 # CHASSIS_BASE_YAW_OFFSET：
 # 只影响 /odom orientation 和 TF odom->base_link 的箭头朝向。
 # 用于修正 base_link 初始箭头方向。
 # 默认保持 0.0，现场校准时再试 0 / pi / pi/2 / -pi/2。
-export CHASSIS_BASE_YAW_OFFSET=0.0
+export CHASSIS_BASE_YAW_OFFSET=-3.141592653589793
 
 # 手柄遥操作限速，与 CHASSIS_MAX_VX/WZ 对齐
 export JOY_SCALE_LINEAR_X="${JOY_SCALE_LINEAR_X:-0.04}"
