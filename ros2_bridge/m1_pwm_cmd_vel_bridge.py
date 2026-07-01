@@ -125,6 +125,7 @@ class M1PwmCmdVelBridge(Node):
         odom_vy_scale: float = 1.0,
         odom_wz_scale: float = 1.0,
         odom_use_vy: bool = False,
+        odom_xy_yaw_offset: float = 0.0,
         base_yaw_offset: float = 0.0,
     ):
         super().__init__("m1_pwm_cmd_vel_bridge")
@@ -140,6 +141,7 @@ class M1PwmCmdVelBridge(Node):
         self.odom_vy_scale = float(odom_vy_scale)
         self.odom_wz_scale = float(odom_wz_scale)
         self.odom_use_vy = bool(odom_use_vy)
+        self.odom_xy_yaw_offset = float(odom_xy_yaw_offset)
         self.base_yaw_offset = float(base_yaw_offset)
 
         self.port = str(port)
@@ -218,6 +220,10 @@ class M1PwmCmdVelBridge(Node):
                 f"TF {self.odom_frame}->{self.base_frame}, source=get_motion_data()"
             )
             self.get_logger().info(f"odom_wz_scale={self.odom_wz_scale}")
+            self.get_logger().info(
+                f"odom x/y yaw offset={self.odom_xy_yaw_offset:.4f} rad "
+                f"({math.degrees(self.odom_xy_yaw_offset):.1f} deg)"
+            )
             self.get_logger().info(
                 f"base_link yaw offset={self.base_yaw_offset:.4f} rad "
                 f"({math.degrees(self.base_yaw_offset):.1f} deg)"
@@ -354,14 +360,16 @@ class M1PwmCmdVelBridge(Node):
                     dy_body = vy * dt
                     dyaw = wz * dt
 
-                    # 用发布后的 base_link 朝向参与 x/y 积分；
-                    # 否则只改变 TF 箭头，不改变 map/odom 中的位置运动方向。
-                    published_yaw_before = math.atan2(
-                        math.sin(self.odom_yaw + self.base_yaw_offset),
-                        math.cos(self.odom_yaw + self.base_yaw_offset),
+                    # x/y 位置积分使用 odom_xy_yaw_offset。
+                    # 这决定 /odom 轨迹在地图里的运动方向。
+                    # 不要在这里使用 base_yaw_offset；
+                    # base_yaw_offset 只用于发布 base_link 箭头朝向。
+                    xy_yaw_before = math.atan2(
+                        math.sin(self.odom_yaw + self.odom_xy_yaw_offset),
+                        math.cos(self.odom_yaw + self.odom_xy_yaw_offset),
                     )
 
-                    yaw_mid = published_yaw_before + 0.5 * dyaw
+                    yaw_mid = xy_yaw_before + 0.5 * dyaw
 
                     self.odom_x += dx_body * math.cos(yaw_mid) - dy_body * math.sin(yaw_mid)
                     self.odom_y += dx_body * math.sin(yaw_mid) + dy_body * math.cos(yaw_mid)
@@ -460,6 +468,8 @@ class M1PwmCmdVelBridge(Node):
                 "odom_use_vy": self.odom_use_vy,
                 "odom_vxy_deadzone": self.odom_vxy_deadzone,
                 "odom_wz_deadzone": self.odom_wz_deadzone,
+                "odom_xy_yaw_offset": self.odom_xy_yaw_offset,
+                "odom_xy_yaw_offset_deg": math.degrees(self.odom_xy_yaw_offset),
                 "base_yaw_offset": self.base_yaw_offset,
                 "base_yaw_offset_deg": math.degrees(self.base_yaw_offset),
                 "time": time.time(),
@@ -517,6 +527,7 @@ def main() -> None:
     parser.add_argument("--odom-vy-scale", type=float, default=1.0)
     parser.add_argument("--odom-wz-scale", type=float, default=1.0)
     parser.add_argument("--odom-use-vy", action="store_true", default=False)
+    parser.add_argument("--odom-xy-yaw-offset", type=float, default=0.0)
     parser.add_argument("--base-yaw-offset", type=float, default=0.0)
     args, _ = parser.parse_known_args()
 
@@ -551,6 +562,7 @@ def main() -> None:
         odom_vy_scale=args.odom_vy_scale,
         odom_wz_scale=args.odom_wz_scale,
         odom_use_vy=args.odom_use_vy,
+        odom_xy_yaw_offset=args.odom_xy_yaw_offset,
         base_yaw_offset=args.base_yaw_offset,
     )
 

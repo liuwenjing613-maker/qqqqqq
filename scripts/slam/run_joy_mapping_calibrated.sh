@@ -428,6 +428,14 @@ main() {
     exit 1
   }
 
+  # live_stack 会先 kill 旧 bridge 再重启；topic 名可能已存在但尚未发数据
+  log "Waiting for /odom to publish (chassis bridge starts after lidar in live_stack) ..."
+  wait_topic_hz /odom 60 || {
+    log "FAIL: /odom not publishing after live stack start"
+    stop_live_stack 2>/dev/null || true
+    exit 1
+  }
+
   log "[2/4] Verify calibrated parameters and sensor chain"
   verify_calibrated_inputs || {
     log "FAIL: calibration verification failed; NOT starting joystick."
