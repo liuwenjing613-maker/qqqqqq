@@ -131,7 +131,11 @@ class NavOverlayContext:
         return str(self.nav_state.get("fsm_mode", self.nav_state.get("mode", "")) or "")
 
     def fsm_reason(self) -> str:
-        return str(self.nav_state.get("fsm_reason", self.nav_state.get("desired_reason", "")) or "")
+        return str(
+            self.nav_state.get("fsm_reason")
+            or self.nav_state.get("desired_reason")
+            or ""
+        )
 
 
 def build_overlay_lines(

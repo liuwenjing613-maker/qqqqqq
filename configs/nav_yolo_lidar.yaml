@@ -26,6 +26,12 @@ topics:
   nav_state: /nav_state
   nav_target_point: /nav_target_point
 
+foxglove:
+  port: 8765
+  layout: configs/foxglove_yolo_lidar_nav.layout.json
+  # Use annotated overlay (same as http://<RDK_IP>:8088/stream.mjpg), NOT raw /image.
+  image_topic: /yolov5s_bpu/annotated/compressed
+
 camera:
   device: /dev/video0
   compressed_topic: /image
