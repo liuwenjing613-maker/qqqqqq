@@ -35,6 +35,7 @@ def target_obs(now=0.0, **kwargs):
         target_u=320.0,
         target_v=240.0,
         target_centered=True,
+        target_center_error_px=0.0,
     )
     data.update(kwargs)
     return obs(now=now, **data)
@@ -64,9 +65,11 @@ def test_lost_frames_enter_recovery():
     fsm.update(target_obs(0.2))
     fsm.update(target_obs(0.3))
     assert fsm.state == NavState.TRACK
-    for i in range(4):
+    for i in range(6):
         assert fsm.update(obs(0.4 + i * 0.1)).state == NavState.TRACK
-    assert fsm.update(obs(0.9)).state == NavState.LOST_RECOVERY
+    for i in range(4):
+        assert fsm.update(obs(1.0 + i * 0.1)).state == NavState.TRACK
+    assert fsm.update(obs(1.4)).state == NavState.LOST_RECOVERY
 
 
 def test_emergency_enters_blocked_from_any_state():
@@ -84,22 +87,19 @@ def test_arrive_frames_then_success_without_qwen():
             min_safe_distance=0.35,
             stop_distance=0.75,
             verify_distance_max=0.85,
+            stop_verify_sec=0.8,
         )
     )
     _reach_track(fsm)
-    for i in range(3):
-        assert fsm.update(target_obs(0.4 + i * 0.1, front_distance=0.70)).state == NavState.TRACK
-    assert fsm.update(target_obs(0.8, front_distance=0.70)).state == NavState.ARRIVE_VERIFY
-    for i in range(3):
-        assert fsm.update(target_obs(0.9 + i * 0.1, front_distance=0.70)).state == NavState.ARRIVE_VERIFY
+    assert fsm.update(target_obs(0.4, front_distance=0.70)).state == NavState.ARRIVE_VERIFY
+    assert fsm.update(target_obs(1.1, front_distance=0.70)).state == NavState.ARRIVE_VERIFY
     assert fsm.update(target_obs(1.2, front_distance=0.70)).state == NavState.SUCCESS
 
 
-def test_arrive_rejects_inside_min_safe_distance():
-    fsm = NavStateMachine(NavFSMConfig(stable_frames_required=1, min_safe_distance=0.35, stop_distance=0.75))
+def test_arrive_requires_recent_centered_target():
+    fsm = NavStateMachine(NavFSMConfig(stable_frames_required=1, success_center_px=140.0))
     _reach_track(fsm)
-    for _ in range(6):
-        assert fsm.update(target_obs(0.4, front_distance=0.30)).state == NavState.TRACK
+    assert fsm.update(target_obs(0.4, front_distance=0.70, target_center_error_px=180.0)).state == NavState.TRACK
 
 
 def test_arrive_accepts_large_bbox_without_lidar_distance():
@@ -109,11 +109,10 @@ def test_arrive_accepts_large_bbox_without_lidar_distance():
     fsm.update(target_obs(0.2, require_lidar=False, front_distance=None, target_area_ratio=0.20))
     fsm.update(target_obs(0.3, require_lidar=False, front_distance=None, target_area_ratio=0.20))
     assert fsm.state == NavState.TRACK
-    assert fsm.update(target_obs(0.4, require_lidar=False, front_distance=None, target_area_ratio=0.20)).state == NavState.TRACK
-    assert fsm.update(target_obs(0.5, require_lidar=False, front_distance=None, target_area_ratio=0.20)).state == NavState.ARRIVE_VERIFY
+    assert fsm.update(target_obs(0.4, require_lidar=False, front_distance=None, target_area_ratio=0.20)).state == NavState.ARRIVE_VERIFY
 
 
-def test_verify_distance_lost_returns_to_track():
+def test_verify_waits_even_if_distance_is_lost():
     fsm = NavStateMachine(
         NavFSMConfig(
             stable_frames_required=1,
@@ -126,7 +125,7 @@ def test_verify_distance_lost_returns_to_track():
     )
     _reach_track(fsm)
     assert fsm.update(target_obs(0.4, front_distance=0.70)).state == NavState.ARRIVE_VERIFY
-    assert fsm.update(target_obs(0.5, front_distance=0.90)).state == NavState.TRACK
+    assert fsm.update(target_obs(0.5, front_distance=1.20)).state == NavState.ARRIVE_VERIFY
 
 
 def test_stale_target_cannot_enter_track():
@@ -142,8 +141,8 @@ if __name__ == "__main__":
     test_lost_frames_enter_recovery()
     test_emergency_enters_blocked_from_any_state()
     test_arrive_frames_then_success_without_qwen()
-    test_arrive_rejects_inside_min_safe_distance()
+    test_arrive_requires_recent_centered_target()
     test_arrive_accepts_large_bbox_without_lidar_distance()
-    test_verify_distance_lost_returns_to_track()
+    test_verify_waits_even_if_distance_is_lost()
     test_stale_target_cannot_enter_track()
     print("PASS test_nav_state_machine")

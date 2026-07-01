@@ -75,6 +75,8 @@ def load_success_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
             True,
         ),
         "center_px": _as_float(success.get("center_px", arrive.get("center_px", 70)), 70.0),
+        "min_score": _as_float(success.get("min_score", 0.20), 0.20),
+        "target_recent_sec": _as_float(success.get("target_recent_sec", 1.0), 1.0),
         "min_safe_distance": _as_float(
             success.get("min_safe_distance", success.get("min_distance", max(legacy_min, hard_stop))),
             max(legacy_min, hard_stop),
@@ -87,10 +89,22 @@ def load_success_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
             success.get("verify_distance_max", success.get("stop_distance", legacy_max) + 0.10),
             legacy_max + 0.10,
         ),
+        "lidar_success_distance": _as_float(
+            success.get("lidar_success_distance", success.get("stop_distance", legacy_max)),
+            legacy_max,
+        ),
         "min_area_ratio": _as_float(
             success.get("min_area_ratio", arrive.get("arrive_area_ratio", 0.16)),
             0.16,
         ),
+        "min_height_ratio": _as_float(success.get("min_height_ratio", 0.32), 0.32),
+        "stop_verify_sec": _as_float(success.get("stop_verify_sec", 0.8), 0.8),
+        "emergency_target_recent_sec": _as_float(
+            success.get("emergency_target_recent_sec", 1.5),
+            1.5,
+        ),
+        "lost_target_servo_sec": _as_float(success.get("lost_target_servo_sec", 0.6), 0.6),
+        "lost_target_vx_scale": _as_float(success.get("lost_target_vx_scale", 0.5), 0.5),
         "center_only_enabled": _as_bool(
             success.get("center_only_enabled", arrive.get("center_only_arrive_enabled", False)),
             False,
