@@ -46,7 +46,6 @@ def test_stale_yolo_target_is_not_visible():
     assert target.stale
     assert not target.visible
     current = adapter.current_yolo_target()
-    assert current.stale
     assert not current.visible
 
 

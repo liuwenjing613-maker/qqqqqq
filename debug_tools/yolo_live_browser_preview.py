@@ -22,15 +22,18 @@ import cv2
 import rclpy
 from ai_msgs.msg import PerceptionTargets
 from cv_bridge import CvBridge
+from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.perception.multi_frame_voter import MultiFrameTargetVoter
+from src.nav.nav_video_overlay import NavOverlayContext, annotate_nav_frame, safe_json_load
 from src.perception.stamp_sync import StampSyncBuffer
 from src.perception.target_backend_yolo import (
     extract_yolo_target,
@@ -96,6 +99,7 @@ class YoloLiveBrowserPreview(Node):
         self.last_status = "WAITING"
         self.last_raw_count = 0
         self.last_reject_reason = ""
+        self.overlay_ctx = NavOverlayContext()
 
         self.target_voter = MultiFrameTargetVoter(
             window_size=6,
@@ -116,6 +120,10 @@ class YoloLiveBrowserPreview(Node):
 
         self.image_sub = self.create_subscription(Image, self.image_topic, self.image_callback, qos)
         self.det_sub = self.create_subscription(PerceptionTargets, self.det_topic, self.det_callback, qos)
+        self.create_subscription(String, "/nav_state", self.nav_state_callback, 10)
+        self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 10)
+        self.create_subscription(String, "/nav_target_point", self.nav_point_callback, 10)
+        self.create_subscription(String, "/target_bbox_json", self.bbox_callback, 10)
 
         self.get_logger().info("===== yolo_live_browser_preview =====")
         self.get_logger().info(f"image_topic={self.image_topic}")
@@ -131,6 +139,41 @@ class YoloLiveBrowserPreview(Node):
         self.get_logger().info(
             f"sync_max_delta_sec={self.sync_max_delta_sec} show_all_boxes={self.show_all_boxes}"
         )
+        self.get_logger().info("nav overlay enabled: target | state | u/v | velocity")
+
+    def nav_state_callback(self, msg: String) -> None:
+        self.overlay_ctx.update_nav_state(safe_json_load(msg.data))
+
+    def cmd_vel_callback(self, msg: Twist) -> None:
+        self.overlay_ctx.update_cmd(float(msg.linear.x), float(msg.angular.z))
+
+    def nav_point_callback(self, msg: String) -> None:
+        data = safe_json_load(msg.data)
+        if data:
+            self.overlay_ctx.target_point = data
+
+    def bbox_callback(self, msg: String) -> None:
+        data = safe_json_load(msg.data)
+        if data:
+            self.overlay_ctx.target_bbox = data
+
+    @staticmethod
+    def _target_override_from_mvp(mvp_target, fallback_reason: str):
+        if mvp_target and mvp_target.get("visible", False):
+            return {
+                "visible": True,
+                "class_name": mvp_target.get("class_name", ""),
+                "score": mvp_target.get("score"),
+                "area_ratio": mvp_target.get("area_ratio"),
+                "bbox": mvp_target.get("bbox"),
+                "u": mvp_target.get("cx"),
+                "v": mvp_target.get("cy"),
+                "reason": mvp_target.get("vote_reason", mvp_target.get("reason", "")),
+            }
+        reason = fallback_reason
+        if mvp_target:
+            reason = str(mvp_target.get("reason", reason) or reason)
+        return {"visible": False, "reason": reason or "not_visible"}
 
     def image_callback(self, msg: Image):
         try:
@@ -323,7 +366,7 @@ class YoloLiveBrowserPreview(Node):
                 f"source={mvp_target.get('source')}"
             )
 
-        lines = [
+        header_lines = [
             f"YOLO-World LIVE | status={status} raw={len(raw_dets or [])}{vote_text}{stale_text}",
             f"target_classes={','.join(self.target_classes) if self.target_classes else 'ALL'}",
             f"min={self.min_score} raw_min={self.raw_min_score} max_area={self.max_area_ratio}",
@@ -331,9 +374,17 @@ class YoloLiveBrowserPreview(Node):
             f"best_raw={best_raw}",
         ]
         if status != "MVP_FOUND" and self.last_reject_reason:
-            lines.append(f"reject={self.last_reject_reason}")
+            header_lines.append(f"reject={self.last_reject_reason}")
 
-        self._draw_text_block(canvas, lines)
+        target_override = self._target_override_from_mvp(mvp_target, self.last_reject_reason or status)
+        canvas = annotate_nav_frame(
+            canvas,
+            self.overlay_ctx,
+            target_override=target_override,
+            header_lines=header_lines,
+            draw_target_graphics=False,
+            draw_center_line=True,
+        )
 
         ok, jpeg = cv2.imencode(
             ".jpg",
@@ -343,37 +394,6 @@ class YoloLiveBrowserPreview(Node):
         if ok:
             with self.lock:
                 self.latest_jpeg = jpeg.tobytes()
-
-    @staticmethod
-    def _draw_text_block(img, lines, origin=(12, 12), line_height=24, font_scale=0.58):
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        thickness = 1
-        max_width = 0
-        for line in lines:
-            (tw, _), _ = cv2.getTextSize(line, font, font_scale, thickness)
-            max_width = max(max_width, tw)
-
-        x0, y0 = origin
-        panel_w = max_width + 24
-        panel_h = line_height * len(lines) + 16
-
-        overlay = img.copy()
-        cv2.rectangle(overlay, (x0, y0), (x0 + panel_w, y0 + panel_h), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.58, img, 0.42, 0, img)
-
-        y = y0 + 22
-        for line in lines:
-            cv2.putText(
-                img,
-                line,
-                (x0 + 10, y),
-                font,
-                font_scale,
-                (255, 255, 255),
-                thickness,
-                cv2.LINE_AA,
-            )
-            y += line_height
 
     def get_latest_jpeg(self):
         with self.lock:

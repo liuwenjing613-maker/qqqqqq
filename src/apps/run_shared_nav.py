@@ -22,8 +22,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.config.nav_success import load_success_config
+from src.config.nav_voter import load_voter_config
 from src.control.point_servo import PointServo, PointServoConfig, ServoCommand, clamp
 from src.fsm.nav_state_machine import NavFSMConfig, NavObservation, NavState, NavStateMachine
+from src.nav.lidar_distance import combine_lidar_distances
 from src.nav.search_strategy import (
     TargetSearchMemory,
     compute_loss_age,
@@ -78,6 +80,7 @@ class SharedNav(Node):
         rates = section(cfg, "rates")
         safety = section(cfg, "safety")
         success_cfg = load_success_config(cfg)
+        voter_cfg = load_voter_config(cfg)
         search = section(cfg, "search")
         track_cfg = section(cfg, "track")
 
@@ -157,6 +160,14 @@ class SharedNav(Node):
             max_area_ratio=float(target_cfg.get("max_area_ratio", 1.0)),
             accept_unknown_class=bool(target_cfg.get("accept_unknown_class", True)),
             bbox_stale_sec=self.bbox_stale_sec,
+            voter_enabled=bool(voter_cfg["enabled"]),
+            voter_window_size=int(voter_cfg["window_size"]),
+            voter_min_votes=int(voter_cfg["min_votes"]),
+            voter_lost_hold_frames=int(voter_cfg["lost_hold_frames"]),
+            voter_iou_threshold=float(voter_cfg["iou_threshold"]),
+            voter_center_dist_threshold=float(voter_cfg["center_dist_threshold"]),
+            voter_smooth_alpha=float(voter_cfg["smooth_alpha"]),
+            voter_accept_held_target=bool(voter_cfg["accept_held_target"]),
         )
 
         self.free_space = FreeSpaceWaypointProvider(
@@ -242,6 +253,12 @@ class SharedNav(Node):
 
         self.get_logger().info(f"===== shared_nav mode={self.mode} =====")
         self.get_logger().info(f"topics image={self.image_topic} scan={self.scan_topic} cmd={self.cmd_topic}")
+        if voter_cfg["enabled"]:
+            self.get_logger().info(
+                "voter enabled "
+                f"window={voter_cfg['window_size']} min_votes={voter_cfg['min_votes']} "
+                f"lost_hold={voter_cfg['lost_hold_frames']}"
+            )
 
     def image_cb(self, msg: Image) -> None:
         self.last_image_time = time.time()
@@ -262,7 +279,7 @@ class SharedNav(Node):
         self.free_space.update_scan(msg)
 
     def bbox_cb(self, msg: String) -> None:
-        self.last_target = self.target_adapter.update_yolo_bbox_json(msg.data)
+        self.target_adapter.ingest_yolo_bbox_json(msg.data)
 
     def publish_target_words(self) -> None:
         target_cfg = section(self.cfg, "target")
@@ -275,8 +292,9 @@ class SharedNav(Node):
         self.step_count += 1
         target = self.resolve_target(now)
         self.update_target_memory(target, now)
-        front = self.front_distance()
-        obs = self.make_observation(now, target, front)
+        front_min = self.front_min_distance()
+        lidar_dist = self.effective_lidar_distance(target)
+        obs = self.make_observation(now, target, lidar_dist, front_min=front_min)
         result = self.fsm.update(obs)
         self.last_fsm_result = result
         self.last_target = target
@@ -325,7 +343,13 @@ class SharedNav(Node):
             return self.target_adapter.from_color(self.last_frame, self.target_color)
         return self.target_adapter.current_yolo_target(now)
 
-    def make_observation(self, now: float, target: NavTarget, front: Optional[float]) -> NavObservation:
+    def make_observation(
+        self,
+        now: float,
+        target: NavTarget,
+        lidar_distance: Optional[float],
+        front_min: Optional[float] = None,
+    ) -> NavObservation:
         image_fresh = self.last_image_time > 0 and now - self.last_image_time <= self.image_stale_sec
         scan_fresh = (not self.require_lidar) or (
             self.last_scan_time > 0 and now - self.last_scan_time <= self.scan_stale_sec
@@ -337,8 +361,9 @@ class SharedNav(Node):
         else:
             center_error_px = None
         target_height_ratio = self.target_height_ratio(target)
-        emergency = bool(front is not None and front <= self.emergency_stop_distance)
-        blocked = bool(front is not None and front <= self.hard_stop_distance)
+        safety_dist = lidar_distance if lidar_distance is not None else front_min
+        emergency = bool(safety_dist is not None and safety_dist <= self.emergency_stop_distance)
+        blocked = bool(safety_dist is not None and safety_dist <= self.hard_stop_distance)
         score_ok = bool(target.visible and not target.stale and target.score >= self.target_min_score)
         return NavObservation(
             now=now,
@@ -355,7 +380,7 @@ class SharedNav(Node):
             target_center_error_px=center_error_px,
             target_area_ratio=target.area_ratio,
             target_height_ratio=target_height_ratio,
-            front_distance=front,
+            front_distance=lidar_distance,
             emergency=emergency,
             blocked=blocked,
             qwen_verified=self.mock_qwen_verify(now),
@@ -443,7 +468,7 @@ class SharedNav(Node):
 
     def _search_arc_vx(self) -> float:
         """Slow forward while turning during search; zero when too close to obstacles."""
-        front = self.front_distance()
+        front = self.front_min_distance()
         if front is not None and front <= self.hard_stop_distance + 0.05:
             return 0.0
         return self.search_arc_vx
@@ -485,28 +510,28 @@ class SharedNav(Node):
             return ServoCommand(), f"{state.value.lower()}_stop"
         if state == NavState.CANDIDATE_LOCK:
             if self.target_ok(target):
-                front = self.front_distance()
+                lidar_dist = self.effective_lidar_distance(target)
                 result = self.servo.compute_cmd(target.to_dict())
-                cmd = self._apply_front_speed_scale(result.cmd, front)
+                cmd = self._apply_front_speed_scale(result.cmd, lidar_dist)
                 return cmd, f"candidate_{result.state.lower()}"
             return ServoCommand(), "candidate_lock_stop"
         if state == NavState.TRACK:
-            front = self.front_distance()
+            lidar_dist = self.effective_lidar_distance(target)
             if not self.target_ok(target):
                 if self.loss_age(now) <= self.lost_target_servo_sec and self.target_ok(self.last_good_target):
                     result = self.servo.compute_cmd(self.last_good_target.to_dict())
-                    cmd = self._apply_front_speed_scale(result.cmd, front)
+                    cmd = self._apply_front_speed_scale(result.cmd, lidar_dist)
                     cmd.vx *= self.lost_target_vx_scale
                     return cmd, "track_recent_target_servo"
                 return ServoCommand(), "track_lost_wait"
             if (
                 self.track_blocked_hold_on_target
-                and front is not None
-                and front <= self.hard_stop_distance
+                and lidar_dist is not None
+                and lidar_dist <= self.hard_stop_distance
             ):
                 return ServoCommand(), "track_blocked_hold"
             result = self.servo.compute_cmd(target.to_dict())
-            cmd = self._apply_front_speed_scale(result.cmd, front)
+            cmd = self._apply_front_speed_scale(result.cmd, lidar_dist)
             return cmd, result.state
         if state == NavState.SEARCH:
             return self.resolve_search_cmd(now)
@@ -520,10 +545,14 @@ class SharedNav(Node):
         return ServoCommand(), "unhandled_stop"
 
     def apply_safety_layer(self, raw_cmd: Twist) -> Tuple[Twist, Dict[str, Any]]:
-        front = self.front_distance()
+        front_min = self.front_min_distance()
+        target_dist = self.target_lidar_distance(self.last_target)
+        safety_dist = self.safety_lidar_distance(self.last_target)
         scan_age = self.free_space.scan_age()
         info: Dict[str, Any] = {
-            "front_distance": front,
+            "front_distance": safety_dist,
+            "front_min_distance": front_min,
+            "target_distance": target_dist,
             "scan_age": scan_age,
             "raw_cmd_vx": float(raw_cmd.linear.x),
             "raw_cmd_wz": float(raw_cmd.angular.z),
@@ -533,7 +562,7 @@ class SharedNav(Node):
         if self.require_lidar and (scan_age is None or scan_age > self.scan_stale_sec):
             info.update({"safe_cmd_vx": 0.0, "safe_cmd_wz": 0.0, "safety_reason": "stale_scan"})
             return safe, info
-        if front is not None and front <= self.emergency_stop_distance:
+        if safety_dist is not None and safety_dist <= self.emergency_stop_distance:
             info.update(
                 {
                     "safe_cmd_vx": 0.0,
@@ -548,13 +577,13 @@ class SharedNav(Node):
         wz = float(raw_cmd.angular.z)
         reason = "pass_through"
 
-        if front is not None and front <= self.hard_stop_distance:
+        if safety_dist is not None and safety_dist <= self.hard_stop_distance:
             vx = 0.0
             info["safety_limited"] = True
             reason = "hard_stop"
-        elif front is not None and front < self.slow_distance and vx > 0.0:
+        elif safety_dist is not None and safety_dist < self.slow_distance and vx > 0.0:
             span = max(self.slow_distance - self.stop_distance, 1e-6)
-            vx = min(vx, self.max_cmd_vx * clamp((front - self.stop_distance) / span, 0.0, 1.0))
+            vx = min(vx, self.max_cmd_vx * clamp((safety_dist - self.stop_distance) / span, 0.0, 1.0))
             info["safety_limited"] = True
             reason = "slow_zone_scale"
 
@@ -572,10 +601,54 @@ class SharedNav(Node):
         info.update({"safe_cmd_vx": float(safe.linear.x), "safe_cmd_wz": float(safe.angular.z), "safety_reason": reason})
         return safe, info
 
-    def front_distance(self) -> Optional[float]:
+    def front_min_distance(self) -> Optional[float]:
         if not self.require_lidar:
             return None
         return self.free_space.front_min_distance()
+
+    def target_lidar_distance(self, target: NavTarget) -> Optional[float]:
+        if not self.require_lidar or target.u is None:
+            return None
+        return self.free_space.target_distance_at_u(float(target.u), self.image_width)
+
+    def target_lidar_distance_at_u(self, u: Optional[float]) -> Optional[float]:
+        if not self.require_lidar or u is None:
+            return None
+        return self.free_space.target_distance_at_u(float(u), self.image_width)
+
+    def resolve_target_u_for_lidar(self, target: NavTarget, kwargs: Optional[Dict[str, Any]] = None) -> Optional[float]:
+        kwargs = kwargs or {}
+        if isinstance(kwargs.get("target"), dict):
+            u = kwargs["target"].get("u")
+            if u is not None:
+                return float(u)
+        if target.u is not None:
+            return float(target.u)
+        if self.target_ok(self.last_good_target) and self.last_good_target.u is not None:
+            return float(self.last_good_target.u)
+        if self.search_mem.last_target_u is not None:
+            return float(self.search_mem.last_target_u)
+        return None
+
+    def lidar_distance_bundle(
+        self, target: NavTarget, kwargs: Optional[Dict[str, Any]] = None
+    ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+        front_min = self.front_min_distance()
+        target_dist = self.target_lidar_distance_at_u(self.resolve_target_u_for_lidar(target, kwargs))
+        combined = combine_lidar_distances(front_min, target_dist)
+        return front_min, target_dist, combined
+
+    def effective_lidar_distance(self, target: NavTarget) -> Optional[float]:
+        """Nav distance: min(front-sector, target-column); stable during brief vote gaps."""
+        _, _, combined = self.lidar_distance_bundle(target)
+        return combined
+
+    def safety_lidar_distance(self, target: NavTarget) -> Optional[float]:
+        """Conservative distance for safety: min(front sector, target column)."""
+        return self.effective_lidar_distance(target)
+
+    def front_distance(self) -> Optional[float]:
+        return self.front_min_distance()
 
     @staticmethod
     def to_twist(cmd: ServoCommand) -> Twist:
@@ -600,6 +673,15 @@ class SharedNav(Node):
 
     def publish_state(self, mode: str, from_control: bool = False, **kwargs: Any) -> None:
         result = self.last_fsm_result
+        target = self.last_target
+        front_min, target_dist, lidar_dist = self.lidar_distance_bundle(target, kwargs)
+        safety = dict(self.last_safety)
+        if front_min is not None:
+            safety["front_min_distance"] = front_min
+        if target_dist is not None:
+            safety["target_distance"] = target_dist
+        if lidar_dist is not None:
+            safety["front_distance"] = lidar_dist
         data = {
             "step": self.step_count,
             "mode": mode,
@@ -609,13 +691,15 @@ class SharedNav(Node):
             "nav_mode": self.mode,
             "image_width": self.image_width,
             "image_height": self.image_height,
-            "front_distance": self.front_distance(),
+            "front_min_distance": front_min,
+            "target_distance": target_dist,
+            "front_distance": lidar_dist,
             "desired_reason": self.desired_reason,
             "raw_cmd_vx": float(self.desired_cmd.linear.x),
             "raw_cmd_wz": float(self.desired_cmd.angular.z),
             "safe_cmd_vx": float(self.last_safety.get("safe_cmd_vx", self.last_cmd.linear.x)),
             "safe_cmd_wz": float(self.last_safety.get("safe_cmd_wz", self.last_cmd.angular.z)),
-            "safety": self.last_safety,
+            "safety": safety,
             "search_mode": self.search_mem.search_mode,
             "search_turn_dir": self.search_mem.search_turn_dir,
             "loss_age_sec": self.loss_age(time.time()),

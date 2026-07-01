@@ -87,9 +87,8 @@ class FreeSpaceWaypointProvider:
         return self.sector_clearance(heading, self.cfg.target_window_deg, method="min")
 
     def front_distance(self) -> Optional[float]:
-        if self.scan is None:
-            return None
-        return self._window_clearance(0.0, self.cfg.lidar_front_deg, method="min_or_percentile")
+        """Same as front_min_distance: minimum range in robot-forward sector."""
+        return self.front_min_distance()
 
     def get_waypoint(self, image_width: int, image_height: int) -> Dict[str, Any]:
         if self.scan is None:

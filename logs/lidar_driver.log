@@ -1,4 +1,4 @@
-[INFO] [1782882779.494164249] [ydlidar_ros2_driver_node]: [YDLIDAR INFO] Current ROS Driver Version: 1.0.1
+[INFO] [1782884255.681069912] [ydlidar_ros2_driver_node]: [YDLIDAR INFO] Current ROS Driver Version: 1.0.1
 
 [YDLIDAR] SDK initializing
 [YDLIDAR] SDK has been initialized
@@ -11,13 +11,27 @@ Hardware version: 1
 Model: unkown(YD-151)
 Serial: 2026022800090821
 [YDLIDAR] Current scan frequency: 10.00Hz
-[YDLIDAR] Lidar init success, Elapsed time 998 ms
+[YDLIDAR] Lidar init success, Elapsed time 992 ms
 [YDLIDAR] Start to getting intensity flag
 [YDLIDAR] Auto set intensity 1
 [YDLIDAR] End to getting intensity flag
-[YDLIDAR] Create thread 0x8F3588E0
-[YDLIDAR] Successed to start scan mode, Elapsed time 2600 ms
+[YDLIDAR] Create thread 0x8EEA88E0
+[YDLIDAR] Successed to start scan mode, Elapsed time 2662 ms
 [YDLIDAR] Fixed Size: 404
 [YDLIDAR] Sample Rate: 4.00K
-[YDLIDAR] Successed to check the lidar, Elapsed time 1 ms
+[YDLIDAR] Successed to check the lidar, Elapsed time 0 ms
 [YDLIDAR] Now lidar is scanning...
+timeout count: 1
+[YDLIDAR ERROR]: Device Block
+[ERROR] [1782884698.284231326] [ydlidar_ros2_driver_node]: Failed to get scan
+timeout count: 2
+[YDLIDAR ERROR]: Device Failed
+[ERROR] [1782884700.285154060] [ydlidar_ros2_driver_node]: Failed to get scan
+[YDLIDAR ERROR]: Device Failed
+[ERROR] [1782884702.286005189] [ydlidar_ros2_driver_node]: Failed to get scan
+[INFO] [1782884812.807849796] [rclcpp]: signal_handler(signum=15)
+[INFO] [1782884812.810665243] [ydlidar_ros2_driver_node]: [YDLIDAR INFO] Now YDLIDAR is stopping .......
+[YDLIDAR DEBUG] Thread [0x8EEA88E0] ready to cancel[0]
+[YDLIDAR DEBUG] Thread [0x8EEA88E0] ready to cancel[0] time[0]
+[YDLIDAR] Thread [0x8EEA88E0] has been canceled
+[YDLIDAR] Now lidar scanning has stopped!

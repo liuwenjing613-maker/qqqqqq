@@ -4,6 +4,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
+from src.perception.multi_frame_voter import MultiFrameTargetVoter
 from src.perception.target_bbox_parser import TargetBBoxParser, TargetBBoxParserConfig
 
 
@@ -37,12 +38,35 @@ class TargetAdapter:
         max_area_ratio: float = 1.0,
         accept_unknown_class: bool = True,
         bbox_stale_sec: float = 0.45,
+        voter_enabled: bool = False,
+        voter_window_size: int = 6,
+        voter_min_votes: int = 2,
+        voter_lost_hold_frames: int = 4,
+        voter_iou_threshold: float = 0.05,
+        voter_center_dist_threshold: float = 0.18,
+        voter_smooth_alpha: float = 0.20,
+        voter_accept_held_target: bool = True,
     ):
         self.image_width = int(image_width)
         self.image_height = int(image_height)
         self.bbox_stale_sec = float(bbox_stale_sec)
+        self.voter_accept_held_target = bool(voter_accept_held_target)
         self._last_yolo_raw_json: Dict[str, Any] = {}
         self._last_yolo_json_time = 0.0
+        self._pending_parsed: Optional[Dict[str, Any]] = None
+        self._has_fresh_parse = False
+        self.target_voter: Optional[MultiFrameTargetVoter] = None
+        if voter_enabled:
+            self.target_voter = MultiFrameTargetVoter(
+                window_size=int(voter_window_size),
+                min_votes=int(voter_min_votes),
+                lost_hold_frames=int(voter_lost_hold_frames),
+                iou_threshold=float(voter_iou_threshold),
+                center_dist_threshold=float(voter_center_dist_threshold),
+                smooth_alpha=float(voter_smooth_alpha),
+                image_width=self.image_width,
+                image_height=self.image_height,
+            )
         self.bbox_parser = TargetBBoxParser(
             TargetBBoxParserConfig(
                 target_words=list(target_words or []),
@@ -60,6 +84,9 @@ class TargetAdapter:
         if width and height:
             self.image_width = int(width)
             self.image_height = int(height)
+            if self.target_voter is not None:
+                self.target_voter.image_width = int(width)
+                self.target_voter.image_height = int(height)
 
     def from_color(self, frame: Any, color: str) -> NavTarget:
         if color == "green":
@@ -72,19 +99,34 @@ class TargetAdapter:
             raw = find_red_target(frame)
         return self._from_backend_dict(raw, source="color")
 
-    def update_yolo_bbox_json(self, json_msg: str, now: Optional[float] = None) -> NavTarget:
+    def ingest_yolo_bbox_json(self, json_msg: str, now: Optional[float] = None) -> None:
         now = float(now if now is not None else time.time())
         data = self._safe_json(json_msg)
         self._last_yolo_raw_json = data
         self._last_yolo_json_time = now
-        parsed = self.bbox_parser.update_json(json_msg, self.image_width, self.image_height)
-        return self._from_backend_dict(parsed, source="yolo_bbox", now=now, raw_json=data)
+        self._pending_parsed = self.bbox_parser.update_json(json_msg, self.image_width, self.image_height)
+        self._has_fresh_parse = True
+
+    def update_yolo_bbox_json(self, json_msg: str, now: Optional[float] = None) -> NavTarget:
+        now = float(now if now is not None else time.time())
+        self.ingest_yolo_bbox_json(json_msg, now=now)
+        return self.materialize_yolo_target(now)
+
+    def materialize_yolo_target(self, now: Optional[float] = None) -> NavTarget:
+        now = float(now if now is not None else time.time())
+        if self._has_fresh_parse and self._pending_parsed is not None:
+            parsed = dict(self._pending_parsed)
+            self._has_fresh_parse = False
+        else:
+            parsed = {"visible": False, "reason": "no_new_bbox_frame"}
+
+        raw_json = self._last_yolo_raw_json if now - self._last_yolo_json_time <= self.bbox_stale_sec else None
+        if self.target_voter is not None:
+            parsed = self.target_voter.update(self._to_voter_input(parsed))
+        return self._from_backend_dict(parsed, source="yolo_bbox", now=now, raw_json=raw_json)
 
     def current_yolo_target(self, now: Optional[float] = None) -> NavTarget:
-        now = float(now if now is not None else time.time())
-        raw = self.bbox_parser.get_target(now, self.image_width, self.image_height)
-        raw_json = self._last_yolo_raw_json if now - self._last_yolo_json_time <= self.bbox_stale_sec else None
-        return self._from_backend_dict(raw, source="yolo_bbox", now=now, raw_json=raw_json)
+        return self.materialize_yolo_target(now)
 
     def from_qwen_result(self, qwen_result: Dict[str, Any], now: Optional[float] = None) -> NavTarget:
         now = float(now if now is not None else time.time())
@@ -129,6 +171,7 @@ class TargetAdapter:
                 reason = str(raw.get("reason", reason))
             return NavTarget(False, None, None, source=source, reason=reason, stamp_time=now)
 
+        visible = True
         u = raw.get("u", raw.get("cx"))
         v = raw.get("v", raw.get("cy"))
         bbox = raw.get("bbox")
@@ -155,17 +198,22 @@ class TargetAdapter:
         stale = bool(raw.get("stale", False))
         if age_sec > self.bbox_stale_sec:
             stale = True
+            visible = False
         if vote_reason == "hold_last_target":
-            stale = True
+            visible = bool(self.voter_accept_held_target)
+            stale = False
         if raw_json and bool(raw_json.get("stale", False)):
             stale = True
+            visible = False
+        if stale and vote_reason != "hold_last_target":
+            visible = False
 
         raw_source = str(raw.get("source", source) or source)
         if source == "yolo_bbox" and raw_source == "yolo":
             raw_source = "yolo_bbox"
 
         return NavTarget(
-            visible=not stale,
+            visible=visible,
             u=float(u),
             v=float(v),
             score=float(raw.get("score", 0.0) or 0.0),
@@ -178,6 +226,20 @@ class TargetAdapter:
             stamp_time=now,
             vote_reason=vote_reason,
         )
+
+    def _to_voter_input(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(parsed, dict):
+            return {"visible": False, "reason": "invalid_parse"}
+
+        out = dict(parsed)
+        bbox = out.get("bbox")
+        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+            x, y, a, b = [float(v) for v in bbox]
+            if a > x and b > y:
+                out["bbox"] = [x, y, a - x, b - y]
+            else:
+                out["bbox"] = [x, y, a, b]
+        return out
 
     @staticmethod
     def _safe_json(text: str) -> Dict[str, Any]:
