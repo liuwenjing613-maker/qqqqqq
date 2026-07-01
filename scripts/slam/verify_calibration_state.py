@@ -18,8 +18,8 @@ EXPECTED: Dict[str, Any] = {
     "odom_wz_deadzone": 0.015,
     "base_yaw_offset": 3.141592653589793,
     "base_yaw_offset_deg": 180.0,
-    "odom_xy_yaw_offset": 3.141592653589793,
-    "odom_xy_yaw_offset_deg": 180.0,
+    "odom_xy_yaw_offset": 0.0,
+    "odom_xy_yaw_offset_deg": 0.0,
 }
 
 

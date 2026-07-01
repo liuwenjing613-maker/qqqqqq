@@ -86,14 +86,22 @@ fsm:
 
 success:
   require_lidar: true
-  center_px: 70
+  target_recent_sec: 1.0
+  min_score: 0.20
+  center_px: 140
   min_safe_distance: 0.20
   stop_distance: 0.90
+  lidar_success_distance: 0.95
   verify_distance_max: 0.85
-  min_area_ratio: 0.08
+  min_area_ratio: 0.04
+  min_height_ratio: 0.32
   center_only_enabled: false
-  arrive_frames: 2
+  arrive_frames: 1
   verify_frames: 2
+  stop_verify_sec: 0.8
+  emergency_target_recent_sec: 1.5
+  lost_target_servo_sec: 0.6
+  lost_target_vx_scale: 0.5
   qwen_verify_required: false
 
 servo:

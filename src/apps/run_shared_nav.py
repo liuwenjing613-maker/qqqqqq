@@ -96,6 +96,8 @@ class SharedNav(Node):
         self.stop_distance = float(success_cfg["stop_distance"])
         self.verify_distance_max = float(success_cfg["verify_distance_max"])
         self.success_min_area_ratio = float(success_cfg["min_area_ratio"])
+        self.lost_target_servo_sec = float(success_cfg["lost_target_servo_sec"])
+        self.lost_target_vx_scale = float(success_cfg["lost_target_vx_scale"])
 
         fsm_cfg = section(cfg, "fsm")
         self.fsm = NavStateMachine(
@@ -117,6 +119,14 @@ class SharedNav(Node):
                 verify_distance_max=self.verify_distance_max,
                 emergency_stop_distance=float(success_cfg["emergency_stop_distance"]),
                 arrive_area_ratio=self.success_min_area_ratio,
+                arrive_height_ratio=float(success_cfg["min_height_ratio"]),
+                success_min_score=float(success_cfg["min_score"]),
+                success_center_px=float(success_cfg["center_px"]),
+                success_target_recent_sec=float(success_cfg["target_recent_sec"]),
+                lidar_success_distance=float(success_cfg["lidar_success_distance"]),
+                stop_verify_sec=float(success_cfg["stop_verify_sec"]),
+                emergency_target_recent_sec=float(success_cfg["emergency_target_recent_sec"]),
+                lost_target_servo_sec=self.lost_target_servo_sec,
                 center_only_arrive_enabled=bool(success_cfg["center_only_enabled"]),
             )
         )
@@ -193,6 +203,7 @@ class SharedNav(Node):
         self.last_image_time = 0.0
         self.last_scan_time = 0.0
         self.last_target = NavTarget(False, None, None, reason="init")
+        self.last_good_target = self.last_target
         self.last_fsm_result = None
         self.desired_cmd = Twist()
         self.last_cmd = Twist()
@@ -321,7 +332,11 @@ class SharedNav(Node):
         )
         target_centered = False
         if target.u is not None:
-            target_centered = abs(float(target.u) - self.image_width / 2.0) <= self.arrive_center_px
+            center_error_px = float(target.u) - self.image_width / 2.0
+            target_centered = abs(center_error_px) <= self.arrive_center_px
+        else:
+            center_error_px = None
+        target_height_ratio = self.target_height_ratio(target)
         emergency = bool(front is not None and front <= self.emergency_stop_distance)
         blocked = bool(front is not None and front <= self.hard_stop_distance)
         score_ok = bool(target.visible and not target.stale and target.score >= self.target_min_score)
@@ -337,12 +352,25 @@ class SharedNav(Node):
             target_u=target.u,
             target_v=target.v,
             target_centered=target_centered,
+            target_center_error_px=center_error_px,
             target_area_ratio=target.area_ratio,
+            target_height_ratio=target_height_ratio,
             front_distance=front,
             emergency=emergency,
             blocked=blocked,
             qwen_verified=self.mock_qwen_verify(now),
         )
+
+    def target_height_ratio(self, target: NavTarget) -> Optional[float]:
+        bbox = target.bbox
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            return None
+        x, y, a, b = [float(v) for v in bbox]
+        del x
+        height = b - y if b > y else b
+        if height <= 0:
+            return None
+        return height / max(float(self.image_height), 1.0)
 
     def mock_qwen_verify(self, now: float) -> Optional[bool]:
         if self.mode != "qwen_yolo_nav" or self.fsm.state != NavState.ARRIVE_VERIFY:
@@ -360,6 +388,7 @@ class SharedNav(Node):
     def update_target_memory(self, target: NavTarget, now: float) -> None:
         if not self.target_ok(target):
             return
+        self.last_good_target = target
         self.search_mem.last_visible_time = now
         if target.u is not None:
             self.search_mem.last_target_u = float(target.u)
@@ -464,10 +493,12 @@ class SharedNav(Node):
         if state == NavState.TRACK:
             front = self.front_distance()
             if not self.target_ok(target):
-                cmd, reason = self.resolve_search_cmd(now)
-                return cmd, f"track_lost_{reason}"
-            if front is not None and front <= self.stop_distance:
-                return ServoCommand(vx=0.0, wz=0.0), "STOP_FOR_VERIFY"
+                if self.loss_age(now) <= self.lost_target_servo_sec and self.target_ok(self.last_good_target):
+                    result = self.servo.compute_cmd(self.last_good_target.to_dict())
+                    cmd = self._apply_front_speed_scale(result.cmd, front)
+                    cmd.vx *= self.lost_target_vx_scale
+                    return cmd, "track_recent_target_servo"
+                return ServoCommand(), "track_lost_wait"
             if (
                 self.track_blocked_hold_on_target
                 and front is not None

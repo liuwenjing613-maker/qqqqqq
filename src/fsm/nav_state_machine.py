@@ -31,7 +31,9 @@ class NavObservation:
     target_u: Optional[float]
     target_v: Optional[float]
     target_centered: bool
+    target_center_error_px: Optional[float] = None
     target_area_ratio: Optional[float] = None
+    target_height_ratio: Optional[float] = None
 
     front_distance: Optional[float] = None
     emergency: bool = False
@@ -59,6 +61,14 @@ class NavFSMConfig:
     verify_distance_max: float = 0.85
     emergency_stop_distance: float = 0.25
     arrive_area_ratio: float = 0.16
+    arrive_height_ratio: float = 0.32
+    success_min_score: float = 0.20
+    success_center_px: float = 140.0
+    success_target_recent_sec: float = 1.0
+    lidar_success_distance: float = 0.95
+    stop_verify_sec: float = 0.8
+    emergency_target_recent_sec: float = 1.5
+    lost_target_servo_sec: float = 0.6
     center_only_arrive_enabled: bool = False
 
 
@@ -88,6 +98,11 @@ class NavStateMachine:
         self.centered_frames = 0
         self.block_clear_frames = 0
         self.arrive_verify_frames = 0
+        self.last_target_seen_time: Optional[float] = None
+        self.last_target_score = 0.0
+        self.last_center_error_px: Optional[float] = None
+        self.last_area_ratio: Optional[float] = None
+        self.last_height_ratio: Optional[float] = None
         self._last_result_reason = "init"
 
     def reset(self, now: Optional[float] = None) -> None:
@@ -100,6 +115,11 @@ class NavStateMachine:
         self.centered_frames = 0
         self.block_clear_frames = 0
         self.arrive_verify_frames = 0
+        self.last_target_seen_time = None
+        self.last_target_score = 0.0
+        self.last_center_error_px = None
+        self.last_area_ratio = None
+        self.last_height_ratio = None
         self._last_result_reason = "reset"
 
     def update(self, obs: NavObservation) -> NavFSMResult:
@@ -114,6 +134,7 @@ class NavStateMachine:
         target_ok = self._target_ok(obs)
         sensors_ok = obs.image_fresh and (not obs.require_lidar or obs.scan_fresh)
         task_elapsed = max(0.0, obs.now - self.task_start_time)
+        self._update_target_memory(obs)
 
         if self.state in (NavState.SUCCESS, NavState.FAILED):
             reason = "terminal"
@@ -126,7 +147,7 @@ class NavStateMachine:
         elif not obs.image_fresh:
             self._enter(NavState.WAIT_SENSORS, obs.now)
             reason = "image_stale"
-        elif obs.emergency:
+        elif obs.emergency and self.state != NavState.ARRIVE_VERIFY:
             self._enter(NavState.BLOCKED, obs.now)
             reason = "emergency"
         elif self.state == NavState.BOOT:
@@ -172,10 +193,27 @@ class NavStateMachine:
                 else:
                     reason = "candidate_lock"
         elif self.state == NavState.TRACK:
-            if obs.blocked:
+            if obs.emergency:
+                self._enter(NavState.BLOCKED, obs.now)
+                reason = "emergency"
+            elif obs.blocked:
                 self._enter(NavState.BLOCKED, obs.now)
                 reason = "blocked"
-            elif not target_ok:
+            elif self.arrive_ok_recent_target(obs):
+                self.lost_frames = 0
+                self.arrive_frames = 0
+                self._enter(NavState.ARRIVE_VERIFY, obs.now)
+                self.arrive_verify_frames = 0
+                reason = "arrive_ok_recent_target"
+            elif target_ok:
+                self.lost_frames = 0
+                self.arrive_frames = 0
+                reason = "tracking"
+            elif self.target_recent(obs.now, self.cfg.lost_target_servo_sec):
+                self.lost_frames = 0
+                self.arrive_frames = 0
+                reason = "target_lost_recent_servo"
+            else:
                 self.lost_frames += 1
                 self.arrive_frames = 0
                 if self.lost_frames >= max(1, self.cfg.lost_frames_limit):
@@ -183,19 +221,6 @@ class NavStateMachine:
                     reason = "target_lost"
                 else:
                     reason = "target_lost_grace"
-            elif self.arrive_ok(obs):
-                self.lost_frames = 0
-                self.arrive_frames += 1
-                if self.arrive_frames >= max(1, self.cfg.arrive_required_frames):
-                    self._enter(NavState.ARRIVE_VERIFY, obs.now)
-                    self.arrive_verify_frames = 0
-                    reason = "arrive_ok"
-                else:
-                    reason = "arrive_counting"
-            else:
-                self.lost_frames = 0
-                self.arrive_frames = 0
-                reason = "tracking"
         elif self.state == NavState.LOST_RECOVERY:
             if target_ok:
                 self._enter(NavState.CANDIDATE_LOCK, obs.now)
@@ -226,21 +251,13 @@ class NavStateMachine:
                 self.block_clear_frames = 0
                 reason = "blocked"
         elif self.state == NavState.ARRIVE_VERIFY:
-            if obs.blocked or obs.emergency:
-                self._enter(NavState.BLOCKED, obs.now)
-                reason = "blocked"
-            elif not self._target_ok(obs):
-                self.lost_frames += 1
-                if self.lost_frames >= self.cfg.lost_frames_limit:
-                    self._enter(NavState.LOST_RECOVERY, obs.now)
-                    reason = "arrive_target_lost"
+            if obs.emergency:
+                if self.target_recent(obs.now, self.cfg.emergency_target_recent_sec):
+                    self._enter(NavState.SUCCESS, obs.now)
+                    reason = "emergency_recent_target_success"
                 else:
-                    reason = "arrive_target_lost_grace"
-            elif not self._verify_distance_ok(obs):
-                self._enter(NavState.TRACK, obs.now)
-                self.arrive_frames = 0
-                self.arrive_verify_frames = 0
-                reason = "verify_distance_lost"
+                    self._enter(NavState.BLOCKED, obs.now)
+                    reason = "emergency_no_recent_target"
             elif self.cfg.qwen_verify_required:
                 if obs.qwen_verified is True:
                     self._enter(NavState.SUCCESS, obs.now)
@@ -257,13 +274,11 @@ class NavStateMachine:
                         reason = "qwen_timeout_search"
                 else:
                     reason = "waiting_qwen_verify"
+            elif self._state_elapsed(obs.now) >= self.cfg.stop_verify_sec:
+                self._enter(NavState.SUCCESS, obs.now)
+                reason = "stop_verify_timeout_success"
             else:
-                self.arrive_verify_frames += 1
-                if self.arrive_verify_frames >= max(1, self.cfg.verify_required_frames):
-                    self._enter(NavState.SUCCESS, obs.now)
-                    reason = "arrive_verified"
-                else:
-                    reason = "arrive_verify_counting"
+                reason = "stop_verify_wait"
 
         if obs.target_centered and target_ok:
             self.centered_frames += 1
@@ -285,26 +300,27 @@ class NavStateMachine:
         )
 
     def arrive_ok(self, obs: NavObservation) -> bool:
-        target_ok = self._target_ok(obs)
-        if not target_ok or not obs.target_centered:
-            return False
+        return self.arrive_ok_recent_target(obs)
 
-        safe_distance_ok = (
-            obs.front_distance is None or obs.front_distance > self.cfg.emergency_stop_distance
+    def arrive_ok_recent_target(self, obs: NavObservation) -> bool:
+        target_recent = self.target_recent(obs.now, self.cfg.success_target_recent_sec)
+        score_ok = self.last_target_score >= self.cfg.success_min_score
+        center_recent_ok = (
+            self.last_center_error_px is not None
+            and abs(self.last_center_error_px) <= self.cfg.success_center_px
         )
-
-        close_enough = False
-        if obs.target_area_ratio is not None and obs.target_area_ratio >= self.cfg.arrive_area_ratio:
-            close_enough = True
-        elif obs.front_distance is not None:
-            close_enough = (
-                obs.front_distance <= self.cfg.stop_distance
-                and obs.front_distance > self.cfg.min_safe_distance
-            )
-        elif self.cfg.center_only_arrive_enabled:
-            close_enough = True
-
-        return safe_distance_ok and close_enough
+        lidar_success = (
+            obs.front_distance is not None
+            and obs.front_distance <= self.cfg.lidar_success_distance
+        )
+        bbox_close = (
+            self.last_area_ratio is not None
+            and self.last_area_ratio >= self.cfg.arrive_area_ratio
+        ) or (
+            self.last_height_ratio is not None
+            and self.last_height_ratio >= self.cfg.arrive_height_ratio
+        )
+        return bool(target_recent and score_ok and center_recent_ok and (lidar_success or bbox_close))
 
     def _verify_distance_ok(self, obs: NavObservation) -> bool:
         if obs.front_distance is None:
@@ -317,6 +333,23 @@ class NavStateMachine:
     @staticmethod
     def _target_ok(obs: NavObservation) -> bool:
         return bool(obs.target_visible and not obs.target_stale and obs.target_score_ok)
+
+    def target_recent(self, now: float, within_sec: float) -> bool:
+        return self.target_seen_age(now) <= within_sec
+
+    def target_seen_age(self, now: float) -> float:
+        if self.last_target_seen_time is None:
+            return float("inf")
+        return max(0.0, now - self.last_target_seen_time)
+
+    def _update_target_memory(self, obs: NavObservation) -> None:
+        if not obs.target_visible or obs.target_stale:
+            return
+        self.last_target_seen_time = obs.now
+        self.last_target_score = float(obs.target_score)
+        self.last_center_error_px = obs.target_center_error_px
+        self.last_area_ratio = obs.target_area_ratio
+        self.last_height_ratio = obs.target_height_ratio
 
     def _enter(self, state: NavState, now: float) -> None:
         if state == self.state:
