@@ -13,7 +13,9 @@ target_words:
   - bottle
 
 lidar_front_deg: 25.0
-camera_lidar_yaw_offset_deg: 180.0
+# Camera optical axis vs LiDAR 0° (robot forward). 180° reads the rear sector (~1.2m) instead of the bottle.
+camera_lidar_yaw_offset_deg: 90.0
+camera_hfov_deg: 70.0
 
 topics:
   image_raw: /image_raw
@@ -54,9 +56,9 @@ yolo_bridge:
   target_classes: bottle
   min_score: 0.2
   max_area_ratio: 0.30
-  voter_window_size: 1
-  voter_min_votes: 1
-  voter_lost_hold_frames: 0
+  voter_window_size: 6
+  voter_min_votes: 2
+  voter_lost_hold_frames: 4
 
 target:
   source: yolo_bbox
@@ -69,12 +71,14 @@ target:
   accept_stale: false
 
 voter:
-  enabled: false
-  window_size: 1
-  min_votes: 1
-  lost_hold_frames: 0
+  enabled: true
+  window_size: 6
+  min_votes: 2
+  lost_hold_frames: 4
   iou_threshold: 0.05
+  center_dist_threshold: 0.18
   smooth_alpha: 0.20
+  accept_held_target: true
 
 fsm:
   stable_frames_required: 3
@@ -90,9 +94,9 @@ success:
   min_score: 0.20
   center_px: 140
   min_safe_distance: 0.20
-  stop_distance: 0.90
-  lidar_success_distance: 0.95
-  verify_distance_max: 0.85
+  stop_distance: 0.5
+  lidar_success_distance: 0.5
+  verify_distance_max: 0.5
   min_area_ratio: 0.04
   min_height_ratio: 0.32
   center_only_enabled: false
@@ -105,13 +109,13 @@ success:
   qwen_verify_required: false
 
 servo:
-  max_vx: 0.06
-  steer_vx: 0.04
-  max_wz: 0.06
-  kp_turn: 0.12
+  max_vx: 0.05
+  steer_vx: 0.03
+  max_wz: 0.03
+  kp_turn: 0.1
   center_deadband: 0.06
-  turn_only_threshold: 0.35
-  turn_only_vx: 0.04
+  turn_only_threshold: 0.4
+  turn_only_vx: 0.0
   cmd_wz_deadband: 0.006
 
 safety:

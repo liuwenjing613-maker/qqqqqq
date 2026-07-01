@@ -7,12 +7,20 @@ import time
 import argparse
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
 import rclpy
+from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from std_msgs.msg import String
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.nav.nav_video_overlay import NavOverlayContext, annotate_nav_frame, safe_json_load
 
 
 COCO_NAMES = [
@@ -150,6 +158,8 @@ class Yolov5sBpuWebNode(Node):
         self.frame_count = 0
         self.fps_t0 = time.time()
         self.current_fps = 0.0
+        self.last_infer_ms = 0.0
+        self.overlay_ctx = NavOverlayContext()
 
         self.model = self.load_model(args)
 
@@ -172,6 +182,10 @@ class Yolov5sBpuWebNode(Node):
             )
             self.get_logger().info(f"subscribing raw image: {args.image_topic}")
 
+        self.create_subscription(String, args.nav_state_topic, self.on_nav_state, 10)
+        self.create_subscription(Twist, args.cmd_vel_topic, self.on_cmd_vel, 10)
+        self.create_subscription(String, args.nav_point_topic, self.on_nav_point, 10)
+
         self.start_web_server(args.web_host, args.web_port)
 
         self.get_logger().info("===== YOLOv5s-BPU web node started =====")
@@ -180,6 +194,34 @@ class Yolov5sBpuWebNode(Node):
         self.get_logger().info(f"out_topic={args.out_topic}")
         self.get_logger().info(f"annotated_topic={args.annotated_topic}")
         self.get_logger().info(f"web=http://<RDK_IP>:{args.web_port}/")
+        self.get_logger().info(
+            f"nav overlay topics state={args.nav_state_topic} cmd={args.cmd_vel_topic}"
+        )
+
+    def on_nav_state(self, msg: String) -> None:
+        self.overlay_ctx.update_nav_state(safe_json_load(msg.data))
+
+    def on_cmd_vel(self, msg: Twist) -> None:
+        self.overlay_ctx.update_cmd(float(msg.linear.x), float(msg.angular.z))
+
+    def on_nav_point(self, msg: String) -> None:
+        data = safe_json_load(msg.data)
+        if data:
+            self.overlay_ctx.target_point = data
+
+    def _overlay_header(self) -> list[str]:
+        return [
+            f"YOLOv5s-BPU | targets={','.join(sorted(self.target_classes))} "
+            f"| fps={self.current_fps:.1f} | infer={self.last_infer_ms:.1f}ms"
+        ]
+
+    def _apply_nav_overlay(self, frame, target_override=None):
+        return annotate_nav_frame(
+            frame,
+            self.overlay_ctx,
+            target_override=target_override,
+            header_lines=self._overlay_header(),
+        )
 
     def load_model(self, args):
         runtime_dir = os.path.abspath(args.runtime_dir)
@@ -261,6 +303,10 @@ class Yolov5sBpuWebNode(Node):
         msg = String()
         msg.data = json.dumps(data, ensure_ascii=False)
         self.pub_json.publish(msg)
+        annotated = self._apply_nav_overlay(
+            annotated,
+            target_override={"visible": False, "reason": reason},
+        )
         self.publish_annotated(annotated)
 
     def process_frame(self, frame):
@@ -278,6 +324,7 @@ class Yolov5sBpuWebNode(Node):
             self.get_logger().error(f"model.predict failed: {e}")
             return
         infer_ms = (time.time() - t0) * 1000.0
+        self.last_infer_ms = infer_ms
 
         annotated = frame.copy()
         all_boxes = []
@@ -341,17 +388,6 @@ class Yolov5sBpuWebNode(Node):
             self.frame_count = 0
             self.fps_t0 = t
 
-        status_line = f"YOLOv5s-BPU | targets={','.join(sorted(self.target_classes))} | fps={self.current_fps:.1f} | infer={infer_ms:.1f}ms"
-        cv2.putText(
-            annotated,
-            status_line,
-            (10, 25),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (0, 255, 255),
-            2,
-        )
-
         if not candidates:
             self.publish_empty(image_w, image_h, annotated, "no_target_class_detected", infer_ms)
             self.publish_debug(None, infer_ms)
@@ -389,6 +425,17 @@ class Yolov5sBpuWebNode(Node):
         self.pub_json.publish(msg)
 
         self.publish_debug(best, infer_ms)
+        target_override = {
+            "visible": True,
+            "class_name": best["class_name"],
+            "score": best["score"],
+            "area_ratio": best["area_ratio"],
+            "bbox": best["bbox"],
+            "bbox_xyxy": best["bbox_xyxy"],
+            "u": best["cx"],
+            "v": best["cy"],
+        }
+        annotated = self._apply_nav_overlay(annotated, target_override=target_override)
         self.publish_annotated(annotated)
 
     def publish_debug(self, best, infer_ms):
@@ -456,6 +503,9 @@ def parse_args():
 
     ap.add_argument("--web-host", default="0.0.0.0")
     ap.add_argument("--web-port", type=int, default=8088)
+    ap.add_argument("--nav-state-topic", default="/nav_state")
+    ap.add_argument("--cmd-vel-topic", default="/cmd_vel")
+    ap.add_argument("--nav-point-topic", default="/nav_target_point")
 
     return ap.parse_args()
 

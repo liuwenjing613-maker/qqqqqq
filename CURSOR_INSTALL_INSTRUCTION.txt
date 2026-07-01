@@ -1,0 +1,28 @@
+请在 Cursor 里执行以下操作：
+
+1. 把这个压缩包解压到：
+   /root/rdk_x5_vln_robot
+
+2. 执行：
+   cd /root/rdk_x5_vln_robot
+   bash install_arrow_tools.sh
+
+3. 运行新的非破坏性箭头校准建图流程：
+   bash scripts/slam/run_arrow_calibrated_joy_mapping.sh
+
+4. 如果你想指定原来的校准建图脚本作为底层流程：
+   SLAM_BASE_SCRIPT=/root/rdk_x5_vln_robot/scripts/slam/run_joy_mapping_calibrated.sh bash scripts/slam/run_arrow_calibrated_joy_mapping.sh
+
+5. Foxglove 里打开：
+   /arrow_calibration_markers
+   /tf_static
+   base_forward_calibrated
+   laser_forward_calibrated
+
+禁止 Cursor 修改以下文件：
+   ros2_bridge/m1_pwm_cmd_vel_bridge.py
+   scripts/lib/run_chassis_bridge.sh
+   lidar/config/tmini_plus.yaml
+   scripts/slam/run_joy_mapping_calibrated.sh
+
+这个工具包只新增文件，不覆盖原有建图流程。

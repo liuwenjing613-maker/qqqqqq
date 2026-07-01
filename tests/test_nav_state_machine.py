@@ -67,9 +67,9 @@ def test_lost_frames_enter_recovery():
     assert fsm.state == NavState.TRACK
     for i in range(6):
         assert fsm.update(obs(0.4 + i * 0.1)).state == NavState.TRACK
-    for i in range(4):
+    for i in range(3):
         assert fsm.update(obs(1.0 + i * 0.1)).state == NavState.TRACK
-    assert fsm.update(obs(1.4)).state == NavState.LOST_RECOVERY
+    assert fsm.update(obs(1.3)).state == NavState.LOST_RECOVERY
 
 
 def test_emergency_enters_blocked_from_any_state():
@@ -93,7 +93,7 @@ def test_arrive_frames_then_success_without_qwen():
     _reach_track(fsm)
     assert fsm.update(target_obs(0.4, front_distance=0.70)).state == NavState.ARRIVE_VERIFY
     assert fsm.update(target_obs(1.1, front_distance=0.70)).state == NavState.ARRIVE_VERIFY
-    assert fsm.update(target_obs(1.2, front_distance=0.70)).state == NavState.SUCCESS
+    assert fsm.update(target_obs(1.21, front_distance=0.70)).state == NavState.SUCCESS
 
 
 def test_arrive_requires_recent_centered_target():

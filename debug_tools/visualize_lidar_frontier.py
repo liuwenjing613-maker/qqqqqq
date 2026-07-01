@@ -299,6 +299,10 @@ class LidarFrontierVisualizer(Node):
         return safe_float(self.latest_point.get("score"), None)
 
     def get_front_distance(self) -> Optional[float]:
+        f = safe_float(self.latest_state.get("front_min_distance"), None)
+        if f is not None:
+            return f
+
         f = safe_float(self.latest_state.get("front_distance"), None)
         if f is not None:
             return f
@@ -340,7 +344,7 @@ class LidarFrontierVisualizer(Node):
         if not values:
             return None
 
-        return float(np.percentile(np.array(values, dtype=np.float32), 20))
+        return float(np.min(np.array(values, dtype=np.float32)))
 
     def draw_grid(self, img: np.ndarray) -> None:
         # Dark background grid, intentionally subtle. Foxglove's blue grid already bullied us enough.

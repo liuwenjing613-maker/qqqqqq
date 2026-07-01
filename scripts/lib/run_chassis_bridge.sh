@@ -47,7 +47,6 @@ run_chassis_bridge() {
     --odom-vxy-deadzone "${CHASSIS_ODOM_VXY_DEADZONE:-0.003}" \
     --odom-wz-deadzone "${CHASSIS_ODOM_WZ_DEADZONE:-0.015}" \
     --base-yaw-offset "${CHASSIS_BASE_YAW_OFFSET:-0.0}" \
-    --odom-xy-yaw-offset "${CHASSIS_ODOM_XY_YAW_OFFSET:-0.0}" \
     $( [ "${CHASSIS_ODOM_USE_VY:-0}" = "1" ] && echo "--odom-use-vy" ) \
     $( [ "${CHASSIS_DEBUG:-0}" = "1" ] && echo "--debug" ) \
     > "${log_file}" 2>&1 &
