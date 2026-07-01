@@ -1,10 +1,43 @@
-[INFO] [1782902991.622779127] [m1_pwm_cmd_vel_bridge]: Initializing Rosmaster PWM bridge on /dev/rosmaster
-[INFO] [1782902992.208710199] [m1_pwm_cmd_vel_bridge]: m1_pwm_cmd_vel_bridge started (drive_mode=pwm)
-[INFO] [1782902992.212372985] [m1_pwm_cmd_vel_bridge]: Publishing odom topic=/odom, TF odom->base_link, source=get_motion_data()
-[INFO] [1782902992.214846524] [m1_pwm_cmd_vel_bridge]: odom_wz_scale=-0.58
-[INFO] [1782902992.217301354] [m1_pwm_cmd_vel_bridge]: odom x/y yaw offset=3.1416 rad (180.0 deg)
-[INFO] [1782902992.219610600] [m1_pwm_cmd_vel_bridge]: base_link yaw offset=1.5708 rad (90.0 deg)
-[INFO] [1782902992.222682971] [m1_pwm_cmd_vel_bridge]: fl-rl-fr-rr: M1=FL, M2=RL, M3=FR, M4=RR
-[INFO] [1782902992.225094676] [m1_pwm_cmd_vel_bridge]: motor_signs=[1, 1, 1, 1], motor_trims=[1.15, 1.15, 1.0, 1.0]
-[INFO] [1782902992.227439256] [m1_pwm_cmd_vel_bridge]: limits: max_vx=0.040, max_wz=0.100, vx_db=10.0, wz_db=10.0, pwm_max=40.0, vx_gain=200.0, wz_gain=150.0
-[INFO] [1782902992.229716087] [m1_pwm_cmd_vel_bridge]: Tip: use angular.z in rad/s (e.g. 0.12~0.16), NOT 3.0. M1 wz breakaway from calibration is about 0.16 rad/s.
+[INFO] [1782903328.174275744] [m1_pwm_cmd_vel_bridge]: Initializing Rosmaster PWM bridge on /dev/rosmaster
+[INFO] [1782903328.766540646] [m1_pwm_cmd_vel_bridge]: m1_pwm_cmd_vel_bridge started (drive_mode=pwm)
+[INFO] [1782903328.770931182] [m1_pwm_cmd_vel_bridge]: Publishing odom topic=/odom, TF odom->base_link, source=get_motion_data()
+[INFO] [1782903328.777618131] [m1_pwm_cmd_vel_bridge]: odom_wz_scale=-0.58
+[INFO] [1782903328.782084042] [m1_pwm_cmd_vel_bridge]: odom x/y yaw offset=3.1416 rad (180.0 deg)
+[INFO] [1782903328.785468829] [m1_pwm_cmd_vel_bridge]: base_link yaw offset=-3.1416 rad (-180.0 deg)
+[INFO] [1782903328.787916409] [m1_pwm_cmd_vel_bridge]: fl-rl-fr-rr: M1=FL, M2=RL, M3=FR, M4=RR
+[INFO] [1782903328.790326197] [m1_pwm_cmd_vel_bridge]: motor_signs=[1, 1, 1, 1], motor_trims=[1.15, 1.15, 1.0, 1.0]
+[INFO] [1782903328.792672819] [m1_pwm_cmd_vel_bridge]: limits: max_vx=0.040, max_wz=0.100, vx_db=10.0, wz_db=10.0, pwm_max=40.0, vx_gain=200.0, wz_gain=150.0
+[INFO] [1782903328.796598147] [m1_pwm_cmd_vel_bridge]: Tip: use angular.z in rad/s (e.g. 0.12~0.16), NOT 3.0. M1 wz breakaway from calibration is about 0.16 rad/s.
+[INFO] [1782904250.615931961] [m1_pwm_cmd_vel_bridge]: Stopping PWM motors before node shutdown...
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389
+Rosmaster Serial Opened! Baudrate=115200
+----------------create receive threading--------------
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/m1_pwm_cmd_vel_bridge.py", line 570, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/m1_pwm_cmd_vel_bridge.py", line 580, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/ros2_bridge/m1_pwm_cmd_vel_bridge.py", line 576, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

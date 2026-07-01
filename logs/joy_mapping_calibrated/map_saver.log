@@ -7,7 +7,7 @@ Node name: slam_toolbox
 Node namespace: /
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: PUBLISHER
-GID: 01.0f.c9.96.e6.32.c4.2f.00.00.01.00.00.00.18.03.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.62.3e.01.29.00.00.01.00.00.00.18.03.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -23,7 +23,7 @@ Node name: foxglove_bridge
 Node namespace: /
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.d1.33.f5.18.00.00.01.00.00.00.f9.04.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.35.3f.b2.c8.00.00.01.00.00.00.f4.04.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -37,7 +37,7 @@ Node name: slam_toolbox
 Node namespace: /
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.e6.32.c4.2f.00.00.01.00.00.00.25.04.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.62.3e.01.29.00.00.01.00.00.00.25.04.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -48,19 +48,19 @@ QoS profile:
   Liveliness lease duration: Infinite
 
 
-[INFO] [1782903146.781806421] [map_saver]: 
+[INFO] [1782903794.613673866] [map_saver]: 
 	map_saver lifecycle node launched. 
 	Waiting on external lifecycle transitions to activate
 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
-[INFO] [1782903146.783131044] [map_saver]: Creating
-[INFO] [1782903146.785417083] [map_saver]: Configuring
-[INFO] [1782903146.804200141] [map_saver]: Saving map from '/map' topic to '/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260701_185220' file
-[WARN] [1782903146.804471974] [map_saver]: Free threshold unspecified. Setting it to default value: 0.250000
-[WARN] [1782903146.804602307] [map_saver]: Occupied threshold unspecified. Setting it to default value: 0.650000
-[WARN] [1782903146.826217236] [map_io]: Image format unspecified. Setting it to: pgm
-[INFO] [1782903146.826507152] [map_io]: Received a 93 X 98 map @ 0.05 m/pix
-[INFO] [1782903146.850624911] [map_io]: Writing map occupancy data to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260701_185220.pgm
-[INFO] [1782903146.852405575] [map_io]: Writing map metadata to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260701_185220.yaml
-[INFO] [1782903146.852976866] [map_io]: Map saved
-[INFO] [1782903146.853050782] [map_saver]: Map saved successfully
-[INFO] [1782903146.855627862] [map_saver]: Destroying
+[INFO] [1782903794.614342282] [map_saver]: Creating
+[INFO] [1782903794.614867614] [map_saver]: Configuring
+[INFO] [1782903794.620485690] [map_saver]: Saving map from '/map' topic to '/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260701_190307' file
+[WARN] [1782903794.620756357] [map_saver]: Free threshold unspecified. Setting it to default value: 0.250000
+[WARN] [1782903794.620945356] [map_saver]: Occupied threshold unspecified. Setting it to default value: 0.650000
+[WARN] [1782903794.721743226] [map_io]: Image format unspecified. Setting it to: pgm
+[INFO] [1782903794.722100767] [map_io]: Received a 155 X 201 map @ 0.05 m/pix
+[INFO] [1782903794.787711598] [map_io]: Writing map occupancy data to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260701_190307.pgm
+[INFO] [1782903794.790183012] [map_io]: Writing map metadata to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260701_190307.yaml
+[INFO] [1782903794.790846844] [map_io]: Map saved
+[INFO] [1782903794.790950428] [map_saver]: Map saved successfully
+[INFO] [1782903794.793173133] [map_saver]: Destroying

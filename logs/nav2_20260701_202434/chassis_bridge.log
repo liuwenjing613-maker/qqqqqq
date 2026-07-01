@@ -1,0 +1,21 @@
+[INFO] [1782908685.047393434] [m1_pwm_cmd_vel_bridge]: Initializing Rosmaster PWM bridge on /dev/ttyUSB0
+[INFO] [1782908685.634411622] [m1_pwm_cmd_vel_bridge]: m1_pwm_cmd_vel_bridge started (drive_mode=pwm)
+[INFO] [1782908685.636786246] [m1_pwm_cmd_vel_bridge]: Publishing odom topic=/odom, TF odom->base_link, source=get_motion_data()
+[INFO] [1782908685.639170329] [m1_pwm_cmd_vel_bridge]: odom_wz_scale=1.0
+[INFO] [1782908685.641445744] [m1_pwm_cmd_vel_bridge]: odom x/y yaw offset=0.0000 rad (0.0 deg)
+[INFO] [1782908685.643663952] [m1_pwm_cmd_vel_bridge]: base_link yaw offset=0.0000 rad (0.0 deg)
+[INFO] [1782908685.646045242] [m1_pwm_cmd_vel_bridge]: fl-rl-fr-rr: M1=FL, M2=RL, M3=FR, M4=RR
+[INFO] [1782908685.648312199] [m1_pwm_cmd_vel_bridge]: motor_signs=[1, 1, 1, 1], motor_trims=[1.0, 1.0, 1.0, 1.0]
+[INFO] [1782908685.650495948] [m1_pwm_cmd_vel_bridge]: limits: max_vx=0.060, max_wz=0.060, vx_db=6.0, wz_db=8.0, pwm_max=30.0, vx_gain=180.0, wz_gain=120.0
+[INFO] [1782908685.652596406] [m1_pwm_cmd_vel_bridge]: Tip: use angular.z in rad/s (e.g. 0.12~0.16), NOT 3.0. M1 wz breakaway from calibration is about 0.16 rad/s.
+Exception in thread task_serial_receive:
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.10/threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/Rosmaster_Lib/Rosmaster_Lib.py", line 260, in __receive_data
+    head1 = bytearray(self.ser.read())[0]
+  File "/usr/lib/python3/dist-packages/serial/serialposix.py", line 595, in read
+    raise SerialException(
+serial.serialutil.SerialException: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
