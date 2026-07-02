@@ -1,0 +1,126 @@
+{
+  "configById": {
+    "3D!semantic_slam": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 12,
+        "phi": 60,
+        "thetaOffset": 45,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "fixedFrame": "map",
+      "followMode": "follow-none",
+      "followTf": "base_link",
+      "scene": {
+        "enableStats": false,
+        "backgroundColor": "#1a1a1a"
+      },
+      "transforms": {
+        "enable": true,
+        "showLabel": false,
+        "lineWidth": 0.2,
+        "labelSize": 0.05
+      },
+      "topics": {
+        "/map": {
+          "visible": true,
+          "colorMode": "costmap",
+          "minColor": "#000000",
+          "maxColor": "#ffffff"
+        },
+        "/scan_filtered": {
+          "visible": true,
+          "pointSize": 4,
+          "decayTime": 0
+        },
+        "/semantic_landmarks": {
+          "visible": true,
+          "namespaces": {
+            "semantic_landmarks": { "visible": true },
+            "semantic_landmark_labels": { "visible": true }
+          }
+        },
+        "/semantic_viewpoints": {
+          "visible": true,
+          "namespaces": {
+            "semantic_viewpoints": { "visible": true }
+          }
+        }
+      },
+      "layers": {}
+    },
+    "Image!yolo_annotated": {
+      "imageMode": {
+        "imageTopic": "/yolov5s_bpu/annotated/compressed"
+      },
+      "synchronize": false,
+      "smooth": false,
+      "rotation": 0,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": 0,
+      "maxValue": 1
+    },
+    "RawMessages!semantic_status": {
+      "topicPath": "/semantic_status",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": {
+        "data": "e"
+      }
+    },
+    "RawMessages!loop_error": {
+      "topicPath": "/semantic_loop_error",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": {
+        "data": "e"
+      }
+    },
+    "RawMessages!bbox_json": {
+      "topicPath": "/target_bbox_json",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": {
+        "data": "e"
+      }
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "3D!semantic_slam",
+    "second": {
+      "direction": "column",
+      "first": "Image!yolo_annotated",
+      "second": {
+        "direction": "column",
+        "first": "RawMessages!semantic_status",
+        "second": {
+          "direction": "column",
+          "first": "RawMessages!loop_error",
+          "second": "RawMessages!bbox_json",
+          "splitPercentage": 50
+        },
+        "splitPercentage": 40
+      },
+      "splitPercentage": 55
+    },
+    "splitPercentage": 65
+  }
+}

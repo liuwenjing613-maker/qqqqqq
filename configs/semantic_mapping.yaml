@@ -1,0 +1,127 @@
+semantic_mapping:
+  frames:
+    fixed_frame: map
+    fallback_frame: odom
+    odom_frame: odom
+    base_frame: base_link
+    laser_frame: laser
+    camera_frame: base_link
+
+  topics:
+    image_raw: /image_raw
+    bbox_json: /target_bbox_json
+    scan: /scan_filtered
+    scan_fallback: /scan
+    map: /map
+    odom: /odom
+    semantic_map_json: /semantic_map_json
+    semantic_status: /semantic_status
+    semantic_observations: /semantic_observations
+    semantic_landmarks: /semantic_landmarks
+    semantic_viewpoints: /semantic_viewpoints
+    semantic_observed_cones: /semantic_observed_cones
+    semantic_loop_error: /semantic_loop_error
+    semantic_save_event: /semantic_save_event
+    save_trigger: /semantic_map/save
+
+  camera:
+    width: 640
+    height: 480
+    hfov_deg: 70.0
+    yaw_offset_deg: 0.0
+
+  projection:
+    min_range_m: 0.18
+    max_range_m: 4.0
+    target_window_deg: 8.0
+    use_lidar_median: true
+    no_range_policy: viewpoint_only
+    default_position_sigma_m: 1.20
+
+  classes:
+    whitelist:
+      - bottle
+      - cup
+      - backpack
+      - chair
+      - dining table
+      - book
+      - potted plant
+      - cell phone
+      - couch
+    dynamic:
+      - person
+      - dog
+      - cat
+    small_objects:
+      - bottle
+      - cup
+      - cell phone
+      - book
+    large_objects:
+      - chair
+      - dining table
+      - couch
+
+  detection_filter:
+    min_score_default: 0.25
+    min_score_small_object: 0.20
+    min_score_observation_only: 0.15
+    min_area_ratio: 0.0006
+    max_area_ratio: 0.45
+    edge_margin_px: 6
+    max_box_aspect_ratio: 6.0
+    reject_stale: true
+
+  low_confidence_policy:
+    min_score_can_observe: 0.15
+    min_score_can_landmark: 0.20
+    require_lidar_range: true
+    require_vote_count: 3
+    require_not_edge_box: true
+
+  temporal_vote:
+    window_size: 8
+    min_votes_candidate: 2
+    min_votes_confirmed: 3
+    max_time_span_sec: 2.0
+    iou_threshold: 0.10
+    center_dist_threshold: 0.16
+    hold_frames: 4
+
+  landmark_fusion:
+    merge_radius_small_m: 0.45
+    merge_radius_large_m: 0.80
+    confirm_seen_count: 3
+    confirm_min_duration_sec: 1.0
+    max_position_sigma_m: 0.80
+    confidence_decay_sec: 60.0
+    min_viewpoint_baseline_m: 0.15
+
+  viewpoints:
+    enable: true
+    min_translation_m: 0.25
+    min_rotation_deg: 20.0
+    save_on_detection: true
+    view_range_m: 3.0
+    view_fov_deg: 70.0
+    save_keyframes: true
+
+  loop_quality:
+    enable: true
+    max_return_xy_error_m: 0.20
+    max_return_yaw_error_deg: 12.0
+    require_stationary_sec_before_save: 3.0
+
+  storage:
+    root_dir: /root/rdk_x5_vln_robot/logs/semantic_mapping
+    session_name: auto
+    write_jsonl: true
+    autosave_sec: 2.0
+    save_keyframe_jpeg_quality: 70
+
+  visualization:
+    publish_markers: true
+    marker_lifetime_sec: 0.0
+    landmark_text: true
+    observed_cone_markers: true

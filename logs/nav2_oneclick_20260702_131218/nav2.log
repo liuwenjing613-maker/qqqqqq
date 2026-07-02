@@ -1,0 +1,141 @@
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-02-13-12-44-326322-ubuntu-40902
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [map_server-1]: process started with pid [40961]
+[INFO] [amcl-2]: process started with pid [40963]
+[INFO] [lifecycle_manager-3]: process started with pid [40966]
+[INFO] [controller_server-4]: process started with pid [40968]
+[INFO] [smoother_server-5]: process started with pid [40970]
+[INFO] [planner_server-6]: process started with pid [40972]
+[INFO] [behavior_server-7]: process started with pid [40974]
+[INFO] [bt_navigator-8]: process started with pid [40976]
+[INFO] [waypoint_follower-9]: process started with pid [40979]
+[INFO] [velocity_smoother-10]: process started with pid [40990]
+[INFO] [lifecycle_manager-11]: process started with pid [41011]
+[smoother_server-5] [INFO] [1782969166.900120556] [smoother_server]: 
+[smoother_server-5] 	smoother_server lifecycle node launched. 
+[planner_server-6] [INFO] [1782969166.907952632] [planner_server]: 
+[planner_server-6] 	planner_server lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-3] [INFO] [1782969166.914687043] [lifecycle_manager_localization]: Creating
+[smoother_server-5] 	Waiting on external lifecycle transitions to activate
+[smoother_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-11] [INFO] [1782969166.920759705] [lifecycle_manager_navigation]: Creating
+[smoother_server-5] [INFO] [1782969166.944679809] [smoother_server]: Creating smoother server
+[planner_server-6] [INFO] [1782969166.965751666] [planner_server]: Creating
+[lifecycle_manager-3] [INFO] [1782969167.017336288] [lifecycle_manager_localization]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-11] [INFO] [1782969167.045077889] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[map_server-1] [INFO] [1782969167.092674347] [map_server]: 
+[map_server-1] 	map_server lifecycle node launched. 
+[map_server-1] 	Waiting on external lifecycle transitions to activate
+[map_server-1] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-1] [INFO] [1782969167.093422472] [map_server]: Creating
+[amcl-2] [INFO] [1782969167.116192827] [amcl]: 
+[amcl-2] 	amcl lifecycle node launched. 
+[amcl-2] 	Waiting on external lifecycle transitions to activate
+[amcl-2] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[amcl-2] [INFO] [1782969167.119953199] [amcl]: Creating
+[behavior_server-7] [INFO] [1782969167.138705057] [behavior_server]: 
+[behavior_server-7] 	behavior_server lifecycle node launched. 
+[behavior_server-7] 	Waiting on external lifecycle transitions to activate
+[behavior_server-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1782969167.139003140] [controller_server]: 
+[controller_server-4] 	controller_server lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[velocity_smoother-10] [INFO] [1782969167.186476349] [velocity_smoother]: 
+[velocity_smoother-10] 	velocity_smoother lifecycle node launched. 
+[velocity_smoother-10] 	Waiting on external lifecycle transitions to activate
+[velocity_smoother-10] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-9] [INFO] [1782969167.265990405] [waypoint_follower]: 
+[waypoint_follower-9] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-9] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-9] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1782969167.270480943] [controller_server]: Creating controller server
+[waypoint_follower-9] [INFO] [1782969167.271188026] [waypoint_follower]: Creating
+[bt_navigator-8] [INFO] [1782969167.278934019] [bt_navigator]: 
+[bt_navigator-8] 	bt_navigator lifecycle node launched. 
+[bt_navigator-8] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-8] [INFO] [1782969167.281130392] [bt_navigator]: Creating
+[planner_server-6] [INFO] [1782969167.532814216] [global_costmap.global_costmap]: 
+[planner_server-6] 	global_costmap lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] [INFO] [1782969167.542444707] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-4] [INFO] [1782969167.862292722] [local_costmap.local_costmap]: 
+[controller_server-4] 	local_costmap lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1782969167.864783220] [local_costmap.local_costmap]: Creating Costmap
+[controller_server-4] terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterTypeException'
+[controller_server-4]   what():  parameter 'height' has invalid type: Wrong parameter type, parameter {height} is of type {integer}, setting it to {double} is not allowed.
+[ERROR] [controller_server-4]: process has died [pid 40968, exit code -6, cmd '/opt/ros/humble/lib/nav2_controller/controller_server --ros-args --log-level info --ros-args --params-file /tmp/launch_params_34kooo_0 -r /tf:=tf -r /tf_static:=tf_static -r cmd_vel:=cmd_vel_nav'].
+[lifecycle_manager-3] [INFO] [1782969168.142529896] [lifecycle_manager_localization]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-3] [INFO] [1782969168.142755437] [lifecycle_manager_localization]: [34m[1mConfiguring map_server[0m[0m
+[map_server-1] [INFO] [1782969168.144393936] [map_server]: Configuring
+[map_server-1] [INFO] [1782969168.144683810] [map_io]: Loading yaml file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.yaml
+[map_server-1] [INFO] [1782969168.147305475] [map_io]: resolution: 0.05
+[map_server-1] [INFO] [1782969168.147394391] [map_io]: origin[0]: -5.07
+[map_server-1] [INFO] [1782969168.147434683] [map_io]: origin[1]: -5.68
+[map_server-1] [INFO] [1782969168.147466391] [map_io]: origin[2]: 0
+[map_server-1] [INFO] [1782969168.147500141] [map_io]: free_thresh: 0.25
+[map_server-1] [INFO] [1782969168.147529600] [map_io]: occupied_thresh: 0.65
+[map_server-1] [INFO] [1782969168.147575641] [map_io]: mode: trinary
+[map_server-1] [INFO] [1782969168.147607641] [map_io]: negate: 0
+[map_server-1] [INFO] [1782969168.149494890] [map_io]: Loading image_file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm
+[map_server-1] [INFO] [1782969168.196357391] [map_io]: Read map /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm: 155 X 201 map @ 0.05 m/cell
+[lifecycle_manager-11] [INFO] [1782969168.197171140] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-11] [INFO] [1782969168.197618181] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[lifecycle_manager-3] [INFO] [1782969168.257727129] [lifecycle_manager_localization]: [34m[1mConfiguring amcl[0m[0m
+[amcl-2] [INFO] [1782969168.259050753] [amcl]: Configuring
+[amcl-2] [INFO] [1782969168.259414086] [amcl]: initTransforms
+[amcl-2] [INFO] [1782969168.359692707] [amcl]: initPubSub
+[amcl-2] [INFO] [1782969168.394337969] [amcl]: Subscribed to map topic.
+[lifecycle_manager-3] [INFO] [1782969168.429474730] [lifecycle_manager_localization]: [34m[1mActivating map_server[0m[0m
+[map_server-1] [INFO] [1782969168.431366645] [map_server]: Activating
+[map_server-1] [INFO] [1782969168.432102561] [map_server]: Creating bond (map_server) to lifecycle manager.
+[lifecycle_manager-3] [INFO] [1782969168.582401264] [lifecycle_manager_localization]: Server map_server connected with bond.
+[lifecycle_manager-3] [INFO] [1782969168.582624097] [lifecycle_manager_localization]: [34m[1mActivating amcl[0m[0m
+[amcl-2] [INFO] [1782969168.583499347] [amcl]: Activating
+[amcl-2] [INFO] [1782969168.583642055] [amcl]: Creating bond (amcl) to lifecycle manager.
+[amcl-2] [INFO] [1782969168.617180817] [amcl]: Received a 155 X 201 map @ 0.050 m/pix
+[amcl-2] [INFO] [1782969168.677001474] [amcl]: createLaserObject
+[lifecycle_manager-3] [INFO] [1782969168.700459829] [lifecycle_manager_localization]: Server amcl connected with bond.
+[lifecycle_manager-3] [INFO] [1782969168.700685495] [lifecycle_manager_localization]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-3] [INFO] [1782969168.700813787] [lifecycle_manager_localization]: [34m[1mCreating bond timer...[0m[0m
+[amcl-2] [INFO] [1782969169.429279071] [amcl]: Message Filter dropping message: frame 'laser' at time 1782969168.278 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[amcl-2] [WARN] [1782969170.272657089] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969172.369357184] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969174.467249669] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969176.467881160] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969178.563206643] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969180.661121123] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969182.760361724] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969184.856496532] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969186.955230420] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969189.051837639] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969191.150799730] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969193.165839025] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969195.246309453] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969197.345521702] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969199.346450080] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969201.439911910] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969203.440882616] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969205.536191982] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969207.633870926] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969209.732851576] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969211.828306058] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969213.829635794] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969215.925821312] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969218.024410826] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969220.122447671] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969222.219514848] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969224.318307854] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969226.415840608] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969228.514180109] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969230.611179150] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969232.710345896] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969234.807434056] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969236.906234547] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [WARN] [1782969238.907003961] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
