@@ -1,0 +1,30 @@
+[INFO] [1782971167.500544358] [simple_scan_filter]: filter /scan -> /scan_filtered, keep=[0.18, 4.00], isolated_window=2, isolated_delta=0.25, min_support_neighbors=1
+[INFO] [1782971172.300145340] [simple_scan_filter]: scan stats: n=404, zeros=120, nan=0, inf=0, finite_raw=284, finite_out=217, removed_isolated=6
+[INFO] [1782971184.213601936] [simple_scan_filter]: scan stats: n=404, zeros=116, nan=0, inf=0, finite_raw=288, finite_out=219, removed_isolated=4
+[INFO] [1782971189.212433329] [simple_scan_filter]: scan stats: n=404, zeros=112, nan=0, inf=0, finite_raw=292, finite_out=218, removed_isolated=5
+[INFO] [1782971194.205767642] [simple_scan_filter]: scan stats: n=404, zeros=118, nan=0, inf=0, finite_raw=286, finite_out=221, removed_isolated=3
+[INFO] [1782971199.196603747] [simple_scan_filter]: scan stats: n=404, zeros=113, nan=0, inf=0, finite_raw=291, finite_out=218, removed_isolated=6
+[INFO] [1782971204.200676627] [simple_scan_filter]: scan stats: n=404, zeros=119, nan=0, inf=0, finite_raw=285, finite_out=218, removed_isolated=1
+[INFO] [1782971209.191101353] [simple_scan_filter]: scan stats: n=404, zeros=110, nan=0, inf=0, finite_raw=294, finite_out=223, removed_isolated=5
+[INFO] [1782971214.192075524] [simple_scan_filter]: scan stats: n=404, zeros=115, nan=0, inf=0, finite_raw=289, finite_out=222, removed_isolated=6
+[INFO] [1782971219.182721704] [simple_scan_filter]: scan stats: n=404, zeros=111, nan=0, inf=0, finite_raw=293, finite_out=221, removed_isolated=7
+[INFO] [1782971224.195601275] [simple_scan_filter]: scan stats: n=404, zeros=113, nan=0, inf=0, finite_raw=291, finite_out=219, removed_isolated=7
+[INFO] [1782971229.176253711] [simple_scan_filter]: scan stats: n=404, zeros=116, nan=0, inf=0, finite_raw=288, finite_out=225, removed_isolated=1
+[INFO] [1782971234.169713881] [simple_scan_filter]: scan stats: n=404, zeros=116, nan=0, inf=0, finite_raw=288, finite_out=223, removed_isolated=3
+[INFO] [1782971239.205283714] [simple_scan_filter]: scan stats: n=404, zeros=113, nan=0, inf=0, finite_raw=291, finite_out=220, removed_isolated=7
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 197, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 191, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
