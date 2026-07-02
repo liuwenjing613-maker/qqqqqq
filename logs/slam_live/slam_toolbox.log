@@ -1,11 +1,13 @@
-[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-02-16-17-50-642529-ubuntu-157054
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-02-17-57-10-978678-ubuntu-221341
 [INFO] [launch]: Default logging verbosity is set to INFO
-[INFO] [async_slam_toolbox_node-1]: process started with pid [157128]
-[async_slam_toolbox_node-1] [INFO] [1782980270.969864339] [slam_toolbox]: Node using stack size 40000000
-[async_slam_toolbox_node-1] [INFO] [1782980271.088894583] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
-[async_slam_toolbox_node-1] [INFO] [1782980271.244078118] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1782980271.034 for reason 'discarding message because the queue is full'
-[async_slam_toolbox_node-1] [WARN] [1782980271.245096868] [slam_toolbox]: minimum laser range setting (0.0 m) exceeds the capabilities of the used Lidar (0.2 m)
+[INFO] [async_slam_toolbox_node-1]: process started with pid [221356]
+[async_slam_toolbox_node-1] [INFO] [1782986231.313132786] [slam_toolbox]: Node using stack size 40000000
+[async_slam_toolbox_node-1] [INFO] [1782986231.458543601] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
+[async_slam_toolbox_node-1] [INFO] [1782986231.642390597] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1782986231.435 for reason 'discarding message because the queue is full'
+[async_slam_toolbox_node-1] [WARN] [1782986232.338001612] [slam_toolbox]: minimum laser range setting (0.0 m) exceeds the capabilities of the used Lidar (0.2 m)
 [async_slam_toolbox_node-1] Info: clipped range threshold to be within minimum and maximum range!
 [async_slam_toolbox_node-1] Registering sensor: [Custom Described Lidar]
-[async_slam_toolbox_node-1] [INFO] [1782980307.276261277] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1782980307.069 for reason 'discarding message because the queue is full'
-[async_slam_toolbox_node-1] [INFO] [1782981038.427975191] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1782981038.218 for reason 'discarding message because the queue is full'
+[async_slam_toolbox_node-1] WARNING: Logging before InitGoogleLogging() is written to STDERR
+[async_slam_toolbox_node-1] W0702 18:09:26.361038 221356 preprocessor.cc:62] Specified options.num_threads: 50 exceeds maximum available from the threading model Ceres was compiled with: 8.  Bounding to maximum number available.
+[async_slam_toolbox_node-1] [INFO] [1782987078.485233774] [rclcpp]: signal_handler(signum=15)
+[INFO] [async_slam_toolbox_node-1]: process has finished cleanly [pid 221356]

@@ -93,45 +93,53 @@ class PlanPreview(Node):
             f"planner_id={self.args.planner_id!r}"
         )
 
-        future = self.client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=self.args.action_timeout)
+        retries = max(1, int(self.args.retries))
+        for attempt in range(1, retries + 1):
+            if attempt > 1:
+                self.get_logger().warn(f"retry ComputePathToPose attempt {attempt}/{retries}")
+                time.sleep(2.0)
 
-        goal_handle = future.result()
-        if goal_handle is None:
-            self.get_logger().error("failed to send ComputePathToPose goal")
-            return False
-        if not goal_handle.accepted:
-            self.get_logger().error("ComputePathToPose goal rejected")
-            return False
+            future = self.client.send_goal_async(goal)
+            rclpy.spin_until_future_complete(self, future, timeout_sec=self.args.action_timeout)
 
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future, timeout_sec=self.args.action_timeout)
+            goal_handle = future.result()
+            if goal_handle is None:
+                self.get_logger().error("failed to send ComputePathToPose goal (no goal handle)")
+                continue
+            if not goal_handle.accepted:
+                self.get_logger().error("ComputePathToPose goal rejected")
+                continue
 
-        wrapped = result_future.result()
-        if wrapped is None:
-            self.get_logger().error("timeout waiting for ComputePathToPose result")
-            return False
+            result_future = goal_handle.get_result_async()
+            rclpy.spin_until_future_complete(self, result_future, timeout_sec=self.args.action_timeout)
 
-        if wrapped.status != GoalStatus.STATUS_SUCCEEDED:
-            self.get_logger().error(f"ComputePathToPose failed, status={wrapped.status}")
-            return False
+            wrapped = result_future.result()
+            if wrapped is None:
+                self.get_logger().error("timeout waiting for ComputePathToPose result")
+                continue
 
-        self.path = wrapped.result.path
-        self.path.header.frame_id = "map"
-        self.path.header.stamp = self.get_clock().now().to_msg()
+            if wrapped.status != GoalStatus.STATUS_SUCCEEDED:
+                self.get_logger().error(f"ComputePathToPose failed, status={wrapped.status}")
+                continue
 
-        n = len(self.path.poses)
-        length = path_length(self.path)
+            self.path = wrapped.result.path
+            self.path.header.frame_id = "map"
+            self.path.header.stamp = self.get_clock().now().to_msg()
 
-        if n == 0:
-            self.get_logger().error("planner returned empty path")
-            return False
+            n = len(self.path.poses)
+            length = path_length(self.path)
 
-        self.markers = self.make_markers()
+            if n == 0:
+                self.get_logger().error("planner returned empty path")
+                continue
 
-        self.get_logger().info(f"path OK: poses={n}, length={length:.3f} m")
-        self.publish_all()
-        return True
+            self.markers = self.make_markers()
+
+            self.get_logger().info(f"path OK: poses={n}, length={length:.3f} m")
+            self.publish_all()
+            return True
+
+        return False
 
     def make_markers(self) -> MarkerArray:
         now = self.get_clock().now().to_msg()
@@ -248,7 +256,8 @@ def main():
     parser.add_argument("--start-yaw", type=float, default=0.0)
     parser.add_argument("--planner-id", type=str, default="GridBased")
     parser.add_argument("--keep-sec", type=float, default=600.0)
-    parser.add_argument("--action-timeout", type=float, default=20.0)
+    parser.add_argument("--action-timeout", type=float, default=60.0)
+    parser.add_argument("--retries", type=int, default=3)
     args = parser.parse_args()
 
     rclpy.init()

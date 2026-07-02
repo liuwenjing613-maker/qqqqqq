@@ -176,6 +176,20 @@ save_map() {
   mv "${MAP_TMP}.pgm" "${MAP_OUT}.pgm"
   mv "${MAP_TMP}.yaml" "${MAP_OUT}.yaml"
 
+  # map_saver yaml keeps the temp basename in `image:`; point to final .pgm.
+  python3 - "${MAP_OUT}.yaml" "${MAP_NAME}.pgm" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+
+path = Path(sys.argv[1])
+image_name = sys.argv[2]
+data = yaml.safe_load(path.read_text(encoding="utf-8"))
+data["image"] = image_name
+path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+print(f"[OK] map yaml image -> {image_name}", flush=True)
+PY
+
   log "Map saved:"
   ls -lh "${MAP_OUT}.yaml" "${MAP_OUT}.pgm"
   SAVED=1

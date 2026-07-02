@@ -1,0 +1,26 @@
+[INFO] [1782983572.098497676] [map_server]: 
+	map_server lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[INFO] [1782983572.101531092] [map_server]: Creating
+[INFO] [1782983582.772812880] [map_server]: Configuring
+[INFO] [1782983582.773582296] [map_io]: Loading yaml file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.yaml
+[INFO] [1782983582.775019795] [map_io]: resolution: 0.05
+[INFO] [1782983582.775732920] [map_io]: origin[0]: -3.98
+[INFO] [1782983582.776114003] [map_io]: origin[1]: -5.16
+[INFO] [1782983582.776401170] [map_io]: origin[2]: 0
+[INFO] [1782983582.776640003] [map_io]: free_thresh: 0.25
+[INFO] [1782983582.776865045] [map_io]: occupied_thresh: 0.65
+[INFO] [1782983582.777219794] [map_io]: mode: trinary
+[INFO] [1782983582.777670669] [map_io]: negate: 0
+[INFO] [1782983582.778518669] [map_io]: Loading image_file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm
+[INFO] [1782983582.797998076] [map_io]: Read map /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm: 146 X 167 map @ 0.05 m/cell
+[INFO] [1782983591.333762060] [map_server]: Activating
+[INFO] [1782983591.334573018] [map_server]: Creating bond (map_server) to lifecycle manager.
+[INFO] [1782983707.199717219] [rclcpp]: signal_handler(signum=15)
+[INFO] [1782983707.200201135] [map_server]: Running Nav2 LifecycleNode rcl preshutdown (map_server)
+[INFO] [1782983707.200564760] [map_server]: Deactivating
+[INFO] [1782983707.200734219] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[INFO] [1782983707.211292089] [map_server]: Cleaning up
+[INFO] [1782983707.211597963] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[INFO] [1782983707.228519664] [map_server]: Destroying

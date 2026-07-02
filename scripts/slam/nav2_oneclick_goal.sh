@@ -18,7 +18,7 @@ DEFAULT_INIT_Y="0.00"
 DEFAULT_INIT_YAW="0.00"
 
 PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
-MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
+MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map_saved_20260702_1743.yaml}"
 NAV2_PARAMS="${NAV2_PARAMS:-$PROJECT_DIR/configs/nav2_params.yaml}"
 
 # If empty, the script reads /scan.header.frame_id and uses it automatically.
@@ -840,7 +840,7 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file'),
         DeclareLaunchArgument('use_composition', default_value='False'),
         GroupAction([
-            SetRemap(src='/cmd_vel', dst='/nav2_oneclick/raw_cmd_vel'),
+            SetRemap(src='/cmd_vel', dst='__NAV2_RAW_CMD_VEL__'),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(bringup_launch),
                 launch_arguments={
@@ -854,13 +854,16 @@ def generate_launch_description():
         ]),
     ])
 LAUNCHPY
+  sed -i "s|__NAV2_RAW_CMD_VEL__|${NAV2_ONECLICK_RAW_CMD_VEL}|g" "$launch_py"
   echo "$launch_py"
 }
 
 start_cmd_vel_invert_relay() {
   require_file "$PROJECT_DIR/ros2_bridge/nav2_oneclick_cmd_vel_relay.py"
   log "cmd_vel invert relay ON: ${NAV2_ONECLICK_RAW_CMD_VEL} -> /cmd_vel (nav only)"
-  start_bg cmd_vel_relay python3 "$PROJECT_DIR/ros2_bridge/nav2_oneclick_cmd_vel_relay.py"     --in-topic "$NAV2_ONECLICK_RAW_CMD_VEL"     --out-topic /cmd_vel
+  start_bg cmd_vel_relay python3 "$PROJECT_DIR/ros2_bridge/nav2_oneclick_cmd_vel_relay.py" \
+    --in-topic "$NAV2_ONECLICK_RAW_CMD_VEL" \
+    --out-topic /cmd_vel
   sleep 1
 }
 

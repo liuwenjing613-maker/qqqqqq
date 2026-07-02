@@ -7,7 +7,7 @@ export LASER_Y="${LASER_Y:-0.0}"
 export LASER_Z="${LASER_Z:-0.12}"
 export LASER_ROLL="${LASER_ROLL:-0.0}"
 export LASER_PITCH="${LASER_PITCH:-0.0}"
-export LASER_YAW="${LASER_YAW:-0.0}"
+export LASER_YAW="${LASER_YAW:-3.141592653589793}"
 export LASER_FRAME="${LASER_FRAME:-laser}"
 
 echo "[lidar_frame_config] base_link -> ${LASER_FRAME}"

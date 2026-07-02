@@ -3,8 +3,8 @@
   "frame_id": "map",
   "map_name": "joy_semantic_calibrated_map",
   "quality": {
-    "loop_xy_error_m": 1.219,
-    "loop_yaw_error_deg": 37.25,
+    "loop_xy_error_m": 1.2329,
+    "loop_yaw_error_deg": 22.92,
     "result": "fail"
   },
   "landmarks": [
@@ -363,6 +363,94 @@
       ],
       "best_image_path": null,
       "note": ""
+    },
+    {
+      "landmark_id": "lm_0013",
+      "class_name": "chair",
+      "frame_id": "map",
+      "x": 0.16574619926467363,
+      "y": 2.089349892201278,
+      "confidence": 0.7733979821205139,
+      "seen_count": 7,
+      "first_seen_time": 1782981844.410807,
+      "last_seen_time": 1782981845.9060524,
+      "state": "confirmed",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000195",
+        "obs_000197",
+        "obs_000198",
+        "obs_000200",
+        "obs_000203",
+        "obs_000204",
+        "obs_000206"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    },
+    {
+      "landmark_id": "lm_0014",
+      "class_name": "chair",
+      "frame_id": "map",
+      "x": 3.0137849597957302,
+      "y": 3.3356096920825036,
+      "confidence": 0.6183285117149353,
+      "seen_count": 4,
+      "first_seen_time": 1782981844.410807,
+      "last_seen_time": 1782981845.6076257,
+      "state": "confirmed",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000196",
+        "obs_000199",
+        "obs_000201",
+        "obs_000205"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    },
+    {
+      "landmark_id": "lm_0015",
+      "class_name": "bottle",
+      "frame_id": "map",
+      "x": 0.5344793580549296,
+      "y": 1.525272936731981,
+      "confidence": 0.5801817178726196,
+      "seen_count": 5,
+      "first_seen_time": 1782981874.846302,
+      "last_seen_time": 1782981896.2469566,
+      "state": "confirmed",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000284",
+        "obs_000288",
+        "obs_000301",
+        "obs_000349",
+        "obs_000351"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
     }
   ],
   "viewpoints": [
@@ -596,7 +684,26 @@
       "view_range_m": 3.0,
       "visited": true,
       "note": ""
+    },
+    {
+      "node_id": "vp_000015",
+      "stamp": 1782981899.2553508,
+      "frame_id": "map",
+      "x": -0.2892111817025538,
+      "y": 1.1841714652021347,
+      "yaw": 0.6501050075663167,
+      "observed_classes": [
+        "bottle",
+        "chair",
+        "person",
+        "potted plant"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
     }
   ],
-  "observation_count": 179
+  "observation_count": 354
 }
