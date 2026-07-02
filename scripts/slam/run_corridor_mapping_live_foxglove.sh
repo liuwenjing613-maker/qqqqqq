@@ -57,7 +57,6 @@ cleanup() {
   pkill -f "sync_slam_toolbox_node" 2>/dev/null || true
   pkill -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
   pkill -f "cmd_vel_to_rosmaster.py" 2>/dev/null || true
-  cleanup_lidar_slam_nav_processes
   pkill -f "ydlidar_ros2_driver_node" 2>/dev/null || true
   pkill -f "start_lidar_only.sh" 2>/dev/null || true
 }
@@ -253,7 +252,7 @@ main() {
   if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
     log "[5/6] foxglove_bridge port ${FOXGLOVE_PORT}"
     start_background foxglove_bridge \
-      ros2 launch foxglove_bridge foxglove_bridge_launch.xml "port:=${FOXGLOVE_PORT}"
+      bash "${PROJECT_DIR}/scripts/lidar/start_foxglove.sh"
     FOXGLOVE_STARTED=1
     sleep 3
   else

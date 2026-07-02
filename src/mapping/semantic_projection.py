@@ -66,6 +66,8 @@ def estimate_lidar_range_median(
     min_range_m: float = 0.18,
     max_range_m: float = 4.0,
     target_window_deg: float = 8.0,
+    range_window_deg: Optional[float] = None,
+    camera_to_laser_yaw_deg: float = 0.0,
     robot_yaw: float = 0.0,
 ) -> Optional[float]:
     """Estimate range in laser frame at bearing (robot-relative)."""
@@ -81,9 +83,10 @@ def estimate_lidar_range_median(
     if abs(angle_inc) < 1e-9:
         return None
 
-    # bearing_rad is in base_link/camera frame relative to robot forward
-    target_angle = normalize_angle(bearing_rad)
-    half_window = math.radians(target_window_deg / 2.0)
+    # bearing_rad is camera/base_link relative; apply camera-laser yaw offset for LiDAR lookup.
+    laser_bearing = normalize_angle(bearing_rad + math.radians(camera_to_laser_yaw_deg))
+    window_deg = float(range_window_deg) if range_window_deg is not None else target_window_deg
+    half_window = math.radians(window_deg / 2.0)
     samples: List[float] = []
 
     for i, raw in enumerate(ranges):
@@ -98,7 +101,7 @@ def estimate_lidar_range_median(
         if r < min_range_m or r > max_range_m:
             continue
         beam_angle = angle_min + i * angle_inc
-        delta = abs(normalize_angle(beam_angle - target_angle))
+        delta = abs(normalize_angle(beam_angle - laser_bearing))
         if delta <= half_window:
             samples.append(r)
 

@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
+
+GOAL_X="${1:-}"
+GOAL_Y="${2:-}"
+GOAL_YAW="${3:-0.0}"
+
+START_X="${4:-0.0}"
+START_Y="${5:-0.0}"
+START_YAW="${6:-0.0}"
+
+if [ -z "$GOAL_X" ] || [ -z "$GOAL_Y" ]; then
+  echo "Usage:"
+  echo "  bash scripts/slam/nav2_plan_preview.sh GOAL_X GOAL_Y [GOAL_YAW] [START_X START_Y START_YAW]"
+  echo
+  echo "Examples:"
+  echo "  bash scripts/slam/nav2_plan_preview.sh 0.60 0.00 0.00"
+  echo "  bash scripts/slam/nav2_plan_preview.sh 1.80 0.00 0.00 0.05 0.03 0.00"
+  exit 2
+fi
+
+MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
+PARAMS_FILE="${PARAMS_FILE:-$PROJECT_DIR/configs/nav2_params.yaml}"
+PLANNER_ID="${PLANNER_ID:-GridBased}"
+FOXGLOVE_PORT="${FOXGLOVE_PORT:-8765}"
+START_FOXGLOVE="${START_FOXGLOVE:-1}"
+KEEP_SEC="${KEEP_SEC:-600}"
+
+LOG_DIR="$PROJECT_DIR/logs/nav2_plan_preview_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$LOG_DIR"
+
+log() {
+  echo "[NAV2-PLAN-PREVIEW] $*"
+}
+
+fail() {
+  echo "[NAV2-PLAN-PREVIEW][FAIL] $*" >&2
+  exit 1
+}
+
+PIDS=()
+
+start_bg() {
+  local name="$1"
+  shift
+  log "start $name: $*"
+  "$@" >"$LOG_DIR/$name.log" 2>&1 &
+  PIDS+=("$!")
+}
+
+cleanup() {
+  log "cleanup preview processes..."
+  for pid in "${PIDS[@]:-}"; do
+    kill "$pid" 2>/dev/null || true
+  done
+}
+trap cleanup EXIT
+
+cd "$PROJECT_DIR"
+
+[ -f "$MAP_YAML" ] || fail "MAP_YAML not found: $MAP_YAML"
+[ -f "$PARAMS_FILE" ] || fail "PARAMS_FILE not found: $PARAMS_FILE"
+
+python3 - <<PY
+import yaml
+p = "$PARAMS_FILE"
+with open(p, "r") as f:
+    yaml.safe_load(f)
+print("[OK] YAML parse:", p)
+PY
+
+log "GOAL=($GOAL_X, $GOAL_Y, $GOAL_YAW), START=($START_X, $START_Y, $START_YAW)"
+log "MAP_YAML=$MAP_YAML"
+log "PARAMS_FILE=$PARAMS_FILE"
+log "PLANNER_ID=$PLANNER_ID"
+log "logs=$LOG_DIR"
+log "this script does NOT start controller_server and does NOT publish /cmd_vel"
+
+# 只清理预览相关节点，不杀 chassis_bridge，不杀底盘，不发 cmd_vel
+pkill -f "nav2_compute_plan_once.py" 2>/dev/null || true
+pkill -f "/opt/ros/.*/lib/nav2_map_server/map_server" 2>/dev/null || true
+pkill -f "/opt/ros/.*/lib/nav2_planner/planner_server" 2>/dev/null || true
+pkill -f "foxglove_bridge" 2>/dev/null || true
+sleep 1
+
+if [ "$START_FOXGLOVE" = "1" ]; then
+  start_bg foxglove ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="$FOXGLOVE_PORT"
+fi
+
+start_bg map_server ros2 run nav2_map_server map_server \
+  --ros-args \
+  -r __node:=map_server \
+  --params-file "$PARAMS_FILE" \
+  -p yaml_filename:="$MAP_YAML"
+
+start_bg planner_server ros2 run nav2_planner planner_server \
+  --ros-args \
+  --params-file "$PARAMS_FILE"
+
+wait_node_lifecycle() {
+  local node="$1"
+  local timeout_sec="${2:-30}"
+  log "wait lifecycle node: $node"
+  local t=0
+  while [ "$t" -lt "$timeout_sec" ]; do
+    if ros2 lifecycle get "$node" >/tmp/nav2_plan_preview_lifecycle.txt 2>&1; then
+      cat /tmp/nav2_plan_preview_lifecycle.txt | sed "s/^/[NAV2-PLAN-PREVIEW] $node state: /"
+      return 0
+    fi
+    sleep 1
+    t=$((t + 1))
+  done
+  return 1
+}
+
+set_lifecycle_active() {
+  local node="$1"
+
+  wait_node_lifecycle "$node" 40 || fail "$node lifecycle service not available"
+
+  local state
+  state="$(ros2 lifecycle get "$node" 2>/dev/null || true)"
+
+  if echo "$state" | grep -q "active"; then
+    log "$node already active"
+    return 0
+  fi
+
+  if echo "$state" | grep -q "unconfigured"; then
+    log "configure $node"
+    ros2 lifecycle set "$node" configure || fail "configure $node failed"
+    sleep 1
+  fi
+
+  state="$(ros2 lifecycle get "$node" 2>/dev/null || true)"
+  if echo "$state" | grep -q "inactive"; then
+    log "activate $node"
+    ros2 lifecycle set "$node" activate || fail "activate $node failed"
+    sleep 1
+  fi
+
+  state="$(ros2 lifecycle get "$node" 2>/dev/null || true)"
+  echo "$state" | grep -q "active" || fail "$node is not active; current state: $state"
+  log "$node active"
+}
+
+set_lifecycle_active /map_server
+
+log "wait /map with transient_local QoS"
+timeout 10 ros2 topic echo --once --qos-durability transient_local /map nav_msgs/msg/OccupancyGrid >/tmp/nav2_plan_preview_map.txt 2>&1 \
+  || fail "no /map received; check $LOG_DIR/map_server.log"
+log "/map received"
+
+set_lifecycle_active /planner_server
+
+log "wait action server: /compute_path_to_pose"
+timeout 30 bash -c 'until ros2 action list | grep -qx "/compute_path_to_pose"; do sleep 1; done' \
+  || fail "/compute_path_to_pose not available; check $LOG_DIR/planner_server.log"
+log "/compute_path_to_pose available"
+
+log "compute and publish preview path; press Ctrl+C after viewing in Foxglove"
+exec python3 "$PROJECT_DIR/ros2_bridge/nav2_compute_plan_once.py" \
+  --goal-x "$GOAL_X" \
+  --goal-y "$GOAL_Y" \
+  --goal-yaw "$GOAL_YAW" \
+  --start-x "$START_X" \
+  --start-y "$START_Y" \
+  --start-yaw "$START_YAW" \
+  --planner-id "$PLANNER_ID" \
+  --keep-sec "$KEEP_SEC"

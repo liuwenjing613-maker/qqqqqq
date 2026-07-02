@@ -161,6 +161,8 @@ class Yolov5sBpuWebNode(Node):
         self.current_fps = 0.0
         self.last_infer_ms = 0.0
         self.overlay_ctx = NavOverlayContext()
+        self.semantic_depth_overlay = bool(getattr(args, "semantic_depth_overlay", False))
+        self._semantic_obs_by_class: dict = {}
 
         self.model = self.load_model(args)
 
@@ -193,6 +195,13 @@ class Yolov5sBpuWebNode(Node):
         self.create_subscription(String, args.nav_state_topic, self.on_nav_state, 10)
         self.create_subscription(Twist, args.cmd_vel_topic, self.on_cmd_vel, 10)
         self.create_subscription(String, args.nav_point_topic, self.on_nav_point, 10)
+        if self.semantic_depth_overlay:
+            self.create_subscription(
+                String, args.semantic_obs_topic, self.on_semantic_obs, 10
+            )
+            self.get_logger().info(
+                f"semantic depth overlay ON topic={args.semantic_obs_topic}"
+            )
 
         self.start_web_server(args.web_host, args.web_port)
 
@@ -217,18 +226,82 @@ class Yolov5sBpuWebNode(Node):
         if data:
             self.overlay_ctx.target_point = data
 
-    def _overlay_header(self) -> list[str]:
-        return [
+    def on_semantic_obs(self, msg: String) -> None:
+        data = safe_json_load(msg.data)
+        if not data:
+            return
+        class_name = str(data.get("class_name", "")).strip()
+        if not class_name:
+            return
+        data["_recv_time"] = time.time()
+        self._semantic_obs_by_class[class_name] = data
+
+    def _depth_for_detection(self, class_name: str, cx: float, cy: float):
+        data = self._semantic_obs_by_class.get(class_name)
+        if not data:
+            return None
+        if time.time() - float(data.get("_recv_time", 0.0)) > 2.5:
+            return None
+        ou, ov = data.get("u"), data.get("v")
+        if ou is not None and ov is not None:
+            if abs(float(ou) - cx) + abs(float(ov) - cy) > 100.0:
+                return None
+        range_m = data.get("range_m")
+        if range_m is None:
+            return None
+        try:
+            return float(range_m)
+        except (TypeError, ValueError):
+            return None
+
+    def _overlay_header(self, best_target=None) -> list[str]:
+        lines = [
             f"YOLOv5s-BPU | targets={','.join(sorted(self.target_classes))} "
             f"| fps={self.current_fps:.1f} | infer={self.last_infer_ms:.1f}ms"
         ]
+        if self.semantic_depth_overlay and isinstance(best_target, dict):
+            depth = self._depth_for_detection(
+                str(best_target.get("class_name", "")),
+                float(best_target.get("cx", 0.0)),
+                float(best_target.get("cy", 0.0)),
+            )
+            if depth is not None:
+                lines.append(
+                    f"[LIDAR] {best_target.get('class_name')} depth={depth:.2f}m "
+                    f"(median)"
+                )
+            else:
+                lines.append("[LIDAR] depth=n/a")
+        return lines
 
     def _apply_nav_overlay(self, frame, target_override=None):
         return annotate_nav_frame(
             frame,
             self.overlay_ctx,
             target_override=target_override,
-            header_lines=self._overlay_header(),
+            header_lines=self._overlay_header(target_override),
+        )
+
+    def _draw_depth_badge(self, frame, x1, y1, x2, y2, depth_m: float) -> None:
+        label = f"LIDAR {depth_m:.2f}m"
+        tx = max(0, min(int(x1), frame.shape[1] - 1))
+        ty = min(frame.shape[0] - 8, int(y2) + 22)
+        cv2.rectangle(
+            frame,
+            (tx, ty - 18),
+            (tx + max(90, len(label) * 9), ty + 4),
+            (0, 0, 0),
+            -1,
+        )
+        cv2.putText(
+            frame,
+            label,
+            (tx + 4, ty),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.62,
+            (0, 255, 255),
+            2,
+            cv2.LINE_AA,
         )
 
     def load_model(self, args):
@@ -375,16 +448,24 @@ class Yolov5sBpuWebNode(Node):
             is_target = name in self.target_classes
             color = (0, 255, 0) if is_target else (160, 160, 160)
             thick = 2 if is_target else 1
+            depth_m = None
+            if self.semantic_depth_overlay and is_target:
+                depth_m = self._depth_for_detection(name, cx, cy)
+            label = f"{name} {score:.2f}"
+            if depth_m is not None:
+                label += f" {depth_m:.2f}m"
             cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thick)
             cv2.putText(
                 annotated,
-                f"{name} {score:.2f}",
+                label,
                 (x1, max(20, y1 - 6)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55,
                 color,
                 2,
             )
+            if depth_m is not None:
+                self._draw_depth_badge(annotated, x1, y1, x2, y2, depth_m)
 
             if is_target:
                 candidates.append(item)
@@ -514,6 +595,8 @@ def parse_args():
     ap.add_argument("--nav-state-topic", default="/nav_state")
     ap.add_argument("--cmd-vel-topic", default="/cmd_vel")
     ap.add_argument("--nav-point-topic", default="/nav_target_point")
+    ap.add_argument("--semantic-depth-overlay", action="store_true")
+    ap.add_argument("--semantic-obs-topic", default="/semantic_observations")
 
     return ap.parse_args()
 

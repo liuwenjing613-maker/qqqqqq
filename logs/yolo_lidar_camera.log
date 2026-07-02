@@ -1,4 +1,4 @@
-[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-01-20-54-25-989215-ubuntu-231508
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-02-15-24-06-158795-ubuntu-122693
 [INFO] [launch]: Default logging verbosity is set to INFO
 config_file_path is  /opt/tros/humble/lib/hobot_usb_cam/config/usb_camera_calibration.yaml
 Hobot shm pkg enables zero-copy with fastrtps profiles file: /opt/tros/humble/lib/hobot_shm/config/shm_fastdds.xml
@@ -6,55 +6,56 @@ Hobot shm pkg sets RMW_FASTRTPS_USE_QOS_FROM_XML: 1
 config_file_path is  /opt/tros/humble/lib/hobot_usb_cam/config/usb_camera_calibration.yaml
 env of RMW_FASTRTPS_USE_QOS_FROM_XML is  1 , ignore env setting
 env of RMW_FASTRTPS_USE_QOS_FROM_XML is  1 , ignore env setting
-[INFO] [hobot_usb_cam-1]: process started with pid [231629]
-[hobot_usb_cam-1] [WARN] [1782910467.248467976] [hobot_usb_cam]: framerate: 20
-[hobot_usb_cam-1] [WARN] [1782910467.262194130] [hobot_usb_cam]: pixel_format_name: mjpeg
-[hobot_usb_cam-1] [WARN] [1782910467.481952289] [hobot_usb_cam]: This devices supproted formats:
-[hobot_usb_cam-1] [WARN] [1782910467.482256039] [hobot_usb_cam]: 	Motion-JPEG: 1920 x 1080 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482371539] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 720 (60 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482419414] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 1024 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482460122] [hobot_usb_cam]: 	Motion-JPEG: 640 x 480 (120 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482498414] [hobot_usb_cam]: 	Motion-JPEG: 800 x 600 (60 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482536955] [hobot_usb_cam]: 	Motion-JPEG: 1024 x 768 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482576663] [hobot_usb_cam]: 	Motion-JPEG: 320 x 240 (120 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482616330] [hobot_usb_cam]: 	YUYV 4:2:2: 1920 x 1080 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482654497] [hobot_usb_cam]: 	YUYV 4:2:2: 640 x 480 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482692622] [hobot_usb_cam]: 	YUYV 4:2:2: 320 x 240 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482731247] [hobot_usb_cam]: 	YUYV 4:2:2: 800 x 600 (20 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482771330] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 720 (9 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482810538] [hobot_usb_cam]: 	YUYV 4:2:2: 1024 x 768 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.482847955] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 1024 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.510701886] [hobot_usb_cam]: Try to open device [/dev/video0]
-[hobot_usb_cam-1] [WARN] [1782910467.510912177] [hobot_usb_cam]: This devices supproted formats:
-[hobot_usb_cam-1] [WARN] [1782910467.510984886] [hobot_usb_cam]: 	Motion-JPEG: 1920 x 1080 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511031011] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 720 (60 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511071052] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 1024 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511109552] [hobot_usb_cam]: 	Motion-JPEG: 640 x 480 (120 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511147219] [hobot_usb_cam]: 	Motion-JPEG: 800 x 600 (60 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511185594] [hobot_usb_cam]: 	Motion-JPEG: 1024 x 768 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511223385] [hobot_usb_cam]: 	Motion-JPEG: 320 x 240 (120 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511262260] [hobot_usb_cam]: 	YUYV 4:2:2: 1920 x 1080 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511299510] [hobot_usb_cam]: 	YUYV 4:2:2: 640 x 480 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511336760] [hobot_usb_cam]: 	YUYV 4:2:2: 320 x 240 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511374427] [hobot_usb_cam]: 	YUYV 4:2:2: 800 x 600 (20 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511411510] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 720 (9 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511448343] [hobot_usb_cam]: 	YUYV 4:2:2: 1024 x 768 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511485635] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 1024 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511634218] [hobot_usb_cam]: Try to open device [/dev/video1]
-[hobot_usb_cam-1] [WARN] [1782910467.511735885] [hobot_usb_cam]: This devices supproted formats:
-[hobot_usb_cam-1] [WARN] [1782910467.511785926] [hobot_usb_cam]: 	Motion-JPEG: 1920 x 1080 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511828301] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 720 (60 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511868010] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 1024 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511906135] [hobot_usb_cam]: 	Motion-JPEG: 640 x 480 (120 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511943426] [hobot_usb_cam]: 	Motion-JPEG: 800 x 600 (60 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.511982426] [hobot_usb_cam]: 	Motion-JPEG: 1024 x 768 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512020343] [hobot_usb_cam]: 	Motion-JPEG: 320 x 240 (120 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512057301] [hobot_usb_cam]: 	YUYV 4:2:2: 1920 x 1080 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512094801] [hobot_usb_cam]: 	YUYV 4:2:2: 640 x 480 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512132218] [hobot_usb_cam]: 	YUYV 4:2:2: 320 x 240 (30 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512170176] [hobot_usb_cam]: 	YUYV 4:2:2: 800 x 600 (20 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512207634] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 720 (9 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512246051] [hobot_usb_cam]: 	YUYV 4:2:2: 1024 x 768 (6 Hz)
-[hobot_usb_cam-1] [WARN] [1782910467.512284593] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 1024 (6 Hz)
+[INFO] [hobot_usb_cam-1]: process started with pid [122720]
+[hobot_usb_cam-1] [WARN] [1782977046.696444981] [hobot_usb_cam]: framerate: 20
+[hobot_usb_cam-1] [WARN] [1782977046.697019647] [hobot_usb_cam]: pixel_format_name: mjpeg
+[hobot_usb_cam-1] [WARN] [1782977046.727170568] [hobot_usb_cam]: This devices supproted formats:
+[hobot_usb_cam-1] [WARN] [1782977046.727426276] [hobot_usb_cam]: 	Motion-JPEG: 1920 x 1080 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727479526] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 720 (60 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727519235] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 1024 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727557401] [hobot_usb_cam]: 	Motion-JPEG: 640 x 480 (120 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727594943] [hobot_usb_cam]: 	Motion-JPEG: 800 x 600 (60 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727633276] [hobot_usb_cam]: 	Motion-JPEG: 1024 x 768 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727670401] [hobot_usb_cam]: 	Motion-JPEG: 320 x 240 (120 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727708276] [hobot_usb_cam]: 	YUYV 4:2:2: 1920 x 1080 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727745859] [hobot_usb_cam]: 	YUYV 4:2:2: 640 x 480 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727783068] [hobot_usb_cam]: 	YUYV 4:2:2: 320 x 240 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727819818] [hobot_usb_cam]: 	YUYV 4:2:2: 800 x 600 (20 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727856818] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 720 (9 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727893526] [hobot_usb_cam]: 	YUYV 4:2:2: 1024 x 768 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.727930484] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 1024 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977100.062624712] [hobot_usb_cam]: Shutting down
+[INFO] [hobot_usb_cam-1]: process has finished cleanly [pid 116173]
+hobot_usb_cam]: This devices supproted formats:
+[hobot_usb_cam-1] [WARN] [1782977046.744276256] [hobot_usb_cam]: 	Motion-JPEG: 1920 x 1080 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744321923] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 720 (60 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744361339] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 1024 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744400131] [hobot_usb_cam]: 	Motion-JPEG: 640 x 480 (120 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744437339] [hobot_usb_cam]: 	Motion-JPEG: 800 x 600 (60 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744474797] [hobot_usb_cam]: 	Motion-JPEG: 1024 x 768 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744512714] [hobot_usb_cam]: 	Motion-JPEG: 320 x 240 (120 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744552006] [hobot_usb_cam]: 	YUYV 4:2:2: 1920 x 1080 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744590506] [hobot_usb_cam]: 	YUYV 4:2:2: 640 x 480 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744627797] [hobot_usb_cam]: 	YUYV 4:2:2: 320 x 240 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744665005] [hobot_usb_cam]: 	YUYV 4:2:2: 800 x 600 (20 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744702172] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 720 (9 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744739630] [hobot_usb_cam]: 	YUYV 4:2:2: 1024 x 768 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744777130] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 1024 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.744947005] [hobot_usb_cam]: Try to open device [/dev/video1]
+[hobot_usb_cam-1] [WARN] [1782977046.745079047] [hobot_usb_cam]: This devices supproted formats:
+[hobot_usb_cam-1] [WARN] [1782977046.745127380] [hobot_usb_cam]: 	Motion-JPEG: 1920 x 1080 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745168797] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 720 (60 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745207005] [hobot_usb_cam]: 	Motion-JPEG: 1280 x 1024 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745244671] [hobot_usb_cam]: 	Motion-JPEG: 640 x 480 (120 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745281463] [hobot_usb_cam]: 	Motion-JPEG: 800 x 600 (60 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745318380] [hobot_usb_cam]: 	Motion-JPEG: 1024 x 768 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745355255] [hobot_usb_cam]: 	Motion-JPEG: 320 x 240 (120 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745392005] [hobot_usb_cam]: 	YUYV 4:2:2: 1920 x 1080 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745428796] [hobot_usb_cam]: 	YUYV 4:2:2: 640 x 480 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745465629] [hobot_usb_cam]: 	YUYV 4:2:2: 320 x 240 (30 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745502921] [hobot_usb_cam]: 	YUYV 4:2:2: 800 x 600 (20 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745539838] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 720 (9 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745576129] [hobot_usb_cam]: 	YUYV 4:2:2: 1024 x 768 (6 Hz)
+[hobot_usb_cam-1] [WARN] [1782977046.745612963] [hobot_usb_cam]: 	YUYV 4:2:2: 1280 x 1024 (6 Hz)
 [hobot_usb_cam-1] terminate called after throwing an instance of 'char*'
-[ERROR] [hobot_usb_cam-1]: process has died [pid 231629, exit code -6, cmd '/opt/tros/humble/lib/hobot_usb_cam/hobot_usb_cam --ros-args --log-level warn --ros-args -r __node:=hobot_usb_cam --params-file /tmp/launch_params_z6sf45v8 --params-file /tmp/launch_params_fiard9o9 --params-file /tmp/launch_params_c77gto9j --params-file /tmp/launch_params_w2ic1oxh --params-file /tmp/launch_params_330b4wi0 --params-file /tmp/launch_params_cjyl_j3z --params-file /tmp/launch_params_rzv2um4a --params-file /tmp/launch_params_ot9dxp46 --params-file /tmp/launch_params_rrazwemd'].
+[ERROR] [hobot_usb_cam-1]: process has died [pid 122720, exit code -6, cmd '/opt/tros/humble/lib/hobot_usb_cam/hobot_usb_cam --ros-args --log-level warn --ros-args -r __node:=hobot_usb_cam --params-file /tmp/launch_params_b4vsk2vq --params-file /tmp/launch_params_rver60e6 --params-file /tmp/launch_params_bkaybok_ --params-file /tmp/launch_params_85drfrar --params-file /tmp/launch_params_7sm990bu --params-file /tmp/launch_params_z7qztnmv --params-file /tmp/launch_params_t9ll40kv --params-file /tmp/launch_params_udiap_r9 --params-file /tmp/launch_params_hhh4tkm1'].

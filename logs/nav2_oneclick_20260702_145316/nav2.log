@@ -1,0 +1,734 @@
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-02-14-53-54-467129-ubuntu-99091
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [map_server-1]: process started with pid [99155]
+[INFO] [amcl-2]: process started with pid [99157]
+[INFO] [lifecycle_manager-3]: process started with pid [99159]
+[INFO] [controller_server-4]: process started with pid [99161]
+[INFO] [smoother_server-5]: process started with pid [99163]
+[INFO] [planner_server-6]: process started with pid [99165]
+[INFO] [behavior_server-7]: process started with pid [99167]
+[INFO] [bt_navigator-8]: process started with pid [99169]
+[INFO] [waypoint_follower-9]: process started with pid [99180]
+[INFO] [velocity_smoother-10]: process started with pid [99199]
+[INFO] [lifecycle_manager-11]: process started with pid [99217]
+[lifecycle_manager-3] [INFO] [1782975236.767827345] [lifecycle_manager_localization]: Creating
+[lifecycle_manager-3] [INFO] [1782975236.834806883] [lifecycle_manager_localization]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[planner_server-6] [INFO] [1782975237.040552782] [planner_server]: 
+[planner_server-6] 	planner_server lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] [INFO] [1782975237.068354912] [planner_server]: Creating
+[smoother_server-5] [INFO] [1782975237.216945469] [smoother_server]: 
+[smoother_server-5] 	smoother_server lifecycle node launched. 
+[smoother_server-5] 	Waiting on external lifecycle transitions to activate
+[smoother_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[smoother_server-5] [INFO] [1782975237.249014177] [smoother_server]: Creating smoother server
+[amcl-2] [INFO] [1782975237.275851725] [amcl]: 
+[controller_server-4] [INFO] [1782975237.274273186] [controller_server]: 
+[controller_server-4] 	controller_server lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[amcl-2] 	amcl lifecycle node launched. 
+[amcl-2] 	Waiting on external lifecycle transitions to activate
+[amcl-2] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[amcl-2] [INFO] [1782975237.296339990] [amcl]: Creating
+[map_server-1] [INFO] [1782975237.304799521] [map_server]: 
+[map_server-1] 	map_server lifecycle node launched. 
+[map_server-1] 	Waiting on external lifecycle transitions to activate
+[map_server-1] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-1] [INFO] [1782975237.305446812] [map_server]: Creating
+[controller_server-4] [INFO] [1782975237.446483461] [controller_server]: Creating controller server
+[lifecycle_manager-11] [INFO] [1782975237.454825367] [lifecycle_manager_navigation]: Creating
+[bt_navigator-8] [INFO] [1782975237.470461597] [bt_navigator]: 
+[bt_navigator-8] 	bt_navigator lifecycle node launched. 
+[bt_navigator-8] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] [INFO] [1782975237.475084257] [global_costmap.global_costmap]: 
+[planner_server-6] 	global_costmap lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] [INFO] [1782975237.477139713] [global_costmap.global_costmap]: Creating Costmap
+[bt_navigator-8] [INFO] [1782975237.479846876] [bt_navigator]: Creating
+[behavior_server-7] [INFO] [1782975237.525350817] [behavior_server]: 
+[behavior_server-7] 	behavior_server lifecycle node launched. 
+[behavior_server-7] 	Waiting on external lifecycle transitions to activate
+[behavior_server-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-9] [INFO] [1782975237.581797160] [waypoint_follower]: 
+[waypoint_follower-9] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-9] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-9] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-9] [INFO] [1782975237.611683663] [waypoint_follower]: Creating
+[velocity_smoother-10] [INFO] [1782975237.619345861] [velocity_smoother]: 
+[velocity_smoother-10] 	velocity_smoother lifecycle node launched. 
+[velocity_smoother-10] 	Waiting on external lifecycle transitions to activate
+[velocity_smoother-10] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-11] [INFO] [1782975237.631790803] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[controller_server-4] [INFO] [1782975238.279176710] [local_costmap.local_costmap]: 
+[controller_server-4] 	local_costmap lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1782975238.281374957] [local_costmap.local_costmap]: Creating Costmap
+[lifecycle_manager-3] [INFO] [1782975238.590286597] [lifecycle_manager_localization]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-3] [INFO] [1782975238.590502513] [lifecycle_manager_localization]: [34m[1mConfiguring map_server[0m[0m
+[map_server-1] [INFO] [1782975238.591961761] [map_server]: Configuring
+[map_server-1] [INFO] [1782975238.592245219] [map_io]: Loading yaml file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.yaml
+[map_server-1] [INFO] [1782975238.593416551] [map_io]: resolution: 0.05
+[map_server-1] [INFO] [1782975238.593498551] [map_io]: origin[0]: -5.07
+[map_server-1] [INFO] [1782975238.593530634] [map_io]: origin[1]: -5.68
+[map_server-1] [INFO] [1782975238.593558593] [map_io]: origin[2]: 0
+[map_server-1] [INFO] [1782975238.593587717] [map_io]: free_thresh: 0.25
+[map_server-1] [INFO] [1782975238.593616384] [map_io]: occupied_thresh: 0.65
+[map_server-1] [INFO] [1782975238.593654092] [map_io]: mode: trinary
+[map_server-1] [INFO] [1782975238.593684176] [map_io]: negate: 0
+[map_server-1] [INFO] [1782975238.594494258] [map_io]: Loading image_file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm
+[map_server-1] [INFO] [1782975238.717908597] [map_io]: Read map /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm: 155 X 201 map @ 0.05 m/cell
+[lifecycle_manager-3] [INFO] [1782975238.878248430] [lifecycle_manager_localization]: [34m[1mConfiguring amcl[0m[0m
+[amcl-2] [INFO] [1782975238.882025050] [amcl]: Configuring
+[amcl-2] [INFO] [1782975238.882407258] [amcl]: initTransforms
+[lifecycle_manager-11] [INFO] [1782975238.955594954] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-11] [INFO] [1782975238.955976787] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-4] [INFO] [1782975238.958109034] [controller_server]: Configuring controller interface
+[controller_server-4] [INFO] [1782975238.961237489] [controller_server]: getting goal checker plugins..
+[controller_server-4] [INFO] [1782975238.961778405] [controller_server]: Controller frequency set to 20.0000Hz
+[controller_server-4] [INFO] [1782975238.962037238] [local_costmap.local_costmap]: Configuring
+[amcl-2] [INFO] [1782975239.038998929] [amcl]: initPubSub
+[controller_server-4] [INFO] [1782975239.056226407] [local_costmap.local_costmap]: Using plugin "voxel_layer"
+[controller_server-4] [INFO] [1782975239.106351050] [local_costmap.local_costmap]: Subscribed to Topics: scan
+[amcl-2] [INFO] [1782975239.114839039] [amcl]: Subscribed to map topic.
+[lifecycle_manager-3] [INFO] [1782975239.177775623] [lifecycle_manager_localization]: [34m[1mActivating map_server[0m[0m
+[map_server-1] [INFO] [1782975239.178835164] [map_server]: Activating
+[map_server-1] [INFO] [1782975239.179647829] [map_server]: Creating bond (map_server) to lifecycle manager.
+[amcl-2] [INFO] [1782975239.181566993] [amcl]: Received a 155 X 201 map @ 0.050 m/pix
+[controller_server-4] [INFO] [1782975239.211439371] [local_costmap.local_costmap]: Initialized plugin "voxel_layer"
+[controller_server-4] [INFO] [1782975239.211592871] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-4] [INFO] [1782975239.230323972] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[lifecycle_manager-3] [INFO] [1782975239.312470281] [lifecycle_manager_localization]: Server map_server connected with bond.
+[lifecycle_manager-3] [INFO] [1782975239.312686448] [lifecycle_manager_localization]: [34m[1mActivating amcl[0m[0m
+[amcl-2] [INFO] [1782975239.315158945] [amcl]: Activating
+[amcl-2] [INFO] [1782975239.315351028] [amcl]: Creating bond (amcl) to lifecycle manager.
+[controller_server-4] [INFO] [1782975239.342725200] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-4] [INFO] [1782975239.352770812] [controller_server]: Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-4] [INFO] [1782975239.365203713] [controller_server]: Controller Server has general_goal_checker  goal checkers available.
+[controller_server-4] [INFO] [1782975239.376524448] [controller_server]: Created controller : FollowPath of type dwb_core::DWBLocalPlanner
+[amcl-2] [INFO] [1782975239.386377185] [amcl]: createLaserObject
+[controller_server-4] [INFO] [1782975239.409183405] [controller_server]: Setting transform_tolerance to 0.200000
+[lifecycle_manager-3] [INFO] [1782975239.454947721] [lifecycle_manager_localization]: Server amcl connected with bond.
+[lifecycle_manager-3] [INFO] [1782975239.455124012] [lifecycle_manager_localization]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-3] [INFO] [1782975239.455190137] [lifecycle_manager_localization]: [34m[1mCreating bond timer...[0m[0m
+[controller_server-4] [INFO] [1782975239.521010551] [controller_server]: Using critic "RotateToGoal" (dwb_critics::RotateToGoalCritic)
+[controller_server-4] [INFO] [1782975239.526987044] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1782975239.528720708] [controller_server]: Using critic "Oscillation" (dwb_critics::OscillationCritic)
+[controller_server-4] [INFO] [1782975239.535967074] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1782975239.537938988] [controller_server]: Using critic "BaseObstacle" (dwb_critics::BaseObstacleCritic)
+[controller_server-4] [INFO] [1782975239.540670234] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1782975239.542227941] [controller_server]: Using critic "GoalAlign" (dwb_critics::GoalAlignCritic)
+[controller_server-4] [INFO] [1782975239.545790061] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1782975239.547534517] [controller_server]: Using critic "PathAlign" (dwb_critics::PathAlignCritic)
+[controller_server-4] [INFO] [1782975239.551234720] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1782975239.553452801] [controller_server]: Using critic "PathDist" (dwb_critics::PathDistCritic)
+[controller_server-4] [INFO] [1782975239.556722755] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1782975239.558601919] [controller_server]: Using critic "GoalDist" (dwb_critics::GoalDistCritic)
+[controller_server-4] [INFO] [1782975239.561539374] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1782975239.561706040] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-11] [INFO] [1782975239.620454089] [lifecycle_manager_navigation]: [34m[1mConfiguring smoother_server[0m[0m
+[smoother_server-5] [INFO] [1782975239.621764712] [smoother_server]: Configuring smoother server
+[smoother_server-5] [INFO] [1782975239.687039960] [smoother_server]: Created smoother : simple_smoother of type nav2_smoother::SimpleSmoother
+[smoother_server-5] [INFO] [1782975239.697083489] [smoother_server]: Smoother Server has simple_smoother  smoothers available.
+[lifecycle_manager-11] [INFO] [1782975239.768593396] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-6] [INFO] [1782975239.770335185] [planner_server]: Configuring
+[planner_server-6] [INFO] [1782975239.770551935] [global_costmap.global_costmap]: Configuring
+[planner_server-6] [INFO] [1782975239.844700422] [global_costmap.global_costmap]: Using plugin "static_layer"
+[planner_server-6] [INFO] [1782975239.873751634] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+[planner_server-6] [INFO] [1782975239.884446412] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+[planner_server-6] [INFO] [1782975239.884586995] [global_costmap.global_costmap]: Using plugin "obstacle_layer"
+[planner_server-6] [INFO] [1782975239.909229213] [global_costmap.global_costmap]: Subscribed to Topics: scan
+[planner_server-6] [INFO] [1782975239.964561641] [global_costmap.global_costmap]: Initialized plugin "obstacle_layer"
+[planner_server-6] [INFO] [1782975239.965407931] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-6] [INFO] [1782975239.986808028] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-6] [INFO] [1782975240.229304337] [global_costmap.global_costmap]: StaticLayer: Resizing costmap to 155 X 201 at 0.050000 m/pix
+[planner_server-6] [INFO] [1782975240.246408940] [planner_server]: Created global planner plugin GridBased of type nav2_navfn_planner/NavfnPlanner
+[planner_server-6] [INFO] [1782975240.252109474] [planner_server]: Configuring plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1782975240.280543729] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-11] [INFO] [1782975240.696697479] [lifecycle_manager_navigation]: [34m[1mConfiguring behavior_server[0m[0m
+[behavior_server-7] [INFO] [1782975240.699927266] [behavior_server]: Configuring
+[behavior_server-7] [INFO] [1782975240.789239525] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors/Spin
+[behavior_server-7] [INFO] [1782975240.794111435] [behavior_server]: Configuring spin
+[behavior_server-7] [INFO] [1782975240.868021881] [behavior_server]: Creating behavior plugin backup of type nav2_behaviors/BackUp
+[behavior_server-7] [INFO] [1782975240.872898083] [behavior_server]: Configuring backup
+[amcl-2] [WARN] [1782975240.885098900] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[behavior_server-7] [INFO] [1782975240.936890374] [behavior_server]: Creating behavior plugin drive_on_heading of type nav2_behaviors/DriveOnHeading
+[behavior_server-7] [INFO] [1782975240.942797700] [behavior_server]: Configuring drive_on_heading
+[behavior_server-7] [INFO] [1782975241.011125403] [behavior_server]: Creating behavior plugin assisted_teleop of type nav2_behaviors/AssistedTeleop
+[behavior_server-7] [INFO] [1782975241.021412556] [behavior_server]: Configuring assisted_teleop
+[behavior_server-7] [INFO] [1782975241.106769820] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors/Wait
+[behavior_server-7] [INFO] [1782975241.111804272] [behavior_server]: Configuring wait
+[lifecycle_manager-11] [INFO] [1782975241.163613704] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-8] [INFO] [1782975241.167223116] [bt_navigator]: Configuring
+[lifecycle_manager-11] [INFO] [1782975242.571378371] [lifecycle_manager_navigation]: [34m[1mConfiguring waypoint_follower[0m[0m
+[waypoint_follower-9] [INFO] [1782975242.573122952] [waypoint_follower]: Configuring
+[waypoint_follower-9] [INFO] [1782975242.694304753] [waypoint_follower]: Created waypoint_task_executor : wait_at_waypoint of type nav2_waypoint_follower::WaitAtWaypoint
+[lifecycle_manager-11] [INFO] [1782975242.700946911] [lifecycle_manager_navigation]: [34m[1mConfiguring velocity_smoother[0m[0m
+[velocity_smoother-10] [INFO] [1782975242.704035448] [velocity_smoother]: Configuring velocity smoother
+[lifecycle_manager-11] [INFO] [1782975242.735326283] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-4] [INFO] [1782975242.742976939] [controller_server]: Activating
+[controller_server-4] [INFO] [1782975242.743181106] [local_costmap.local_costmap]: Activating
+[controller_server-4] [INFO] [1782975242.743298231] [local_costmap.local_costmap]: Checking transform
+[controller_server-4] [INFO] [1782975242.743694980] [local_costmap.local_costmap]: start
+[controller_server-4] [INFO] [1782975242.947451173] [controller_server]: Creating bond (controller_server) to lifecycle manager.
+[amcl-2] [WARN] [1782975242.982450211] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[lifecycle_manager-11] [INFO] [1782975243.071478970] [lifecycle_manager_navigation]: Server controller_server connected with bond.
+[lifecycle_manager-11] [INFO] [1782975243.071694803] [lifecycle_manager_navigation]: [34m[1mActivating smoother_server[0m[0m
+[smoother_server-5] [INFO] [1782975243.073318718] [smoother_server]: Activating
+[smoother_server-5] [INFO] [1782975243.073534467] [smoother_server]: Creating bond (smoother_server) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1782975243.195417434] [lifecycle_manager_navigation]: Server smoother_server connected with bond.
+[lifecycle_manager-11] [INFO] [1782975243.195583808] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-6] [INFO] [1782975243.198692554] [planner_server]: Activating
+[planner_server-6] [INFO] [1782975243.198937679] [global_costmap.global_costmap]: Activating
+[planner_server-6] [INFO] [1782975243.199022346] [global_costmap.global_costmap]: Checking transform
+[planner_server-6] [INFO] [1782975243.199159512] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975243.699217153] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975244.199203210] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975244.699199559] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975244.983599689] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975245.199188366] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975245.699187382] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975246.199199315] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975246.699185705] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975247.079253169] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975247.199188346] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975247.699194612] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975248.199225169] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975248.699186643] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975249.179433601] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975249.199198826] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975249.699186633] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975250.199189316] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975250.699195540] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975251.199190014] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975251.274298708] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975251.699189197] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975252.199198671] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975252.699184520] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975253.199189327] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975253.274663563] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975253.699184510] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975254.199190651] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975254.699204250] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975255.199185266] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975255.276249916] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975255.699230032] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975256.199197965] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975256.699188939] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975257.199186497] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975257.369692025] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975257.699183763] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975258.199199779] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975258.699192003] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975259.199180019] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975259.468325585] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1782975259.699184118] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975260.199187426] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975260.699216692] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1782975261.199204208] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1782975261.469633106] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[amcl-2] [INFO] [1782975261.524668451] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1782975261.525095367] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1782975261.524846 but the latest data is at time 1782975261.497554, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1782975261.525217867] [amcl]: Setting pose (1782975261.525214): 0.000 0.000 0.000
+[planner_server-6] [INFO] [1782975261.699412765] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1782975261.664190 but the earliest data is at time 1782975262.468618, when looking up transform from frame [base_link] to frame [map]
+[amcl-2] [INFO] [1782975262.044443192] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1782975262.044765733] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the past.  Requested time 1782975262.044601 but the earliest data is at time 1782975262.468618, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1782975262.044836816] [amcl]: Setting pose (1782975262.044834): 0.000 0.000 0.000
+[planner_server-6] [INFO] [1782975262.199288198] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1782975262.164189 but the earliest data is at time 1782975262.468618, when looking up transform from frame [base_link] to frame [map]
+[amcl-2] [INFO] [1782975262.677738868] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1782975262.678028367] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1782975262.677880 but the latest data is at time 1782975262.664464, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1782975262.678096617] [amcl]: Setting pose (1782975262.678095): 0.000 0.000 0.000
+[planner_server-6] [INFO] [1782975262.699465589] [global_costmap.global_costmap]: start
+[amcl-2] [INFO] [1782975263.319537449] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1782975263.319990574] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1782975263.319753 but the latest data is at time 1782975263.297644, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1782975263.320121573] [amcl]: Setting pose (1782975263.320118): 0.000 0.000 0.000
+[planner_server-6] [INFO] [1782975263.753236927] [planner_server]: Activating plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1782975263.763984663] [planner_server]: Creating bond (planner_server) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1782975263.890167707] [lifecycle_manager_navigation]: Server planner_server connected with bond.
+[lifecycle_manager-11] [INFO] [1782975263.890354956] [lifecycle_manager_navigation]: [34m[1mActivating behavior_server[0m[0m
+[behavior_server-7] [INFO] [1782975263.891950913] [behavior_server]: Activating
+[behavior_server-7] [INFO] [1782975263.892176037] [behavior_server]: Activating spin
+[behavior_server-7] [INFO] [1782975263.892290162] [behavior_server]: Activating backup
+[behavior_server-7] [INFO] [1782975263.892381454] [behavior_server]: Activating drive_on_heading
+[behavior_server-7] [INFO] [1782975263.892471245] [behavior_server]: Activating assisted_teleop
+[behavior_server-7] [INFO] [1782975263.892559870] [behavior_server]: Activating wait
+[behavior_server-7] [INFO] [1782975263.892671953] [behavior_server]: Creating bond (behavior_server) to lifecycle manager.
+[amcl-2] [INFO] [1782975263.963629653] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1782975263.963930652] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1782975263.963777 but the latest data is at time 1782975263.931037, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1782975263.964206860] [amcl]: Setting pose (1782975263.964203): 0.000 0.000 0.000
+[lifecycle_manager-11] [INFO] [1782975264.020344079] [lifecycle_manager_navigation]: Server behavior_server connected with bond.
+[lifecycle_manager-11] [INFO] [1782975264.020516662] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-8] [INFO] [1782975264.021757702] [bt_navigator]: Activating
+[bt_navigator-8] [INFO] [1782975264.460909172] [bt_navigator]: Creating bond (bt_navigator) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1782975264.578627561] [lifecycle_manager_navigation]: Server bt_navigator connected with bond.
+[lifecycle_manager-11] [INFO] [1782975264.578863269] [lifecycle_manager_navigation]: [34m[1mActivating waypoint_follower[0m[0m
+[waypoint_follower-9] [INFO] [1782975264.580182642] [waypoint_follower]: Activating
+[waypoint_follower-9] [INFO] [1782975264.580397767] [waypoint_follower]: Creating bond (waypoint_follower) to lifecycle manager.
+[amcl-2] [INFO] [1782975264.607699315] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1782975264.608066439] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1782975264.607895 but the latest data is at time 1782975264.597679, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1782975264.608177981] [amcl]: Setting pose (1782975264.608175): 0.000 0.000 0.000
+[lifecycle_manager-11] [INFO] [1782975264.703142566] [lifecycle_manager_navigation]: Server waypoint_follower connected with bond.
+[lifecycle_manager-11] [INFO] [1782975264.703400482] [lifecycle_manager_navigation]: [34m[1mActivating velocity_smoother[0m[0m
+[velocity_smoother-10] [INFO] [1782975264.705136313] [velocity_smoother]: Activating
+[velocity_smoother-10] [INFO] [1782975264.705432354] [velocity_smoother]: Creating bond (velocity_smoother) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1782975264.825868156] [lifecycle_manager_navigation]: Server velocity_smoother connected with bond.
+[lifecycle_manager-11] [INFO] [1782975264.826019447] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-11] [INFO] [1782975264.826071031] [lifecycle_manager_navigation]: [34m[1mCreating bond timer...[0m[0m
+[bt_navigator-8] [INFO] [1782975356.396985745] [bt_navigator]: Begin navigating from current location (0.05, 0.03) to (0.60, 0.00)
+[bt_navigator-8] [WARN] [1782975356.416692011] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1782975356.445801599] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1782975356.446063932] [controller_server]: No goal checker was specified in parameter 'current_goal_checker'. Server will use only plugin loaded general_goal_checker . This warning will appear once.
+[bt_navigator-8] [WARN] [1782975356.453293797] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1782975357.324414501] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1782975357.492683616] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1782975357.499711815] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1782975357.803800379] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1782975357.856475852] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1782975357.964569545] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1782975358.003956286] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1782975358.160507000] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975358.212103766] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975358.271398898] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975358.571505175] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1782975359.571504545] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1782975360.575334826] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1782975360.586200770] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1782975360.628848715] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975360.630722879] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1782975360.927103828] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975361.186506367] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975361.528399174] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975361.528585715] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975361.529483422] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975361.530325879] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975361.565546042] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975361.565655709] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975361.569790745] [controller_server]: No valid trajectories out of 420! 
+[bt_navigator-8] [WARN] [1782975361.577966859] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1782975361.683629514] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1782975362.330630758] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975362.379448320] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1782975362.688871460] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1782975362.773966433] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1782975363.362421587] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.362551420] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.364335793] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.412965105] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.416710725] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.420960803] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975363.426474462] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975363.464644621] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.466675368] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.467420076] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.524463044] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.526393749] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.527306082] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975363.528041914] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975363.554569088] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.555712586] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.556470669] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.625091330] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.625206871] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.627109660] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.627380535] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975363.627856659] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975363.639985019] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1782975363.651429254] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975363.778208173] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.782687542] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.789310575] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975363.796912190] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975363.797080315] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1782975363.827558692] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.827785192] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.828514649] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.911731375] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.911843041] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.912619832] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.985779904] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.988714483] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975363.990183731] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975363.990737981] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975363.991223022] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975364.010471247] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[planner_server-6] [INFO] [1782975364.021539357] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[planner_server-6] [WARN] [1782975364.712034629] [planner_server]: Planner loop missed its desired rate of 20.0000 Hz. Current loop rate is 1.4815 Hz
+[controller_server-4] [INFO] [1782975364.755702572] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975364.785147826] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.785285950] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975364.786039991] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.858381064] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.860546519] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975364.861975768] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975364.862691225] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975364.895660224] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.896414931] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975364.897904638] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.941752372] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.942225997] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975364.942910288] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.986082148] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975364.986181606] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975364.986862689] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.034903418] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.035033251] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.035763042] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.083970855] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.087611225] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.090088388] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.090326013] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975365.092267052] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975365.118260852] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[bt_navigator-8] [WARN] [1782975365.119779642] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1782975365.129925212] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1782975365.140287365] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975365.180490355] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.180595771] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.181305520] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.244148522] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.244250689] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.245979478] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975365.249601390] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975365.305508942] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.305618901] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.306453483] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975365.307698690] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975365.335735195] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.335837236] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.336616902] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.370246525] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.370350650] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.372254023] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.429753115] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.429864656] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.432362403] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.467536857] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.467648316] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975365.468410190] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975365.468635148] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975365.468834147] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1782975365.494532781] [behavior_server]: Running spin
+[behavior_server-7] [INFO] [1782975365.499728857] [behavior_server]: Turning 1.57 for spin behavior.
+[behavior_server-7] [INFO] [1782975367.802270789] [behavior_server]: spin completed successfully
+[bt_navigator-8] [WARN] [1782975367.879151481] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1782975367.931675079] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975367.959723626] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975367.959840001] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975367.962196081] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.013464015] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.013590848] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.014344847] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.063000325] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.063112575] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.063936449] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.107933559] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.108041392] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.108766349] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.159776158] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.162696238] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.167909106] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.207980388] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.211743258] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.216884084] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.286682369] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.289547282] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.290397864] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.292005529] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975368.293727610] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975368.309971630] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1782975368.311918211] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975368.396592810] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.396815143] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.397664017] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975368.398245516] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975368.433077179] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.433191054] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.434018344] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975368.435091051] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975368.473772251] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.473881084] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.474620292] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975368.475728040] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975368.504220170] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.513317617] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.517037278] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975368.518804818] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975368.547305281] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.547433822] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.548288030] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.596602509] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.596721925] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.597554632] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.641859742] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.641973825] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975368.642739532] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975368.642964699] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975368.644722321] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1782975368.660843050] [behavior_server]: Running wait
+[bt_navigator-8] [WARN] [1782975372.754191869] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[behavior_server-7] [INFO] [1782975373.662748066] [behavior_server]: wait completed successfully
+[controller_server-4] [INFO] [1782975373.720946366] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975373.766880223] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.766980806] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975373.769800136] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.799894597] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.800000513] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975373.800703637] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.855352233] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.855463149] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975373.856276732] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.910552411] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.914252615] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975373.918548818] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975373.923013145] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975373.963009302] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975373.964557466] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975373.967201463] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.025451096] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.025579179] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975374.026986594] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.027202469] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975374.027775551] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975374.051588979] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1782975374.060598550] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975374.205493237] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.205601571] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975374.206361945] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975374.206948611] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975374.264502536] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.264604911] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975374.266743200] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.349692217] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.352924005] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975374.358203164] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975374.360067537] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975374.387838876] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.387952584] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975374.388715792] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975374.388911541] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975374.389126541] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1782975374.410876180] [behavior_server]: Running backup
+[behavior_server-7] [INFO] [1782975374.412909885] [behavior_server]: DriveOnHeading: no acceleration or deceleration limits set
+[behavior_server-7] [WARN] [1782975378.312054831] [behavior_server]: Collision Ahead - Exiting DriveOnHeading
+[behavior_server-7] [WARN] [1782975378.312212039] [behavior_server]: backup failed
+[behavior_server-7] [WARN] [1782975378.312288206] [behavior_server]: [backup] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975378.351057572] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[planner_server-6] [INFO] [1782975378.359566770] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[planner_server-6] [WARN] [1782975378.707639652] [planner_server]: Planner loop missed its desired rate of 20.0000 Hz. Current loop rate is 2.8960 Hz
+[controller_server-4] [INFO] [1782975378.730336706] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1782975379.186875781] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975379.542849819] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975379.785246505] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1782975379.967680394] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975379.971927930] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975379.980529127] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975379.988273867] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975380.018682119] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.018814869] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975380.019640952] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.066642474] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.067621764] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975380.068651638] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.125247606] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.125379523] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975380.126255147] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.163949473] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.168195301] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975380.170486881] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.240654623] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.244493702] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975380.251957484] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.254838938] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975380.256130978] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975380.281008571] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1782975380.286256023] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1782975380.383905063] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975380.435449746] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975380.501656494] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975380.667491320] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.671915273] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975380.684034799] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975380.687613044] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975380.735238066] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.735346191] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975380.736066481] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975380.736725981] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975380.774435223] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.777916469] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975380.780164716] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975380.780897673] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975380.828908778] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.829024569] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975380.829757068] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975380.831373775] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975380.883647457] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.886439037] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975380.887383202] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.887620160] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975380.887999201] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975380.888731909] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975380.950767786] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.950879036] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975380.951639369] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975380.952439659] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975380.989861569] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975380.990825068] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975380.991701608] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975380.992198191] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975381.029668143] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975381.032965805] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975381.037216133] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975381.070241257] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975381.071480130] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975381.072858003] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975381.129769638] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975381.136057588] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975381.140190499] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975381.145566659] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975381.195105511] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975381.390708091] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1782975381.573365188] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1782975381.695535946] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975381.740514180] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975381.742854135] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975381.744079175] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975381.745110924] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975381.889441945] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1782975382.042725913] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975382.111316157] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975382.147128736] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975382.151176147] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975382.153591186] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975382.154139810] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975382.989434811] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1782975383.345411100] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975383.381843053] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975383.386340422] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975383.391595748] [controller_server]: No valid trajectories out of 420! 
+[bt_navigator-8] [WARN] [1782975383.393524538] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1782975383.411395681] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975383.455188208] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975383.458367204] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975383.461154325] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975383.461698616] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975383.544205342] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975383.544317342] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975383.545201174] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975383.549850918] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975383.636035432] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975383.636149140] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975383.636914764] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975383.729315561] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975383.729418227] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975383.730162435] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975383.730374601] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975383.730999642] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1782975383.753576238] [behavior_server]: Running spin
+[behavior_server-7] [INFO] [1782975383.753914196] [behavior_server]: Turning 1.57 for spin behavior.
+[bt_navigator-8] [WARN] [1782975385.710451619] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[behavior_server-7] [INFO] [1782975385.854510349] [behavior_server]: spin completed successfully
+[controller_server-4] [INFO] [1782975385.913616272] [controller_server]: Received a goal, begin computing control effort.
+[bt_navigator-8] [WARN] [1782975385.952443388] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1782975385.955079510] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [ERROR] [1782975385.969796074] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975385.970034866] [DWBLocalPlanner]: 1.00: BaseObstacle/Trajectory Hits Obstacle.
+[controller_server-4] [WARN] [1782975385.974591276] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975385.975931358] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975386.018398845] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975386.167692651] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975386.965040118] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1782975387.008034062] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.012489515] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975387.016027927] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975387.016607384] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975387.273692885] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975387.340878923] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1782975387.387300612] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975387.455383274] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.456370148] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975387.457108980] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975387.457622521] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975387.509899120] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.510021120] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975387.510747869] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975387.515082614] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975387.564273467] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.564371133] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975387.565581340] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.659143177] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.662851547] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975387.668085582] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975387.673431408] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975387.718974808] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.719084766] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975387.719794890] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975387.720008348] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975387.720839722] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975387.744533650] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1782975387.758025215] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1782975387.973136437] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1782975388.047318841] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1782975388.074788055] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.077281135] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975388.078082384] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.158894196] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.161692817] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975388.164103106] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.203143514] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.205167219] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975388.206006010] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.250346036] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.250446577] [DWBLocalPlanner]: 1.00: RotateToGoal/Not slowing down near goal.
+[controller_server-4] [WARN] [1782975388.251115910] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.308757210] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.310162208] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975388.311312874] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975388.311553748] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975388.312423039] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1782975388.334733802] [behavior_server]: Running wait
+[bt_navigator-8] [WARN] [1782975391.704091895] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[behavior_server-7] [INFO] [1782975393.335172365] [behavior_server]: wait completed successfully
+[controller_server-4] [INFO] [1782975393.395291870] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975393.440190771] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.440945561] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.442505726] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.483609798] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.483718298] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.485052754] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.531537777] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.531663527] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.532344693] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.573067515] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.576592927] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.581198380] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.627002654] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.627987819] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.628714485] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.683680705] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.683790038] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.684494662] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.731468977] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.737050844] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.741043214] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.741278839] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975393.743368044] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1782975393.768201721] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1782975393.769854093] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [ERROR] [1782975393.981955194] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975393.982069235] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975393.982736401] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [WARN] [1782975393.985815480] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [ERROR] [1782975394.025084971] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975394.026706636] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975394.027461135] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975394.110740110] [DWBLocalPlanner]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975394.110853568] [DWBLocalPlanner]: 1.00: RotateToGoal/Nonrotation command near goal.
+[controller_server-4] [WARN] [1782975394.111640109] [controller_server]: No valid trajectories out of 420! 
+[controller_server-4] [ERROR] [1782975394.111873109] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1782975394.112212858] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[bt_navigator-8] [WARN] [1782975394.133725830] [bt_navigator]: [navigate_to_pose] [ActionServer] Aborting handle.
+[bt_navigator-8] [ERROR] [1782975394.134689829] [bt_navigator]: Goal failed
