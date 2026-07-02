@@ -14,6 +14,12 @@ run_chassis_bridge() {
     return 1
   fi
 
+  if [ "${CHASSIS_REUSE_IF_RUNNING:-0}" = "1" ] \
+    && pgrep -f "m1_pwm_cmd_vel_bridge.py|cmd_vel_to_rosmaster.py" >/dev/null 2>&1; then
+    echo "[NAV2] reuse existing chassis bridge (CHASSIS_REUSE_IF_RUNNING=1)"
+    return 0
+  fi
+
   kill_chassis_bridge
   mkdir -p "$(dirname "$log_file")"
 

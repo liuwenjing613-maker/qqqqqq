@@ -1,0 +1,202 @@
+{
+  "configById": {
+    "3D!semantic_explore": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 12,
+        "phi": 60,
+        "thetaOffset": 45,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "fixedFrame": "map",
+      "followMode": "follow-none",
+      "followTf": "base_link",
+      "scene": {
+        "enableStats": false,
+        "backgroundColor": "#1a1a1a"
+      },
+      "transforms": {
+        "enable": true,
+        "showLabel": false,
+        "lineWidth": 0.2,
+        "labelSize": 0.05
+      },
+      "topics": {
+        "/map": {
+          "visible": true,
+          "colorMode": "costmap",
+          "minColor": "#000000",
+          "maxColor": "#ffffff"
+        },
+        "/scan_filtered": {
+          "visible": true,
+          "pointSize": 4,
+          "decayTime": 0
+        },
+        "/explore_frontiers": {
+          "visible": true,
+          "namespaces": {
+            "frontiers": { "visible": true }
+          }
+        },
+        "/explore_candidate_goals": {
+          "visible": true,
+          "namespaces": {
+            "candidates": { "visible": true }
+          }
+        },
+        "/explore_selected_goal": {
+          "visible": true,
+          "namespaces": {
+            "selected": { "visible": true },
+            "selected_arrow": { "visible": true }
+          }
+        },
+        "/explore_path": {
+          "visible": true
+        },
+        "/semantic_landmarks": {
+          "visible": true,
+          "namespaces": {
+            "semantic_landmarks": { "visible": true },
+            "semantic_landmark_labels": { "visible": true }
+          }
+        },
+        "/semantic_viewpoints": {
+          "visible": true,
+          "namespaces": {
+            "semantic_viewpoints": { "visible": true }
+          }
+        },
+        "/semantic_observed_cones": {
+          "visible": true,
+          "namespaces": {
+            "semantic_observed_cones": { "visible": true }
+          }
+        },
+        "/semantic_candidate_objects": {
+          "visible": true,
+          "namespaces": {
+            "semantic_candidate_objects": { "visible": true }
+          }
+        }
+      },
+      "layers": {}
+    },
+    "Image!yolo_annotated": {
+      "imageMode": {
+        "imageTopic": "/yolov5s_bpu/annotated/compressed"
+      },
+      "synchronize": false,
+      "smooth": false,
+      "rotation": 0,
+      "flipHorizontal": false,
+      "flipVertical": false,
+      "minValue": 0,
+      "maxValue": 1
+    },
+    "Plot!cmd_vx": {
+      "title": "cmd_vel.linear.x",
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/cmd_vel.linear.x",
+          "enabled": true,
+          "color": "#4e98e2"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": false,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RawMessages!explore_hint": {
+      "topicPath": "/explore_goal_hint",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    },
+    "RawMessages!explore_state": {
+      "topicPath": "/explore_state_json",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    },
+    "RawMessages!nav_state": {
+      "topicPath": "/nav_state",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    },
+    "RawMessages!semantic_map_json": {
+      "topicPath": "/semantic_map_json",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    },
+    "RawMessages!qwen_decision": {
+      "topicPath": "/qwen_text_decision",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "direction": "row",
+    "first": "3D!semantic_explore",
+    "second": {
+      "direction": "column",
+      "first": "Image!yolo_annotated",
+      "second": {
+        "direction": "column",
+        "first": {
+          "direction": "column",
+          "first": "RawMessages!explore_hint",
+          "second": {
+            "direction": "column",
+            "first": "RawMessages!explore_state",
+            "second": "RawMessages!nav_state",
+            "splitPercentage": 50
+          },
+          "splitPercentage": 34
+        },
+        "second": {
+          "direction": "column",
+          "first": "Plot!cmd_vx",
+          "second": {
+            "direction": "column",
+            "first": "RawMessages!semantic_map_json",
+            "second": "RawMessages!qwen_decision",
+            "splitPercentage": 50
+          },
+          "splitPercentage": 45
+        },
+        "splitPercentage": 55
+      },
+      "splitPercentage": 55
+    },
+    "splitPercentage": 62
+  }
+}

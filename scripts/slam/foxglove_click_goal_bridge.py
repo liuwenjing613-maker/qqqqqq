@@ -247,6 +247,9 @@ class FoxgloveClickGoalBridge(Node):
 
         if status == GoalStatus.STATUS_SUCCEEDED or err_code == 0:
             self.get_logger().info(f'[{seq}] Navigation succeeded. status={status}')
+            self.get_logger().info(
+                'Navigation succeeded. Current pose will be updated by pose_memory_node.'
+            )
         else:
             self.get_logger().error(f'[{seq}] Navigation ended. status={status}, error_code={err_code}, error_msg={err_msg}')
 

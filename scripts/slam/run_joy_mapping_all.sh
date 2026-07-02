@@ -11,8 +11,10 @@ cd ~/rdk_x5_vln_robot
 LOG_DIR="$PWD/logs/joy_mapping"
 MAP_DIR="$PWD/maps"
 MAP_NAME="${MAP_NAME:-joy_corridor_map}"
+STATE_DIR="$PWD/state"
+POSE_STATE_FILE="$STATE_DIR/last_pose_map.json"
 
-mkdir -p "$LOG_DIR" "$MAP_DIR"
+mkdir -p "$LOG_DIR" "$MAP_DIR" "$STATE_DIR"
 
 PIDS=()
 SAVED=0
@@ -297,6 +299,7 @@ show_status() {
   echo "3. Enable /map, /scan, /scan_filtered, /tf, /tf_static, /odom"
   echo "4. Drive slowly with joystick"
   echo "5. Press Ctrl+C in this terminal to save map and stop"
+  echo "Pose memory file: $POSE_STATE_FILE"
   echo
 }
 
@@ -345,6 +348,13 @@ main() {
     stop_live_stack 2>/dev/null || true
     exit 1
   }
+
+  start_bg pose_memory python3 scripts/slam/pose_memory_node.py \
+    --state-file "$POSE_STATE_FILE" \
+    --map-frame map \
+    --base-frame base_link \
+    --fallback-base-frame base_footprint \
+    --save-period 1.0
 
   log "[2/3] Start joystick /joy"
   start_bg joy_node ros2 run joy joy_node --ros-args \

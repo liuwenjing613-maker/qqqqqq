@@ -8,7 +8,7 @@ source /opt/ros/humble/setup.bash
 set -u
 
 PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
-MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_corridor_map.yaml}"
+MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
 NAV2_PARAMS="${NAV2_PARAMS:-$PROJECT_DIR/configs/nav2_params.yaml}"
 
 fail=0
@@ -72,6 +72,7 @@ done
 echo
 echo "========== Project file check =========="
 check_file "$PROJECT_DIR/scripts/slam/run_nav2_saved_map.sh"
+check_file "$PROJECT_DIR/scripts/slam/pose_memory_node.py"
 check_exec "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
 check_file "$PROJECT_DIR/ros2_bridge/m1_pwm_cmd_vel_bridge.py"
 check_file "$PROJECT_DIR/ros2_bridge/cmd_vel_to_rosmaster.py"
@@ -97,6 +98,19 @@ if python3 -m py_compile "$PROJECT_DIR/ros2_bridge/cmd_vel_to_rosmaster.py"; the
   ok "python syntax: cmd_vel_to_rosmaster.py (backup)"
 else
   bad "python syntax error: cmd_vel_to_rosmaster.py"
+fi
+
+if python3 -m py_compile "$PROJECT_DIR/scripts/slam/pose_memory_node.py"; then
+  ok "python syntax: pose_memory_node.py"
+else
+  bad "python syntax error: pose_memory_node.py"
+fi
+
+POSE_STATE_FILE="${POSE_STATE_FILE:-$PROJECT_DIR/state/last_pose_map.json}"
+if [ -f "$POSE_STATE_FILE" ]; then
+  ok "pose state file: $POSE_STATE_FILE"
+else
+  warn "pose state file not found yet: $POSE_STATE_FILE (expected before first mapping run)"
 fi
 
 echo
