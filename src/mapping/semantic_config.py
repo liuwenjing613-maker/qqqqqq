@@ -24,6 +24,13 @@ def _as_float(value: Any, default: float) -> float:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return _as_float(raw, default)
+
+
 def _as_bool(value: Any, default: bool = False) -> bool:
     if value is None:
         return default
@@ -72,13 +79,24 @@ def load_semantic_config(path: str | None = None) -> Dict[str, Any]:
         "camera": {
             "width": int(camera.get("width", 640)),
             "height": int(camera.get("height", 480)),
-            "hfov_deg": _as_float(camera.get("hfov_deg", 70.0), 70.0),
+            "hfov_deg": _env_float(
+                "SEMANTIC_CAMERA_HFOV_DEG",
+                _as_float(camera.get("hfov_deg", 70.0), 70.0),
+            ),
             "yaw_offset_deg": _as_float(camera.get("yaw_offset_deg", 0.0), 0.0),
         },
         "projection": {
             "min_range_m": _as_float(projection.get("min_range_m", 0.18), 0.18),
             "max_range_m": _as_float(projection.get("max_range_m", 4.0), 4.0),
             "target_window_deg": _as_float(projection.get("target_window_deg", 8.0), 8.0),
+            "camera_to_laser_yaw_deg": _env_float(
+                "SEMANTIC_CAMERA_TO_LASER_YAW_DEG",
+                _as_float(projection.get("camera_to_laser_yaw_deg", 0.0), 0.0),
+            ),
+            "range_window_deg": _env_float(
+                "SEMANTIC_RANGE_WINDOW_DEG",
+                _as_float(projection.get("range_window_deg", 12.0), 12.0),
+            ),
             "use_lidar_median": _as_bool(projection.get("use_lidar_median", True), True),
             "no_range_policy": str(projection.get("no_range_policy", "viewpoint_only")),
             "default_position_sigma_m": _as_float(
@@ -188,6 +206,9 @@ def load_semantic_config(path: str | None = None) -> Dict[str, Any]:
             "landmark_text": _as_bool(visualization.get("landmark_text", True), True),
             "observed_cone_markers": _as_bool(
                 visualization.get("observed_cone_markers", True), True
+            ),
+            "show_depth_labels": _as_bool(
+                visualization.get("show_depth_labels", True), True
             ),
         },
     }

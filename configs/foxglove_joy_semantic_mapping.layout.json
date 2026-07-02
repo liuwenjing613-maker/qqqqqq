@@ -49,6 +49,28 @@
           "namespaces": {
             "semantic_viewpoints": { "visible": true }
           }
+        },
+        "/semantic_observed_cones": {
+          "visible": true,
+          "namespaces": {
+            "semantic_observed_cones": {
+              "visible": true
+            }
+          }
+        },
+        "/semantic_candidate_objects": {
+          "visible": true,
+          "namespaces": {
+            "semantic_candidate_objects": { "visible": true },
+            "semantic_depth_labels": { "visible": true }
+          }
+        },
+        "/semantic_observation_rays": {
+          "visible": true,
+          "namespaces": {
+            "semantic_observation_rays": { "visible": true },
+            "semantic_depth_labels": { "visible": true }
+          }
         }
       },
       "layers": {}
@@ -64,6 +86,26 @@
       "flipVertical": false,
       "minValue": 0,
       "maxValue": 1
+    },
+    "RawMessages!semantic_map_json": {
+      "topicPath": "/semantic_map_json",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": {
+        "data": "e"
+      }
+    },
+    "RawMessages!semantic_observations": {
+      "topicPath": "/semantic_observations",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": {
+        "data": "e"
+      }
     },
     "RawMessages!semantic_status": {
       "topicPath": "/semantic_status",
@@ -110,14 +152,24 @@
       "first": "Image!yolo_annotated",
       "second": {
         "direction": "column",
-        "first": "RawMessages!semantic_status",
+        "first": {
+          "direction": "column",
+          "first": "RawMessages!semantic_map_json",
+          "second": {
+            "direction": "column",
+            "first": "RawMessages!semantic_observations",
+            "second": "RawMessages!semantic_status",
+            "splitPercentage": 50
+          },
+          "splitPercentage": 34
+        },
         "second": {
           "direction": "column",
           "first": "RawMessages!loop_error",
           "second": "RawMessages!bbox_json",
           "splitPercentage": 50
         },
-        "splitPercentage": 40
+        "splitPercentage": 55
       },
       "splitPercentage": 55
     },

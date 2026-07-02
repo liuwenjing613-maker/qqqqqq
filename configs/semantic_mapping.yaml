@@ -20,6 +20,8 @@ semantic_mapping:
     semantic_landmarks: /semantic_landmarks
     semantic_viewpoints: /semantic_viewpoints
     semantic_observed_cones: /semantic_observed_cones
+    semantic_candidate_objects: /semantic_candidate_objects
+    semantic_observation_rays: /semantic_observation_rays
     semantic_loop_error: /semantic_loop_error
     semantic_save_event: /semantic_save_event
     save_trigger: /semantic_map/save
@@ -34,6 +36,9 @@ semantic_mapping:
     min_range_m: 0.18
     max_range_m: 4.0
     target_window_deg: 8.0
+    # Align with configs/nav_yolo_lidar.yaml camera_lidar_yaw_offset_deg
+    camera_to_laser_yaw_deg: -170.0
+    range_window_deg: 12.0
     use_lidar_median: true
     no_range_policy: viewpoint_only
     default_position_sigma_m: 1.20
@@ -125,3 +130,4 @@ semantic_mapping:
     marker_lifetime_sec: 0.0
     landmark_text: true
     observed_cone_markers: true
+    show_depth_labels: true

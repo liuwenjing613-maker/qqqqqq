@@ -88,6 +88,21 @@ source "$PROJECT_DIR/scripts/lidar/source_ydlidar.sh"
 ros2 launch "$PROJECT_DIR/lidar/launch/tmini_plus.launch.py" > logs/yolo_lidar_scan.log 2>&1 &
 sleep 5
 
+echo "[2.5/6] static TF base_link -> laser (Foxglove 3D /scan overlay)..."
+source "$PROJECT_DIR/scripts/lib/lidar_frame_config.sh"
+pkill -f "static_transform_publisher.*base_link" 2>/dev/null || true
+ros2 run tf2_ros static_transform_publisher \
+  --x "${LASER_X}" \
+  --y "${LASER_Y}" \
+  --z "${LASER_Z}" \
+  --roll "${LASER_ROLL}" \
+  --pitch "${LASER_PITCH}" \
+  --yaw "${LASER_YAW}" \
+  --frame-id base_link \
+  --child-frame-id "${LASER_FRAME}" \
+  > logs/yolo_lidar_static_tf.log 2>&1 &
+sleep 1
+
 if [ "${DETECTOR_BACKEND:-yolo_world}" = "yolov5s_bpu" ]; then
   echo "[3/5] start YOLOv5s-BPU detector..."
   pkill -f yolov5s_bpu_web_node.py || true
@@ -141,15 +156,25 @@ python3 "$PROJECT_DIR/src/apps/run_shared_nav.py" \
   --instruction "$INSTRUCTION" \
   > "$PROJECT_DIR/logs/yolo_lidar_nav.log" 2>&1 &
 
+FOXGLOVE_PORT="${FOXGLOVE_PORT:-8765}"
 if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   pkill -f "foxglove_bridge" 2>/dev/null || true
+  sleep 1
   bash "$PROJECT_DIR/scripts/lidar/start_foxglove.sh" \
     > "$PROJECT_DIR/logs/yolo_lidar_foxglove_bridge.log" 2>&1 &
-  sleep 2
-  if ss -tln 2>/dev/null | grep -q ':8765'; then
-    echo "[foxglove] bridge OK ws://$(hostname -I 2>/dev/null | awk '{print $1}'):8765"
+  FOXGLOVE_OK=0
+  for _ in $(seq 1 15); do
+    if ss -tln 2>/dev/null | grep -q ":${FOXGLOVE_PORT} "; then
+      FOXGLOVE_OK=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$FOXGLOVE_OK" = "1" ]; then
+    echo "[foxglove] bridge OK ws://$(hostname -I 2>/dev/null | awk '{print $1}'):${FOXGLOVE_PORT}"
   else
-    echo "[foxglove] WARN: bridge not listening on 8765; see logs/yolo_lidar_foxglove_bridge.log"
+    echo "[foxglove] WARN: bridge not listening on ${FOXGLOVE_PORT}; see logs/yolo_lidar_foxglove_bridge.log"
+    tail -5 "$PROJECT_DIR/logs/yolo_lidar_foxglove_bridge.log" 2>/dev/null || true
   fi
 else
   echo "[foxglove] WARN: foxglove_bridge not installed; skip WebSocket viz."

@@ -14,6 +14,7 @@ LOG_DIR="$PWD/logs/joy_semantic_mapping_calibrated"
 MAP_DIR="$PWD/maps"
 MAP_NAME="${MAP_NAME:-joy_semantic_calibrated_map}"
 SEMANTIC_CONFIG="${SEMANTIC_CONFIG:-configs/semantic_mapping.yaml}"
+NAV_DIRECTION_CONFIG="${NAV_DIRECTION_CONFIG:-configs/nav_yolo_lidar.yaml}"
 SEMANTIC_CLASSES="${SEMANTIC_CLASSES:-bottle,cup,backpack,chair,dining table,book,potted plant,cell phone,couch}"
 CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
 JOY_DEV="${JOY_DEV:-/dev/input/js0}"
@@ -49,6 +50,37 @@ log() {
   echo "[$(date +%H:%M:%S)] $*"
 }
 
+load_nav_lidar_direction() {
+  # Keep camera<->LiDAR bearing aligned with scripts/nav/start_yolo_lidar_nav.sh
+  local nav_cfg="${PWD}/${NAV_DIRECTION_CONFIG}"
+  if [ ! -f "$nav_cfg" ]; then
+    log "WARN: NAV_DIRECTION_CONFIG not found: ${nav_cfg}"
+    return 0
+  fi
+  eval "$(python3 - "$nav_cfg" <<'PY'
+import shlex
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    cfg = yaml.safe_load(f) or {}
+
+mapping = {
+    "SEMANTIC_CAMERA_TO_LASER_YAW_DEG": cfg.get("camera_lidar_yaw_offset_deg", 0.0),
+    "SEMANTIC_CAMERA_HFOV_DEG": cfg.get("camera_hfov_deg", 70.0),
+    "SEMANTIC_LIDAR_FRONT_DEG": cfg.get("lidar_front_deg", 30.0),
+}
+for key, value in mapping.items():
+    print(f"export {key}={shlex.quote(str(value))}")
+PY
+)"
+  log "LiDAR direction aligned with ${NAV_DIRECTION_CONFIG}:"
+  log "  camera_to_laser_yaw_deg=${SEMANTIC_CAMERA_TO_LASER_YAW_DEG:-?}"
+  log "  camera_hfov_deg=${SEMANTIC_CAMERA_HFOV_DEG:-?}"
+  log "  lidar_front_deg=${SEMANTIC_LIDAR_FRONT_DEG:-?}"
+}
+
 start_bg() {
   local name="$1"
   shift
@@ -77,6 +109,43 @@ wait_topic_exists() {
     sleep 1
   done
   log "FAIL: timeout waiting for ${topic}"
+  return 1
+}
+
+stop_stale_live_stack() {
+  log "Stopping stale SLAM live stack processes ..."
+  pkill -TERM -f "run_slam_calibrated.sh" 2>/dev/null || true
+  pkill -TERM -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
+  sleep 2
+  pkill -KILL -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
+  pkill -KILL -f "run_slam_calibrated.sh" 2>/dev/null || true
+  sleep 1
+}
+
+ensure_foxglove_bridge() {
+  local port="${FOXGLOVE_PORT:-8765}"
+  source_ros
+  if ! ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
+    log "WARN: foxglove_bridge not installed"
+    return 1
+  fi
+  if ss -tln 2>/dev/null | grep -q ":${port} "; then
+    log "OK: Foxglove bridge listening on ${port}"
+    return 0
+  fi
+  log "WARN: Foxglove not listening on ${port}; restarting bridge ..."
+  pkill -f "foxglove_bridge" 2>/dev/null || true
+  sleep 1
+  start_bg foxglove_bridge bash "$PWD/scripts/lidar/start_foxglove.sh"
+  for _ in $(seq 1 15); do
+    if ss -tln 2>/dev/null | grep -q ":${port} "; then
+      log "OK: Foxglove bridge listening on ${port}"
+      return 0
+    fi
+    sleep 1
+  done
+  log "ERROR: Foxglove bridge failed to start on ${port}"
+  tail -n 40 "${LOG_DIR}/foxglove_bridge.log" 2>/dev/null || true
   return 1
 }
 
@@ -166,9 +235,11 @@ main() {
   log "MAP_NAME=${MAP_NAME}"
   log "SEMANTIC_CONFIG=${SEMANTIC_CONFIG}"
   log "SEMANTIC_CLASSES=${SEMANTIC_CLASSES}"
+  load_nav_lidar_direction
 
   zero_cmd
   stop_joystick_nodes
+  stop_stale_live_stack
   sleep 1
 
   log "[1/7] Start calibrated SLAM live stack"
@@ -204,14 +275,20 @@ main() {
     --score-thres 0.20 \
     --nms-thres 0.45 \
     --max-hz 6.0 \
-    --jpeg-quality 35
+    --jpeg-quality 35 \
+    --semantic-depth-overlay \
+    --semantic-obs-topic /semantic_observations
   wait_topic_exists /target_bbox_json 40 || exit 1
 
   log "[5/7] Start semantic mapper"
   start_bg semantic_mapper python3 "$PWD/src/mapping/semantic_mapper_node.py" \
     --config "$SEMANTIC_CONFIG" \
     --map-name "$MAP_NAME"
-  wait_topic_exists /semantic_map_json 30 || true
+  wait_topic_exists /semantic_map_json 30 || {
+    log "ERROR: semantic mapper did not publish /semantic_map_json"
+    tail -n 120 "${LOG_DIR}/semantic_mapper.log" || true
+    exit 1
+  }
 
   log "[6/7] Start joystick"
   start_bg joy_node ros2 run joy joy_node --ros-args \
@@ -227,6 +304,8 @@ main() {
     -p scale_linear.x:="$JOY_SCALE_LINEAR_X" \
     -p axis_angular.yaw:=0 \
     -p scale_angular.yaw:="$JOY_SCALE_ANGULAR_YAW"
+
+  ensure_foxglove_bridge || true
 
   local ip
   ip="$(hostname -I 2>/dev/null | awk '{print $1}')"

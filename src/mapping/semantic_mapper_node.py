@@ -16,7 +16,7 @@ from geometry_msgs.msg import Point, Pose, Quaternion
 from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import ColorRGBA, String
 from visualization_msgs.msg import Marker, MarkerArray
@@ -40,10 +40,13 @@ from src.mapping.semantic_types import SemanticObservation, json_dumps
 
 try:
     from tf2_ros import Buffer, TransformListener
-    import tf_transformations
 except ImportError:
     Buffer = None  # type: ignore
     TransformListener = None  # type: ignore
+
+try:
+    import tf_transformations
+except ImportError:
     tf_transformations = None  # type: ignore
 
 
@@ -92,14 +95,16 @@ class SemanticMapperNode(Node):
             String, self.topics.get("bbox_json", "/target_bbox_json"), self.on_bbox, qos
         )
         self.sub_scan = self.create_subscription(
-            LaserScan, self.topics.get("scan", "/scan_filtered"), self.on_scan, qos
+            LaserScan, self.topics.get("scan", "/scan_filtered"), self.on_scan, qos_profile_sensor_data
         )
         scan_fb = self.topics.get("scan_fallback", "/scan")
         if scan_fb and scan_fb != self.topics.get("scan"):
-            self.sub_scan_fb = self.create_subscription(LaserScan, scan_fb, self.on_scan, qos)
+            self.sub_scan_fb = self.create_subscription(
+                LaserScan, scan_fb, self.on_scan, qos_profile_sensor_data
+            )
 
         self.sub_image = self.create_subscription(
-            Image, self.topics.get("image_raw", "/image_raw"), self.on_image, qos
+            Image, self.topics.get("image_raw", "/image_raw"), self.on_image, qos_profile_sensor_data
         )
         self.sub_map = self.create_subscription(
             OccupancyGrid, self.topics.get("map", "/map"), self.on_map, 1
@@ -128,6 +133,16 @@ class SemanticMapperNode(Node):
         self.pub_cones = self.create_publisher(
             MarkerArray, self.topics.get("semantic_observed_cones", "/semantic_observed_cones"), foxglove_qos
         )
+        self.pub_candidates = self.create_publisher(
+            MarkerArray,
+            self.topics.get("semantic_candidate_objects", "/semantic_candidate_objects"),
+            foxglove_qos,
+        )
+        self.pub_rays = self.create_publisher(
+            MarkerArray,
+            self.topics.get("semantic_observation_rays", "/semantic_observation_rays"),
+            foxglove_qos,
+        )
         self.pub_loop = self.create_publisher(
             String, self.topics.get("semantic_loop_error", "/semantic_loop_error"), qos
         )
@@ -137,13 +152,14 @@ class SemanticMapperNode(Node):
 
         self._last_marker_pub = 0.0
         self._marker_pub_min_interval = 0.25  # max ~4 Hz markers over Foxglove
+        self._live_candidate_objects: List[Dict[str, Any]] = []
 
         autosave = float(self.cfg.get("storage", {}).get("autosave_sec", 2.0))
         if autosave > 0:
             self.create_timer(autosave, self._autosave_cb)
 
         self.get_logger().info(f"semantic_mapper session={self.store.session_dir}")
-        self._publish_markers(force=True)
+        self.publish_json_and_markers()
 
     def on_scan(self, msg: LaserScan) -> None:
         self.latest_scan = laser_scan_to_dict(msg)
@@ -245,6 +261,7 @@ class SemanticMapperNode(Node):
         proj = self.cfg["projection"]
         observed_classes: List[str] = []
         keyframe_path: Optional[str] = None
+        live_candidates: List[Dict[str, Any]] = []
 
         for box in boxes:
             bbox_xyxy = parse_bbox_xyxy(box)
@@ -275,6 +292,8 @@ class SemanticMapperNode(Node):
                 min_range_m=proj["min_range_m"],
                 max_range_m=proj["max_range_m"],
                 target_window_deg=proj["target_window_deg"],
+                range_window_deg=proj.get("range_window_deg"),
+                camera_to_laser_yaw_deg=proj.get("camera_to_laser_yaw_deg", 0.0),
             )
 
             object_x = object_y = None
@@ -284,6 +303,19 @@ class SemanticMapperNode(Node):
                     pose.x, pose.y, pose.yaw, bearing_rad, range_m
                 )
                 range_source = "lidar_median"
+
+            if track.is_candidate and object_x is not None and object_y is not None:
+                live_candidates.append(
+                    {
+                        "class_name": class_name,
+                        "x": object_x,
+                        "y": object_y,
+                        "score": track.score,
+                        "confirmed": track.is_confirmed,
+                        "frame_id": pose.frame_id,
+                        "range_m": range_m,
+                    }
+                )
 
             quality = "confirmed_input" if track.is_confirmed else "voted"
             if track.is_dynamic:
@@ -326,6 +358,8 @@ class SemanticMapperNode(Node):
                     small_objects=set(classes.get("small_objects", [])),
                     large_objects=set(classes.get("large_objects", [])),
                 )
+
+        self._live_candidate_objects = live_candidates
 
         if observed_classes:
             vp = self.store.maybe_add_viewpoint(pose, observed_classes, stamp, keyframe_path)
@@ -370,33 +404,50 @@ class SemanticMapperNode(Node):
         frame_id = self.frames.get("fixed_frame", "map")
         lifetime = float(self.cfg.get("visualization", {}).get("marker_lifetime_sec", 0.0))
         dur = rclpy.duration.Duration(seconds=lifetime) if lifetime > 0 else rclpy.duration.Duration(seconds=0)
+        show_depth_labels = bool(
+            self.cfg.get("visualization", {}).get("show_depth_labels", True)
+        )
 
         lm_markers = MarkerArray()
-        for i, lm in enumerate(self.store.landmarks.values()):
+        candidate_markers = MarkerArray()
+        confirmed_idx = 0
+        candidate_idx = 0
+        for lm in self.store.landmarks.values():
+            is_confirmed = lm.state == "confirmed"
             m = Marker()
             m.header.frame_id = lm.frame_id or frame_id
             m.header.stamp = self.get_clock().now().to_msg()
-            m.ns = "semantic_landmarks"
-            m.id = i
+            m.ns = "semantic_landmarks" if is_confirmed else "semantic_candidate_objects"
+            m.id = confirmed_idx if is_confirmed else candidate_idx
             m.type = Marker.SPHERE
             m.action = Marker.ADD
             m.pose.position.x = lm.x
             m.pose.position.y = lm.y
             m.pose.position.z = 0.15
-            m.scale.x = m.scale.y = m.scale.z = 0.18
-            color = ColorRGBA(r=0.2, g=0.8, b=0.3, a=0.9)
-            if lm.state != "confirmed":
-                color = ColorRGBA(r=0.9, g=0.7, b=0.1, a=0.7)
-            m.color = color
+            if is_confirmed:
+                m.scale.x = m.scale.y = m.scale.z = 0.18
+                m.color = ColorRGBA(r=0.2, g=0.8, b=0.3, a=0.9)
+            else:
+                m.scale.x = m.scale.y = m.scale.z = 0.14
+                m.color = ColorRGBA(r=0.95, g=0.75, b=0.1, a=0.75)
             if lifetime > 0:
                 m.lifetime = dur.to_msg()
-            lm_markers.markers.append(m)
+            if is_confirmed:
+                lm_markers.markers.append(m)
+                confirmed_idx += 1
+            else:
+                candidate_markers.markers.append(m)
+                candidate_idx += 1
 
             if self.cfg.get("visualization", {}).get("landmark_text", True):
                 t = Marker()
                 t.header = m.header
-                t.ns = "semantic_landmark_labels"
-                t.id = i
+                t.ns = (
+                    "semantic_landmark_labels"
+                    if is_confirmed
+                    else "semantic_candidate_labels"
+                )
+                t.id = m.id
                 t.type = Marker.TEXT_VIEW_FACING
                 t.action = Marker.ADD
                 t.pose.position.x = lm.x
@@ -407,8 +458,49 @@ class SemanticMapperNode(Node):
                 t.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=0.95)
                 if lifetime > 0:
                     t.lifetime = dur.to_msg()
-                lm_markers.markers.append(t)
+                if is_confirmed:
+                    lm_markers.markers.append(t)
+                else:
+                    candidate_markers.markers.append(t)
         self.pub_landmarks.publish(lm_markers)
+
+        for i, cand in enumerate(self._live_candidate_objects):
+            m = Marker()
+            m.header.frame_id = cand.get("frame_id") or frame_id
+            m.header.stamp = self.get_clock().now().to_msg()
+            m.ns = "semantic_candidate_objects"
+            m.id = 1000 + i
+            m.type = Marker.CUBE
+            m.action = Marker.ADD
+            m.pose.position.x = float(cand["x"])
+            m.pose.position.y = float(cand["y"])
+            m.pose.position.z = 0.12
+            m.scale.x = m.scale.y = 0.12
+            m.scale.z = 0.20
+            if cand.get("confirmed"):
+                m.color = ColorRGBA(r=0.2, g=0.85, b=0.95, a=0.85)
+            else:
+                m.color = ColorRGBA(r=0.95, g=0.55, b=0.15, a=0.70)
+            if lifetime > 0:
+                m.lifetime = dur.to_msg()
+            candidate_markers.markers.append(m)
+            if show_depth_labels and cand.get("range_m") is not None:
+                t = Marker()
+                t.header = m.header
+                t.ns = "semantic_depth_labels"
+                t.id = 2000 + i
+                t.type = Marker.TEXT_VIEW_FACING
+                t.action = Marker.ADD
+                t.pose.position.x = float(cand["x"])
+                t.pose.position.y = float(cand["y"])
+                t.pose.position.z = 0.28
+                t.text = f"{cand['class_name']} {float(cand['range_m']):.2f}m"
+                t.scale.z = 0.14
+                t.color = ColorRGBA(r=0.2, g=1.0, b=1.0, a=0.95)
+                if lifetime > 0:
+                    t.lifetime = dur.to_msg()
+                candidate_markers.markers.append(t)
+        self.pub_candidates.publish(candidate_markers)
 
         vp_markers = MarkerArray()
         for i, vp in enumerate(self.store.viewpoints):
@@ -434,34 +526,87 @@ class SemanticMapperNode(Node):
 
         if self.cfg.get("visualization", {}).get("observed_cone_markers", True):
             cones = MarkerArray()
+            rays = MarkerArray()
+            range_window_deg = float(
+                self.cfg.get("projection", {}).get("range_window_deg", 12.0)
+            )
+            half_window_rad = math.radians(range_window_deg / 2.0)
             for i, obs in enumerate(self.store.observations[-12:]):
                 if obs.range_m is None:
                     continue
-                m = Marker()
-                m.header.frame_id = obs.fixed_frame or frame_id
-                m.header.stamp = self.get_clock().now().to_msg()
-                m.ns = "semantic_observed_cones"
-                m.id = i
-                m.type = Marker.LINE_LIST
-                m.action = Marker.ADD
-                m.pose.orientation.w = 1.0
-                m.scale.x = 0.03
-                m.color = ColorRGBA(r=0.9, g=0.4, b=0.1, a=0.5)
+                obs_frame = obs.fixed_frame or frame_id
+                stamp_msg = self.get_clock().now().to_msg()
+
+                ray = Marker()
+                ray.header.frame_id = obs_frame
+                ray.header.stamp = stamp_msg
+                ray.ns = "semantic_observation_rays"
+                ray.id = i
+                ray.type = Marker.LINE_LIST
+                ray.action = Marker.ADD
+                ray.pose.orientation.w = 1.0
+                ray.scale.x = 0.03
+                ray.color = ColorRGBA(r=0.2, g=0.7, b=1.0, a=0.65)
                 p0 = Point(x=obs.robot_x, y=obs.robot_y, z=0.05)
                 if obs.object_x is not None and obs.object_y is not None:
                     p1 = Point(x=obs.object_x, y=obs.object_y, z=0.05)
                 else:
-                    import math as _m
-
                     p1 = Point(
-                        x=obs.robot_x + obs.range_m * _m.cos(obs.robot_yaw + obs.bearing_rad),
-                        y=obs.robot_y + obs.range_m * _m.sin(obs.robot_yaw + obs.bearing_rad),
+                        x=obs.robot_x + obs.range_m * math.cos(obs.robot_yaw + obs.bearing_rad),
+                        y=obs.robot_y + obs.range_m * math.sin(obs.robot_yaw + obs.bearing_rad),
                         z=0.05,
                     )
-                m.points = [p0, p1]
+                ray.points = [p0, p1]
                 if lifetime > 0:
-                    m.lifetime = dur.to_msg()
-                cones.markers.append(m)
+                    ray.lifetime = dur.to_msg()
+                rays.markers.append(ray)
+
+                if show_depth_labels:
+                    depth_label = Marker()
+                    depth_label.header = ray.header
+                    depth_label.ns = "semantic_depth_labels"
+                    depth_label.id = 3000 + i
+                    depth_label.type = Marker.TEXT_VIEW_FACING
+                    depth_label.action = Marker.ADD
+                    depth_label.pose.position.x = p1.x
+                    depth_label.pose.position.y = p1.y
+                    depth_label.pose.position.z = 0.30
+                    depth_label.text = f"{obs.class_name} {obs.range_m:.2f}m"
+                    depth_label.scale.z = 0.14
+                    depth_label.color = ColorRGBA(r=0.2, g=1.0, b=1.0, a=0.95)
+                    if lifetime > 0:
+                        depth_label.lifetime = dur.to_msg()
+                    rays.markers.append(depth_label)
+
+                cone = Marker()
+                cone.header.frame_id = obs_frame
+                cone.header.stamp = stamp_msg
+                cone.ns = "semantic_observed_cones"
+                cone.id = i
+                cone.type = Marker.LINE_LIST
+                cone.action = Marker.ADD
+                cone.pose.orientation.w = 1.0
+                cone.scale.x = 0.02
+                cone.color = ColorRGBA(r=0.9, g=0.4, b=0.1, a=0.5)
+                bearing = obs.robot_yaw + obs.bearing_rad
+                r = obs.range_m
+                left = Point(
+                    x=obs.robot_x + r * math.cos(bearing - half_window_rad),
+                    y=obs.robot_y + r * math.sin(bearing - half_window_rad),
+                    z=0.05,
+                )
+                right = Point(
+                    x=obs.robot_x + r * math.cos(bearing + half_window_rad),
+                    y=obs.robot_y + r * math.sin(bearing + half_window_rad),
+                    z=0.05,
+                )
+                apex = Point(x=obs.robot_x, y=obs.robot_y, z=0.05)
+                cone.points = [apex, left, apex, right, left, right]
+                if lifetime > 0:
+                    cone.lifetime = dur.to_msg()
+                cones.markers.append(cone)
+
+            self.pub_rays.publish(rays)
             self.pub_cones.publish(cones)
 
     @staticmethod

@@ -45,6 +45,20 @@ AUTO_SEND_GOAL="${AUTO_SEND_GOAL:-1}"
 KEEP_RUNNING_AFTER_GOAL="${KEEP_RUNNING_AFTER_GOAL:-}"
 # 1 = also start Foxglove bridge if installed.
 START_FOXGLOVE="${START_FOXGLOVE:-1}"
+FOXGLOVE_LAYOUT="${FOXGLOVE_LAYOUT:-$PROJECT_DIR/configs/foxglove_nav2_oneclick.layout.json}"
+# 1 = publish Nav2 plan/local_plan markers for Foxglove map overlay.
+START_NAV2_PATH_VIZ="${START_NAV2_PATH_VIZ:-1}"
+
+# Chassis self-check before Nav2: brief straight cmd_vel burst (0=skip, 1=run).
+CHASSIS_VERIFY="${CHASSIS_VERIFY:-1}"
+CHASSIS_VERIFY_VX="${CHASSIS_VERIFY_VX:-0.12}"
+CHASSIS_VERIFY_SEC="${CHASSIS_VERIFY_SEC:-1.0}"
+CHASSIS_VERIFY_MIN_DELTA="${CHASSIS_VERIFY_MIN_DELTA:-0.03}"
+
+# After navigation, verify map pose vs goal (0=trust Nav2 only, 1=check TF).
+GOAL_VERIFY="${GOAL_VERIFY:-1}"
+GOAL_VERIFY_XY_TOL="${GOAL_VERIFY_XY_TOL:-0.15}"
+GOAL_VERIFY_YAW_TOL="${GOAL_VERIFY_YAW_TOL:-0.35}"
 # ==========================================================
 
 GOAL_X="${1:-$DEFAULT_GOAL_X}"
@@ -102,6 +116,7 @@ PY
   pkill -f "nav2_bringup.*bringup_launch.py" >/dev/null 2>&1 || true
   pkill -f "amcl|map_server|controller_server|planner_server|bt_navigator|behavior_server|velocity_smoother|smoother_server|waypoint_follower|lifecycle_manager" >/dev/null 2>&1 || true
   pkill -f "m1_pwm_cmd_vel_bridge.py|cmd_vel_to_rosmaster.py" >/dev/null 2>&1 || true
+  pkill -f "nav2_plan_path_viz.py" >/dev/null 2>&1 || true
   pkill -f "static_transform_publisher.*base_link" >/dev/null 2>&1 || true
   exit "$code"
 }
@@ -203,10 +218,14 @@ select_chassis_dev() {
 }
 
 verify_chassis_motion() {
-  local burst_vx="${CHASSIS_VERIFY_VX:-0.15}"
-  local burst_sec="${CHASSIS_VERIFY_SEC:-1.5}"
+  if [ "${CHASSIS_VERIFY:-1}" != "1" ]; then
+    log "CHASSIS_VERIFY=0, skip chassis motion self-check"
+    return 0
+  fi
+  local burst_vx="${CHASSIS_VERIFY_VX:-0.12}"
+  local burst_sec="${CHASSIS_VERIFY_SEC:-1.0}"
   local min_delta="${CHASSIS_VERIFY_MIN_DELTA:-0.03}"
-  log "verify chassis motion (brief cmd_vel burst vx=$burst_vx for ${burst_sec}s)"
+  log "verify chassis motion (straight cmd_vel vx=$burst_vx wz=0 for ${burst_sec}s)"
   python3 - <<PY
 import math
 import subprocess
@@ -710,6 +729,87 @@ raise SystemExit(0 if map_base_ok else 1)
 PY
 }
 
+verify_goal_reached() {
+  local gx="$1" gy="$2" gyaw="$3"
+  if [ "${GOAL_VERIFY:-1}" != "1" ]; then
+    log "GOAL_VERIFY=0, skip post-navigation pose check"
+    return 0
+  fi
+  log "verify goal reached: target=($gx, $gy, yaw=$gyaw) xy_tol=${GOAL_VERIFY_XY_TOL:-0.15}"
+  python3 - <<PY
+import math
+import sys
+import time
+
+import rclpy
+from rclpy.duration import Duration
+from rclpy.node import Node
+import tf2_ros
+
+gx = float("$gx")
+gy = float("$gy")
+gyaw = float("$gyaw")
+xy_tol = float("${GOAL_VERIFY_XY_TOL:-0.15}")
+yaw_tol = float("${GOAL_VERIFY_YAW_TOL:-0.35}")
+
+def yaw_from_quat(x, y, z, w):
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+rclpy.init()
+node = Node("nav2_oneclick_goal_verify")
+tf_buffer = tf2_ros.Buffer(cache_time=Duration(seconds=10.0))
+tf_listener = tf2_ros.TransformListener(tf_buffer, node)
+
+pose = None
+end = time.time() + 8.0
+while time.time() < end:
+    rclpy.spin_once(node, timeout_sec=0.2)
+    try:
+        tf = tf_buffer.lookup_transform(
+            "map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.3)
+        )
+        t = tf.transform.translation
+        q = tf.transform.rotation
+        pose = (float(t.x), float(t.y), yaw_from_quat(q.x, q.y, q.z, q.w))
+        break
+    except Exception:
+        pass
+
+node.destroy_node()
+rclpy.shutdown()
+
+if pose is None:
+    print("[FAIL] cannot read map->base_link TF for goal verify", flush=True)
+    sys.exit(1)
+
+x, y, yaw = pose
+xy_err = math.hypot(gx - x, gy - y)
+yaw_err = abs(math.atan2(math.sin(yaw - gyaw), math.cos(yaw - gyaw)))
+print(
+    f"[INFO] pose=({x:.3f}, {y:.3f}, yaw={yaw:.3f}) "
+    f"xy_err={xy_err:.3f}m yaw_err={math.degrees(yaw_err):.1f}deg",
+    flush=True,
+)
+if xy_err > xy_tol:
+    print(
+        f"[FAIL] goal verify: xy error {xy_err:.3f}m > tol {xy_tol:.3f}m "
+        f"(Nav2 may have reported false success)",
+        flush=True,
+    )
+    sys.exit(1)
+if yaw_err > yaw_tol:
+    print(
+        f"[FAIL] goal verify: yaw error {math.degrees(yaw_err):.1f}deg > "
+        f"tol {math.degrees(yaw_tol):.1f}deg",
+        flush=True,
+    )
+    sys.exit(1)
+print("[OK] goal verify passed", flush=True)
+PY
+}
+
 send_goal() {
   local x="$1" y="$2" yaw="$3"
   local qz qw
@@ -733,6 +833,27 @@ PY
     sleep 1
   done
   log "send NavigateToPose goal: x=$x y=$y yaw=$yaw qz=$qz qw=$qw"
+  python3 - <<PY >/dev/null 2>&1 || true
+import rclpy
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Header
+import math
+
+rclpy.init()
+node = rclpy.create_node("nav2_oneclick_goal_pose_pub")
+pub = node.create_publisher(PoseStamped, "/goal_pose", 10)
+msg = PoseStamped()
+msg.header.frame_id = "map"
+msg.pose.position.x = float("$x")
+msg.pose.position.y = float("$y")
+msg.pose.orientation.z = float("$qz")
+msg.pose.orientation.w = float("$qw")
+for _ in range(5):
+    pub.publish(msg)
+    rclpy.spin_once(node, timeout_sec=0.05)
+node.destroy_node()
+rclpy.shutdown()
+PY
   ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose "
 pose:
   header:
@@ -749,6 +870,24 @@ pose:
       w: ${qw}
 behavior_tree: ''
 " --feedback
+}
+
+print_foxglove_help() {
+  local host
+  host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  [ -n "$host" ] || host="127.0.0.1"
+  echo "========== FOXGLOVE NAV2 PATH VIZ =========="
+  echo "Connect: ws://${host}:8765"
+  if [ -f "$FOXGLOVE_LAYOUT" ]; then
+    echo "Layout -> Import -> $FOXGLOVE_LAYOUT"
+  fi
+  echo "Path topics on map:"
+  echo "  /plan                 global plan (green)"
+  echo "  /local_plan           local plan (blue)"
+  echo "  /nav2_plan_markers    MarkerArray overlay"
+  echo "  /nav2_viz/global_plan /nav2_viz/local_plan  republished paths"
+  echo "  /goal_pose            navigation target (red sphere)"
+  echo "============================================="
 }
 
 print_status() {
@@ -860,14 +999,31 @@ main() {
   wait_lifecycle_active /planner_server 120 || fatal "/planner_server not active; see $LOG_DIR/nav2.log"
   wait_lifecycle_active /bt_navigator 120 || fatal "/bt_navigator not active; see $LOG_DIR/nav2.log"
 
+  if [ "$START_NAV2_PATH_VIZ" = "1" ]; then
+    start_bg path_viz python3 "$PROJECT_DIR/ros2_bridge/nav2_plan_path_viz.py"
+    log "Nav2 path viz started -> /nav2_plan_markers, /nav2_viz/global_plan, /nav2_viz/local_plan"
+  fi
+
   if ! wait_topic_data /amcl_pose 15; then
     warn "/amcl_pose not echoed yet, but map->base_link TF is OK; continuing"
   fi
 
   print_status
+  if [ "$START_FOXGLOVE" = "1" ]; then
+    print_foxglove_help
+  fi
 
   if [ "$AUTO_SEND_GOAL" = "1" ]; then
+    set +e
     send_goal "$GOAL_X" "$GOAL_Y" "$GOAL_YAW"
+    local nav_exit=$?
+    set -e
+    if [ "$nav_exit" -ne 0 ]; then
+      warn "Nav2 action exit code=$nav_exit (see terminal feedback above)"
+    fi
+    verify_goal_reached "$GOAL_X" "$GOAL_Y" "$GOAL_YAW" \
+      || fatal "goal verify failed: robot not at ($GOAL_X, $GOAL_Y) within tolerance"
+    log "navigation finished (Nav2 exit=$nav_exit, goal verify OK)"
   else
     log "AUTO_SEND_GOAL=0, stack is ready. Send goal manually with scripts/slam/nav_goal.sh or ros2 action."
   fi
