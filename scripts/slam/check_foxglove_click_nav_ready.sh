@@ -2,7 +2,8 @@
 set -u
 
 PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
-MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_corridor_map.yaml}"
+MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
+POSE_STATE_FILE="${POSE_STATE_FILE:-$PROJECT_DIR/state/last_pose_map.json}"
 fail=0
 
 source_ros() {
@@ -23,11 +24,14 @@ echo "========== File check =========="
 [ -f "$PROJECT_DIR/scripts/slam/run_nav2_saved_map.sh" ] && ok "run_nav2_saved_map.sh exists" || bad "missing run_nav2_saved_map.sh"
 [ -f "$PROJECT_DIR/scripts/slam/foxglove_click_goal_bridge.py" ] && ok "foxglove_click_goal_bridge.py exists" || bad "missing foxglove_click_goal_bridge.py"
 [ -f "$PROJECT_DIR/scripts/slam/run_nav2_foxglove_click_goal.sh" ] && ok "run_nav2_foxglove_click_goal.sh exists" || bad "missing run_nav2_foxglove_click_goal.sh"
+[ -f "$PROJECT_DIR/scripts/slam/pose_memory_node.py" ] && ok "pose_memory_node.py exists" || bad "missing pose_memory_node.py"
+[ -f "$POSE_STATE_FILE" ] && ok "pose state file: $POSE_STATE_FILE" || warn "pose state file not found yet: $POSE_STATE_FILE (expected before first mapping run)"
 
 echo
 echo "========== Syntax check =========="
 bash -n "$PROJECT_DIR/scripts/slam/run_nav2_foxglove_click_goal.sh" && ok "bash syntax: run_nav2_foxglove_click_goal.sh" || bad "bash syntax error"
 python3 -m py_compile "$PROJECT_DIR/scripts/slam/foxglove_click_goal_bridge.py" && ok "python syntax: foxglove_click_goal_bridge.py" || bad "python syntax error"
+python3 -m py_compile "$PROJECT_DIR/scripts/slam/pose_memory_node.py" && ok "python syntax: pose_memory_node.py" || bad "python syntax error"
 
 echo
 echo "========== ROS package check =========="

@@ -5,9 +5,11 @@
 set -Eeo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
-MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_corridor_map.yaml}"
+MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
 GOAL_TOPIC="${GOAL_TOPIC:-/foxglove_goal_pose}"
 START_NAV2="${START_NAV2:-1}"
+STATE_DIR="$PROJECT_DIR/state"
+POSE_STATE_FILE="${POSE_STATE_FILE:-$STATE_DIR/last_pose_map.json}"
 LOG_DIR="${PROJECT_DIR}/logs/nav2_foxglove_click_$(date +%Y%m%d_%H%M%S)"
 
 PIDS=()
@@ -84,16 +86,22 @@ wait_action_exists() {
 main() {
   source_ros
   cd "$PROJECT_DIR"
-  mkdir -p "$LOG_DIR"
+  mkdir -p "$LOG_DIR" "$STATE_DIR"
 
   log "PROJECT_DIR=$PROJECT_DIR"
   log "MAP_YAML=$MAP_YAML"
   log "GOAL_TOPIC=$GOAL_TOPIC"
+  log "POSE_STATE_FILE=$POSE_STATE_FILE"
   log "LOG_DIR=$LOG_DIR"
+
+  if [ ! -f "$MAP_YAML" ] && [ -f "$PROJECT_DIR/maps/joy_corridor_map.yaml" ]; then
+    log "WARN: MAP_YAML not found, fallback to joy_corridor_map.yaml"
+    MAP_YAML="$PROJECT_DIR/maps/joy_corridor_map.yaml"
+  fi
 
   if [ ! -f "$MAP_YAML" ]; then
     log "ERROR: map yaml not found: $MAP_YAML"
-    log "先运行 scripts/slam/run_joy_mapping_all.sh，Ctrl+C 保存地图，再运行本脚本。"
+    log "先运行 scripts/slam/run_joy_mapping_calibrated.sh，Ctrl+C 保存地图，再运行本脚本。"
     exit 1
   fi
 
@@ -112,6 +120,15 @@ main() {
     start_bg nav2_saved_map bash "$PROJECT_DIR/scripts/slam/run_nav2_saved_map.sh"
   else
     log "START_NAV2=0: assume Nav2 is already running."
+    start_bg pose_memory python3 "$PROJECT_DIR/scripts/slam/pose_memory_node.py" \
+      --state-file "$POSE_STATE_FILE" \
+      --map-frame map \
+      --base-frame base_link \
+      --fallback-base-frame base_footprint \
+      --save-period 1.0 \
+      --publish-initial \
+      --initial-repeat 5 \
+      --initial-interval 0.3
   fi
 
   wait_topic_exists /map 120 || exit 1
@@ -131,10 +148,12 @@ main() {
   echo "========== Foxglove click navigation ready =========="
   echo "Connect: ws://${BOARD_IP}:8765"
   echo "3D fixed frame: map"
+  echo "Optional layout: ${PROJECT_DIR}/configs/foxglove_click_goal_nav.layout.json"
   echo "Initial pose tool topic: /initialpose"
-  echo "Goal 2D pose tool topic: ${GOAL_TOPIC}"
+  echo "Goal 2D pose tool topic: ${GOAL_TOPIC} (geometry_msgs/PoseStamped)"
   echo "Path topic to display: /foxglove_click_planned_path"
   echo "Marker topic to display: /foxglove_click_path_marker"
+  echo "Pose memory file: ${POSE_STATE_FILE}"
   echo "Logs: ${LOG_DIR}"
   echo "Press Ctrl+C here to stop wrapper-started processes."
   echo "===================================================="
