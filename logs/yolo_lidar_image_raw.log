@@ -1,42 +1,70 @@
-[INFO] [1782977051.547582187] [compressed_to_raw_image]: compressed_to_raw_image started
-[INFO] [1782977051.550055976] [compressed_to_raw_image]: subscribe: /image  type=sensor_msgs/msg/CompressedImage
-[INFO] [1782977051.552240182] [compressed_to_raw_image]: publish  : /image_raw type=sensor_msgs/msg/Image
-[INFO] [1782977053.551789659] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.60
-[INFO] [1782977055.621597592] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.76
-[INFO] [1782977057.624565982] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.49
-[INFO] [1782977059.734937449] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.64
-[INFO] [1782977061.834959803] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
-[INFO] [1782977063.982431850] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.05
-[INFO] [1782977066.094102441] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.63
-[INFO] [1782977068.202297285] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.64
-[INFO] [1782977070.281971207] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.73
-[INFO] [1782977072.387289263] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.65
-[INFO] [1782977074.444419670] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.80
-[INFO] [1782977076.525482048] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.73
-[INFO] [1782977078.625446862] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977080.739598824] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=5.68
-[INFO] [1782977082.828658901] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.69
-[INFO] [1782977084.929936838] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977087.027309529] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977089.127731467] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977091.227521031] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977093.326109846] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977095.425892951] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977097.526336764] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
-[INFO] [1782977099.628765408] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
-Traceback (most recent call last):
-  File "/root/rdk_x5_vln_robot/src/perception/compressed_to_raw_image.py", line 118, in <module>
-    main()
-  File "/root/rdk_x5_vln_robot/src/perception/compressed_to_raw_image.py", line 108, in main
-    rclpy.spin(node)
-  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
-    executor.spin_once()
-  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
-    self._spin_once_impl(timeout_sec)
-  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
-    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
-  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
-    return next(self._cb_iter)
-  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 596, in _wait_for_ready_callbacks
-    wait_set = _rclpy.WaitSet(
-rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130
+[INFO] [1782988113.013075050] [compressed_to_raw_image]: compressed_to_raw_image started
+[INFO] [1782988113.015757131] [compressed_to_raw_image]: subscribe: /image  type=sensor_msgs/msg/CompressedImage
+[INFO] [1782988113.018411172] [compressed_to_raw_image]: publish  : /image_raw type=sensor_msgs/msg/Image
+[INFO] [1782988115.013431315] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.61
+[INFO] [1782988117.113157274] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988119.213562941] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988121.312664276] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988123.412926902] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988125.552559632] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.54
+[INFO] [1782988127.614161114] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.79
+[INFO] [1782988129.710598077] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.68
+[INFO] [1782988131.809345247] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988133.922052326] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.62
+[INFO] [1782988135.959486283] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=5.89
+[INFO] [1782988138.060253328] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988140.160217707] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988142.268715748] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.64
+[INFO] [1782988144.360359133] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.69
+[INFO] [1782988146.460560847] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988148.560930852] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988150.660610983] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988152.760363282] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988154.859962997] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988156.960349587] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988159.060399095] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988161.160159353] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988163.263937067] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988165.360114578] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988167.460130878] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988169.560336554] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988171.659962397] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988173.760241032] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988175.861371958] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988177.960957136] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988180.060721522] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988182.160702283] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988184.259964921] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988186.360222432] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988188.460779736] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988190.559360583] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988192.659609054] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988194.760205693] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988196.859689040] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988198.965738051] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.65
+[INFO] [1782988201.060372735] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.68
+[INFO] [1782988203.161521749] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988205.259489307] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988207.360110281] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988209.461247796] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988211.561044646] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988213.660076455] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988215.787894914] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.58
+[INFO] [1782988217.859717656] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.75
+[INFO] [1782988219.960227507] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988222.064775147] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988224.159616377] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.68
+[INFO] [1782988226.260435145] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988228.360277247] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988230.460063809] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988232.562117077] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988234.664695763] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988236.762726701] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988238.861377389] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988240.960350161] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988243.060400766] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988245.159721121] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988247.260232851] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988249.363616872] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.66
+[INFO] [1782988251.460449188] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
+[INFO] [1782988253.559650712] [compressed_to_raw_image]: published /image_raw: 1280x720, approx_fps=6.67
