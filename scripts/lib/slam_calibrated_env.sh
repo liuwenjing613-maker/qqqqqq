@@ -40,7 +40,8 @@ export CHASSIS_ODOM_XY_YAW_OFFSET=3.141592653589793
 # 只影响 /odom orientation 和 TF odom->base_link 的箭头朝向。
 # 用于修正 base_link 初始箭头方向。
 # 默认保持 0.0，现场校准时再试 0 / pi / pi/2 / -pi/2。
-export CHASSIS_BASE_YAW_OFFSET=3.141592653589793
+#export CHASSIS_BASE_YAW_OFFSET=3.141592653589793
+export CHASSIS_BASE_YAW_OFFSET=0
 
 # 手柄遥操作限速，与 CHASSIS_MAX_VX/WZ 对齐
 export JOY_SCALE_LINEAR_X="${JOY_SCALE_LINEAR_X:-0.04}"

@@ -59,6 +59,11 @@ CHASSIS_VERIFY_MIN_DELTA="${CHASSIS_VERIFY_MIN_DELTA:-0.03}"
 GOAL_VERIFY="${GOAL_VERIFY:-1}"
 GOAL_VERIFY_XY_TOL="${GOAL_VERIFY_XY_TOL:-0.15}"
 GOAL_VERIFY_YAW_TOL="${GOAL_VERIFY_YAW_TOL:-0.35}"
+
+# 1 = invert Nav2 cmd_vel (vx/wz) via oneclick-only relay during navigation.
+# Does not change chassis bridge or other scripts. Default off.
+NAV2_ONECLICK_CMD_VEL_INVERT="${NAV2_ONECLICK_CMD_VEL_INVERT:-0}"
+NAV2_ONECLICK_RAW_CMD_VEL="${NAV2_ONECLICK_RAW_CMD_VEL:-/nav2_oneclick/raw_cmd_vel}"
 # ==========================================================
 
 GOAL_X="${1:-$DEFAULT_GOAL_X}"
@@ -117,6 +122,7 @@ PY
   pkill -f "amcl|map_server|controller_server|planner_server|bt_navigator|behavior_server|velocity_smoother|smoother_server|waypoint_follower|lifecycle_manager" >/dev/null 2>&1 || true
   pkill -f "m1_pwm_cmd_vel_bridge.py|cmd_vel_to_rosmaster.py" >/dev/null 2>&1 || true
   pkill -f "nav2_plan_path_viz.py" >/dev/null 2>&1 || true
+  pkill -f "nav2_oneclick_cmd_vel_relay.py" >/dev/null 2>&1 || true
   pkill -f "static_transform_publisher.*base_link" >/dev/null 2>&1 || true
   exit "$code"
 }
@@ -810,6 +816,54 @@ print("[OK] goal verify passed", flush=True)
 PY
 }
 
+
+write_nav2_invert_bringup_launch() {
+  local launch_py="$LOG_DIR/nav2_oneclick_bringup.launch.py"
+  cat >"$launch_py" <<'LAUNCHPY'
+from ament_index_python.packages import get_package_share_directory
+import os
+
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import SetRemap
+
+
+def generate_launch_description():
+    bringup_dir = get_package_share_directory('nav2_bringup')
+    bringup_launch = os.path.join(bringup_dir, 'launch', 'bringup_launch.py')
+    return LaunchDescription([
+        DeclareLaunchArgument('use_sim_time', default_value='False'),
+        DeclareLaunchArgument('autostart', default_value='True'),
+        DeclareLaunchArgument('map'),
+        DeclareLaunchArgument('params_file'),
+        DeclareLaunchArgument('use_composition', default_value='False'),
+        GroupAction([
+            SetRemap(src='/cmd_vel', dst='/nav2_oneclick/raw_cmd_vel'),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(bringup_launch),
+                launch_arguments={
+                    'use_sim_time': LaunchConfiguration('use_sim_time'),
+                    'autostart': LaunchConfiguration('autostart'),
+                    'map': LaunchConfiguration('map'),
+                    'params_file': LaunchConfiguration('params_file'),
+                    'use_composition': LaunchConfiguration('use_composition'),
+                }.items(),
+            ),
+        ]),
+    ])
+LAUNCHPY
+  echo "$launch_py"
+}
+
+start_cmd_vel_invert_relay() {
+  require_file "$PROJECT_DIR/ros2_bridge/nav2_oneclick_cmd_vel_relay.py"
+  log "cmd_vel invert relay ON: ${NAV2_ONECLICK_RAW_CMD_VEL} -> /cmd_vel (nav only)"
+  start_bg cmd_vel_relay python3 "$PROJECT_DIR/ros2_bridge/nav2_oneclick_cmd_vel_relay.py"     --in-topic "$NAV2_ONECLICK_RAW_CMD_VEL"     --out-topic /cmd_vel
+  sleep 1
+}
+
 send_goal() {
   local x="$1" y="$2" yaw="$3"
   local qz qw
@@ -976,13 +1030,24 @@ main() {
   wait_tf odom base_link 20 || warn "odom->base_link not ready yet; continuing for Nav2 startup"
   wait_tf base_link "$LASER_FRAME" 20 || fatal "base_link->$LASER_FRAME TF missing"
 
-  log "launch Nav2 bringup"
-  start_bg nav2 ros2 launch nav2_bringup bringup_launch.py \
-    use_sim_time:=False \
-    autostart:=True \
-    map:="$MAP_YAML" \
-    params_file:="$NAV2_PARAMS" \
-    use_composition:=False
+  if [ "$NAV2_ONECLICK_CMD_VEL_INVERT" = "1" ]; then
+    _oneclick_launch="$(write_nav2_invert_bringup_launch)"
+    log "launch Nav2 bringup (cmd_vel -> ${NAV2_ONECLICK_RAW_CMD_VEL}, invert relay during nav)"
+    start_bg nav2 ros2 launch "$_oneclick_launch" \
+      use_sim_time:=False \
+      autostart:=True \
+      map:="$MAP_YAML" \
+      params_file:="$NAV2_PARAMS" \
+      use_composition:=False
+  else
+    log "launch Nav2 bringup"
+    start_bg nav2 ros2 launch nav2_bringup bringup_launch.py \
+      use_sim_time:=False \
+      autostart:=True \
+      map:="$MAP_YAML" \
+      params_file:="$NAV2_PARAMS" \
+      use_composition:=False
+  fi
 
   # Localization stack comes up first; navigation stack needs map->base_link TF.
   wait_lifecycle_active /map_server 120 || fatal "/map_server not active; see $LOG_DIR/nav2.log"
@@ -998,6 +1063,10 @@ main() {
   wait_lifecycle_active /controller_server 120 || fatal "/controller_server not active; see $LOG_DIR/nav2.log"
   wait_lifecycle_active /planner_server 120 || fatal "/planner_server not active; see $LOG_DIR/nav2.log"
   wait_lifecycle_active /bt_navigator 120 || fatal "/bt_navigator not active; see $LOG_DIR/nav2.log"
+
+  if [ "$NAV2_ONECLICK_CMD_VEL_INVERT" = "1" ]; then
+    start_cmd_vel_invert_relay
+  fi
 
   if [ "$START_NAV2_PATH_VIZ" = "1" ]; then
     start_bg path_viz python3 "$PROJECT_DIR/ros2_bridge/nav2_plan_path_viz.py"
