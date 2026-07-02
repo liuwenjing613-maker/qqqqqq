@@ -21,13 +21,17 @@ if [ -z "$GOAL_X" ] || [ -z "$GOAL_Y" ]; then
   exit 2
 fi
 
-MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
+MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map_saved_20260702_1743.yaml}"
 PARAMS_FILE="${PARAMS_FILE:-$PROJECT_DIR/configs/nav2_params.yaml}"
 PLANNER_ID="${PLANNER_ID:-GridBased}"
 FOXGLOVE_PORT="${FOXGLOVE_PORT:-8765}"
 FOXGLOVE_LAYOUT="${FOXGLOVE_LAYOUT:-$PROJECT_DIR/configs/foxglove_nav2_oneclick.layout.json}"
 START_FOXGLOVE="${START_FOXGLOVE:-1}"
 KEEP_SEC="${KEEP_SEC:-600}"
+PREVIEW_MAP_TOPIC="${PREVIEW_MAP_TOPIC:-/nav2_plan_preview/map}"
+# 1 = stop slam_toolbox if detected (preview needs exclusive map/TF). 0 = fail with hint.
+PREVIEW_STOP_SLAM="${PREVIEW_STOP_SLAM:-0}"
+PLAN_ACTION_TIMEOUT="${PLAN_ACTION_TIMEOUT:-60}"
 
 LOG_DIR="$PROJECT_DIR/logs/nav2_plan_preview_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$LOG_DIR"
@@ -79,6 +83,27 @@ cd "$PROJECT_DIR"
 source_ros
 
 [ -f "$MAP_YAML" ] || fail "MAP_YAML not found: $MAP_YAML"
+validate_map_yaml() {
+  python3 - "$MAP_YAML" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+
+map_yaml = Path(sys.argv[1])
+data = yaml.safe_load(map_yaml.read_text(encoding="utf-8"))
+image_name = data.get("image")
+if not image_name:
+    raise SystemExit(f"map yaml missing 'image' field: {map_yaml}")
+image_path = map_yaml.parent / image_name
+if not image_path.is_file():
+    raise SystemExit(
+        f"map image not found: {image_path}\n"
+        f"fix {map_yaml} 'image:' to an existing .pgm (e.g. joy_calibrated_corridor_map.pgm)"
+    )
+print(f"[OK] map image: {image_path}", flush=True)
+PY
+}
+validate_map_yaml || fail "invalid map yaml/image; see message above"
 [ -f "$PARAMS_FILE" ] || fail "PARAMS_FILE not found: $PARAMS_FILE"
 [ -f "$PROJECT_DIR/ros2_bridge/nav2_compute_plan_once.py" ] || fail "missing ros2_bridge/nav2_compute_plan_once.py"
 
@@ -102,6 +127,10 @@ gc = data.setdefault("global_costmap", {}).setdefault("global_costmap", {}).setd
 # Preview mode: static map only, no lidar obstacle layer required.
 gc["plugins"] = ["static_layer", "inflation_layer"]
 gc.pop("obstacle_layer", None)
+sl = gc.setdefault("static_layer", {})
+sl["plugin"] = sl.get("plugin", "nav2_costmap_2d::StaticLayer")
+sl["map_topic"] = "$PREVIEW_MAP_TOPIC"
+sl["map_subscribe_transient_local"] = True
 
 dst.parent.mkdir(parents=True, exist_ok=True)
 dst.write_text(yaml.dump(data, sort_keys=False), encoding="utf-8")
@@ -111,8 +140,9 @@ PY
 
 wait_map_topic() {
   local timeout_sec="${1:-60}"
-  log "wait /map with transient_local QoS"
-  python3 - "$timeout_sec" <<'PY'
+  local topic="${2:-$PREVIEW_MAP_TOPIC}"
+  log "wait ${topic} with transient_local QoS"
+  python3 - "$timeout_sec" "$topic" <<'PY'
 import sys
 import time
 
@@ -122,6 +152,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
 timeout = float(sys.argv[1])
+topic = sys.argv[2]
 rclpy.init()
 node = Node("nav2_plan_preview_wait_map")
 qos = QoSProfile(
@@ -137,12 +168,12 @@ def cb(msg: OccupancyGrid) -> None:
         got["w"] = msg.info.width
         got["h"] = msg.info.height
 
-node.create_subscription(OccupancyGrid, "/map", cb, qos)
+node.create_subscription(OccupancyGrid, topic, cb, qos)
 start = time.time()
 while time.time() - start < timeout:
     rclpy.spin_once(node, timeout_sec=0.5)
     if got["ok"]:
-        print(f"[OK] /map received: {got['w']} x {got['h']}", flush=True)
+        print(f"[OK] {topic} received: {got['w']} x {got['h']}", flush=True)
         node.destroy_node()
         rclpy.shutdown()
         raise SystemExit(0)
@@ -152,6 +183,19 @@ node.destroy_node()
 rclpy.shutdown()
 raise SystemExit(1)
 PY
+}
+
+check_preview_conflicts() {
+  if pgrep -f "async_slam_toolbox_node|slam_toolbox" >/dev/null 2>&1; then
+    if [ "$PREVIEW_STOP_SLAM" = "1" ]; then
+      warn "slam_toolbox detected; stopping it for isolated plan preview"
+      pkill -f "async_slam_toolbox_node|slam_toolbox" 2>/dev/null || true
+      pkill -f "online_async_launch.py" 2>/dev/null || true
+      sleep 2
+    else
+      fail "slam_toolbox 正在运行，会与预览冲突(/map+TF)。请先 Ctrl+C 结束 run_joy_mapping_calibrated.sh，或 PREVIEW_STOP_SLAM=1"
+    fi
+  fi
 }
 
 wait_tf_map_base_link() {
@@ -214,6 +258,8 @@ log "PLANNER_ID=$PLANNER_ID"
 log "logs=$LOG_DIR"
 log "SAFE MODE: no controller_server, no bt_navigator, no chassis_bridge, no /cmd_vel"
 
+check_preview_conflicts
+
 pkill -f "nav2_compute_plan_once.py" 2>/dev/null || true
 pkill -f "/opt/ros/.*/lib/nav2_map_server/map_server" 2>/dev/null || true
 pkill -f "/opt/ros/.*/lib/nav2_planner/planner_server" 2>/dev/null || true
@@ -223,11 +269,9 @@ sleep 1
 
 patch_preview_params
 
-if [ "$START_FOXGLOVE" = "1" ] && ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
-  start_bg foxglove ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="$FOXGLOVE_PORT"
-  sleep 2
-else
+if [ "$START_FOXGLOVE" = "1" ] && ! ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   warn "foxglove_bridge not installed; path topics still publish on ROS"
+  START_FOXGLOVE=0
 fi
 
 wait_lifecycle_service() {
@@ -289,12 +333,13 @@ wait_tf_map_base_link 20 || fail "map->base_link TF missing; stop chassis/odom n
 start_bg map_server ros2 run nav2_map_server map_server \
   --ros-args \
   -r __node:=map_server \
+  -r "/map:=${PREVIEW_MAP_TOPIC}" \
   --params-file "$PREVIEW_PARAMS" \
   -p "yaml_filename:=$MAP_YAML"
 
 activate_lifecycle_node /map_server
-wait_map_topic 60 || fail "no /map received; check $LOG_DIR/map_server.log"
-log "/map received"
+wait_map_topic 60 "$PREVIEW_MAP_TOPIC" || fail "no ${PREVIEW_MAP_TOPIC} received; check $LOG_DIR/map_server.log"
+log "${PREVIEW_MAP_TOPIC} received"
 
 start_bg planner_server ros2 run nav2_planner planner_server \
   --ros-args \
@@ -315,6 +360,12 @@ while true; do
   sleep 1
 done
 log "/compute_path_to_pose available"
+sleep 3
+
+if [ "$START_FOXGLOVE" = "1" ]; then
+  start_bg foxglove ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="$FOXGLOVE_PORT"
+  sleep 2
+fi
 
 print_foxglove_help
 log "compute and publish preview path"
@@ -328,6 +379,8 @@ python3 "$PROJECT_DIR/ros2_bridge/nav2_compute_plan_once.py" \
   --start-yaw "$START_YAW" \
   --planner-id "$PLANNER_ID" \
   --keep-sec "$KEEP_SEC" \
+  --action-timeout "$PLAN_ACTION_TIMEOUT" \
+  --retries 3 \
   || fail "plan compute failed; check planner_server.log and goal/start pose"
 
 log "preview finished"
