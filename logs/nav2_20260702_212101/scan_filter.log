@@ -1,0 +1,27 @@
+[INFO] [1782998467.611961380] [simple_scan_filter]: filter /scan -> /scan_filtered, keep=[0.18, 4.00], isolated_window=2, isolated_delta=0.25, min_support_neighbors=1
+[INFO] [1782998491.785176210] [simple_scan_filter]: scan stats: n=404, zeros=92, nan=0, inf=0, finite_raw=312, finite_out=236, removed_isolated=2
+[INFO] [1782998496.775825668] [simple_scan_filter]: scan stats: n=404, zeros=99, nan=0, inf=0, finite_raw=305, finite_out=230, removed_isolated=2
+[INFO] [1782998501.774149113] [simple_scan_filter]: scan stats: n=404, zeros=87, nan=0, inf=0, finite_raw=317, finite_out=240, removed_isolated=4
+[INFO] [1782998506.765028756] [simple_scan_filter]: scan stats: n=404, zeros=91, nan=0, inf=0, finite_raw=313, finite_out=239, removed_isolated=4
+[INFO] [1782998511.758220472] [simple_scan_filter]: scan stats: n=404, zeros=95, nan=0, inf=0, finite_raw=309, finite_out=237, removed_isolated=4
+[INFO] [1782998516.751995759] [simple_scan_filter]: scan stats: n=404, zeros=95, nan=0, inf=0, finite_raw=309, finite_out=233, removed_isolated=4
+[INFO] [1782998521.746928160] [simple_scan_filter]: scan stats: n=404, zeros=92, nan=0, inf=0, finite_raw=312, finite_out=243, removed_isolated=3
+[INFO] [1782998526.741451258] [simple_scan_filter]: scan stats: n=404, zeros=89, nan=0, inf=0, finite_raw=315, finite_out=242, removed_isolated=4
+[INFO] [1782998531.734720430] [simple_scan_filter]: scan stats: n=404, zeros=98, nan=0, inf=0, finite_raw=306, finite_out=229, removed_isolated=4
+[INFO] [1782998536.728088715] [simple_scan_filter]: scan stats: n=404, zeros=100, nan=0, inf=0, finite_raw=304, finite_out=229, removed_isolated=1
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 197, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 191, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException

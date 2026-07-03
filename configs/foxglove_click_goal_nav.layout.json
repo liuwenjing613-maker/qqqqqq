@@ -3,7 +3,7 @@
     "3D!foxglove_click_goal_nav": {
       "cameraState": {
         "perspective": false,
-        "distance": 8,
+        "distance": 10,
         "phi": 0,
         "thetaOffset": 0,
         "targetOffset": [0, 0, 0],
@@ -12,8 +12,8 @@
         "near": 0.5,
         "far": 5000
       },
-      "followMode": "follow-position",
-      "followTf": "base_link",
+      "followMode": "follow-none",
+      "followTf": "map",
       "scene": {
         "enableStats": false,
         "backgroundColor": "#1a1a1a"
@@ -21,8 +21,8 @@
       "transforms": {
         "enable": true,
         "showLabel": false,
-        "lineWidth": 0.15,
-        "labelSize": 0.05
+        "lineWidth": 0.1,
+        "labelSize": 0.03
       },
       "topics": {
         "/map": {
@@ -38,7 +38,7 @@
         },
         "/amcl_pose": {
           "visible": true,
-          "axisScale": 0.4
+          "axisScale": 0.35
         },
         "/foxglove_click_planned_path": {
           "visible": true,
@@ -48,21 +48,31 @@
         "/foxglove_click_path_marker": {
           "visible": true
         },
+        "/foxglove_click_goal_marker": {
+          "visible": true
+        },
+        "/foxglove_click_goal_label": {
+          "visible": true
+        },
         "/foxglove_click_accepted_goal": {
           "visible": true,
-          "axisScale": 0.5
+          "axisScale": 0.45
         }
       },
       "layers": {},
       "publish": {
-        "type": "pose",
+        "type": "point",
         "poseTopic": "/foxglove_goal_pose",
-        "pointTopic": "/clicked_point",
+        "pointTopic": "/foxglove_goal_point",
         "poseEstimateTopic": "/initialpose",
         "poseEstimateXDeviation": 0.25,
         "poseEstimateYDeviation": 0.25,
         "poseEstimateThetaDeviation": 0.26179939
       }
+    },
+    "Text!click_nav_help": {
+      "fontSize": 14,
+      "text": "Foxglove 点选导航操作（必读）\n\n推荐模式（单击终点）：\n1. 先点左侧 3D 面板，再点面板顶部工具栏里的 Publish（发布）图标。\n2. 选 发布 2D 点 (/foxglove_goal_point)。\n3. 固定参考系 Fixed frame = map。\n4. 显示参考系也建议设为 map（若是 base_link，后端会自动转换，但 map 更直观）。\n5. 在地图白色可通行区域单击一次即可。\n6. 单击后立刻显示橙色圆圈+「终点」标注 (/foxglove_click_goal_marker)。\n7. 规划成功后会显示 /foxglove_click_planned_path 绿线。\n\n兼容旧模式：Publish -> 2D 位姿 -> /foxglove_goal_pose\n\n初始位姿：Publish -> 2D 位姿估计 -> /initialpose"
     }
   },
   "globalVariables": {},
@@ -71,5 +81,10 @@
   "playbackConfig": {
     "speed": 1
   },
-  "layout": "3D!foxglove_click_goal_nav"
+  "layout": {
+    "direction": "row",
+    "first": "3D!foxglove_click_goal_nav",
+    "second": "Text!click_nav_help",
+    "splitPercentage": 72
+  }
 }

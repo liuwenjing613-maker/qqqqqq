@@ -1,0 +1,42 @@
+[INFO] [1783001976.939489761] [foxglove_click_goal_bridge]: Foxglove click goal bridge started.
+[INFO] [1783001976.943139671] [foxglove_click_goal_bridge]: Listening point click topic:
+[INFO] [1783001976.946456999] [foxglove_click_goal_bridge]:   /foxglove_goal_point
+[INFO] [1783001976.949913993] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PointStamped
+[INFO] [1783001976.953486070] [foxglove_click_goal_bridge]: Listening pose click topic:
+[INFO] [1783001976.957030814] [foxglove_click_goal_bridge]:   /foxglove_goal_pose
+[INFO] [1783001976.961064474] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PoseStamped
+[INFO] [1783001976.965165216] [foxglove_click_goal_bridge]: Recommended Foxglove tool:
+[INFO] [1783001976.968941168] [foxglove_click_goal_bridge]:   Publish -> 2D point -> /foxglove_goal_point
+[INFO] [1783001976.972753870] [foxglove_click_goal_bridge]: Visual path topic: /foxglove_click_planned_path
+[INFO] [1783001982.613454743] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=0.350, y=0.050, goal_yaw=0.205
+[INFO] [1783001982.616487904] [foxglove_click_goal_bridge]: [1] Accepted goal: frame=map, x=0.350, y=0.050
+[INFO] [1783001982.632913084] [foxglove_click_goal_bridge]: [1] NavigateToPose goal accepted. Robot should start planning/following.
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 416, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 425, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 421, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

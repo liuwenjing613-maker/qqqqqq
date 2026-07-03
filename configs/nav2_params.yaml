@@ -121,31 +121,32 @@ controller_server:
     general_goal_checker:
       stateful: true
       plugin: nav2_controller::SimpleGoalChecker
-      xy_goal_tolerance: 0.15
-      yaw_goal_tolerance: 0.35
+      xy_goal_tolerance: 0.20
+      yaw_goal_tolerance: 6.28
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
-      debug_trajectory_details: true
-      min_vel_x: 0.1
+      debug_trajectory_details: false
+      # Align with chassis bridge (max_vx≈0.06); keep min_vel_x above PWM deadband.
+      min_vel_x: 0.04
       min_vel_y: 0.0
-      max_vel_x: 0.18
+      max_vel_x: 0.06
       max_vel_y: 0.0
-      max_vel_theta: 0.8
-      min_speed_xy: 0.08
-      max_speed_xy: 0.18
+      max_vel_theta: 0.10
+      min_speed_xy: 0.04
+      max_speed_xy: 0.06
       min_speed_theta: 0.0
-      acc_lim_x: 0.35
+      acc_lim_x: 0.20
       acc_lim_y: 0.0
-      acc_lim_theta: 1.2
-      decel_lim_x: -0.35
+      acc_lim_theta: 0.25
+      decel_lim_x: -0.20
       decel_lim_y: 0.0
-      decel_lim_theta: -1.2
-      vx_samples: 20
-      vy_samples: 5
-      vtheta_samples: 20
-      sim_time: 1.7
+      decel_lim_theta: -0.25
+      vx_samples: 16
+      vy_samples: 1
+      vtheta_samples: 16
+      sim_time: 2.0
       linear_granularity: 0.05
-      angular_granularity: 0.025
+      angular_granularity: 0.02
       transform_tolerance: 0.2
       xy_goal_tolerance: 0.15
       trans_stopped_velocity: 0.02
@@ -160,15 +161,17 @@ controller_server:
       - PathDist
       - GoalDist
       BaseObstacle.scale: 0.02
-      PathAlign.scale: 32.0
-      PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 24.0
-      GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 32.0
-      GoalDist.scale: 24.0
-      RotateToGoal.scale: 32.0
+      PathAlign.scale: 20.0
+      PathAlign.forward_point_distance: 0.40
+      GoalAlign.scale: 16.0
+      GoalAlign.forward_point_distance: 0.40
+      PathDist.scale: 24.0
+      GoalDist.scale: 16.0
+      RotateToGoal.scale: 24.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
+      Oscillation.scale: 12.0
+      Oscillation.oscillation_reset_dist: 0.08
 local_costmap:
   local_costmap:
     ros__parameters:
@@ -183,8 +186,15 @@ local_costmap:
       resolution: 0.05
       robot_radius: 0.18
       plugins:
+      - static_layer
       - voxel_layer
       - inflation_layer
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_subscribe_transient_local: true
+        trinary_costmap: true
+        unknown_cost_value: 255
+        lethal_cost_threshold: 100
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 3.0
@@ -209,9 +219,6 @@ local_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 2.5
           obstacle_min_range: 0.0
-      static_layer:
-        plugin: nav2_costmap_2d::StaticLayer
-        map_subscribe_transient_local: true
       always_send_full_costmap: true
 global_costmap:
   global_costmap:
@@ -245,6 +252,9 @@ global_costmap:
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
+        trinary_costmap: true
+        unknown_cost_value: 255
+        lethal_cost_threshold: 100
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 3.0
@@ -271,7 +281,7 @@ planner_server:
       plugin: nav2_navfn_planner/NavfnPlanner
       tolerance: 0.5
       use_astar: false
-      allow_unknown: true
+      allow_unknown: false
 smoother_server:
   ros__parameters:
     use_sim_time: false
@@ -308,9 +318,9 @@ behavior_server:
     transform_tolerance: 0.1
     use_sim_time: false
     simulate_ahead_time: 2.0
-    max_rotational_vel: 0.6
-    min_rotational_vel: 0.15
-    rotational_acc_lim: 1.2
+    max_rotational_vel: 0.35
+    min_rotational_vel: 0.08
+    rotational_acc_lim: 0.35
 robot_state_publisher:
   ros__parameters:
     use_sim_time: false
@@ -331,21 +341,21 @@ velocity_smoother:
     scale_velocities: false
     feedback: OPEN_LOOP
     max_velocity:
-    - 0.18
+    - 0.06
     - 0.0
-    - 0.8
+    - 0.10
     min_velocity:
     - -0.05
     - 0.0
-    - -0.8
+    - -0.10
     max_accel:
-    - 0.35
+    - 0.20
     - 0.0
-    - 1.2
+    - 0.25
     max_decel:
-    - -0.35
+    - -0.20
     - 0.0
-    - -1.2
+    - -0.25
     odom_topic: odom
     odom_duration: 0.1
     deadband_velocity:
@@ -353,3 +363,13 @@ velocity_smoother:
     - 0.0
     - 0.0
     velocity_timeout: 1.0
+lifecycle_manager_localization:
+  ros__parameters:
+    use_sim_time: false
+    bond_timeout: 10.0
+    attempt_respawn_reconnection: true
+lifecycle_manager_navigation:
+  ros__parameters:
+    use_sim_time: false
+    bond_timeout: 10.0
+    attempt_respawn_reconnection: true

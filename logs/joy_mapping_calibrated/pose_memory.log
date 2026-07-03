@@ -1,5 +1,6 @@
+[INFO] [1783057033.955577419] [pose_memory_node]: odom -> base_link TF is ready for /initialpose
 Traceback (most recent call last):
-  File "/root/rdk_x5_vln_robot/scripts/slam/pose_memory_node.py", line 201, in main
+  File "/root/rdk_x5_vln_robot/scripts/slam/pose_memory_node.py", line 243, in main
     rclpy.spin(node)
   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
     executor.spin_once()
@@ -16,9 +17,9 @@ rclpy.executors.ExternalShutdownException
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "/root/rdk_x5_vln_robot/scripts/slam/pose_memory_node.py", line 210, in <module>
+  File "/root/rdk_x5_vln_robot/scripts/slam/pose_memory_node.py", line 252, in <module>
     main()
-  File "/root/rdk_x5_vln_robot/scripts/slam/pose_memory_node.py", line 206, in main
+  File "/root/rdk_x5_vln_robot/scripts/slam/pose_memory_node.py", line 248, in main
     rclpy.shutdown()
   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
     _shutdown(context=context)

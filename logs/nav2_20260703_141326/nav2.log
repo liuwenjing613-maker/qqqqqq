@@ -1,0 +1,954 @@
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-03-14-13-55-414358-ubuntu-46342
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [map_server-1]: process started with pid [46363]
+[INFO] [amcl-2]: process started with pid [46365]
+[INFO] [lifecycle_manager-3]: process started with pid [46367]
+[INFO] [controller_server-4]: process started with pid [46369]
+[INFO] [smoother_server-5]: process started with pid [46371]
+[INFO] [planner_server-6]: process started with pid [46373]
+[INFO] [behavior_server-7]: process started with pid [46375]
+[INFO] [bt_navigator-8]: process started with pid [46377]
+[INFO] [waypoint_follower-9]: process started with pid [46381]
+[INFO] [velocity_smoother-10]: process started with pid [46397]
+[INFO] [lifecycle_manager-11]: process started with pid [46404]
+[amcl-2] [INFO] [1783059238.112270207] [amcl]: 
+[amcl-2] 	amcl lifecycle node launched. 
+[amcl-2] 	Waiting on external lifecycle transitions to activate
+[amcl-2] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[amcl-2] [INFO] [1783059238.147409658] [amcl]: Creating
+[map_server-1] [INFO] [1783059238.169632528] [map_server]: 
+[map_server-1] 	map_server lifecycle node launched. 
+[map_server-1] 	Waiting on external lifecycle transitions to activate
+[map_server-1] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-1] [INFO] [1783059238.186248066] [map_server]: Creating
+[lifecycle_manager-3] [INFO] [1783059238.307297414] [lifecycle_manager_localization]: Creating
+[lifecycle_manager-3] [INFO] [1783059238.402191684] [lifecycle_manager_localization]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[planner_server-6] [INFO] [1783059238.407061433] [planner_server]: 
+[controller_server-4] [INFO] [1783059238.408860058] [controller_server]: 
+[controller_server-4] 	controller_server lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] 	planner_server lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1783059238.460398671] [controller_server]: Creating controller server
+[smoother_server-5] [INFO] [1783059238.477884834] [smoother_server]: 
+[smoother_server-5] 	smoother_server lifecycle node launched. 
+[smoother_server-5] 	Waiting on external lifecycle transitions to activate
+[smoother_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[smoother_server-5] [INFO] [1783059238.486548874] [smoother_server]: Creating smoother server
+[waypoint_follower-9] [INFO] [1783059238.486389874] [waypoint_follower]: 
+[waypoint_follower-9] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-9] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-9] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-9] [INFO] [1783059238.496877621] [waypoint_follower]: Creating
+[planner_server-6] [INFO] [1783059238.515789575] [planner_server]: Creating
+[bt_navigator-8] [INFO] [1783059238.747415982] [bt_navigator]: 
+[bt_navigator-8] 	bt_navigator lifecycle node launched. 
+[bt_navigator-8] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-8] [INFO] [1783059238.750710231] [bt_navigator]: Creating
+[lifecycle_manager-11] [INFO] [1783059238.756851605] [lifecycle_manager_navigation]: Creating
+[velocity_smoother-10] [INFO] [1783059238.761182021] [velocity_smoother]: 
+[velocity_smoother-10] 	velocity_smoother lifecycle node launched. 
+[velocity_smoother-10] 	Waiting on external lifecycle transitions to activate
+[velocity_smoother-10] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-11] [INFO] [1783059238.864379539] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-3] [INFO] [1783059238.963310725] [lifecycle_manager_localization]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-3] [INFO] [1783059239.003659550] [lifecycle_manager_localization]: [34m[1mConfiguring map_server[0m[0m
+[behavior_server-7] [INFO] [1783059239.135194354] [behavior_server]: 
+[behavior_server-7] 	behavior_server lifecycle node launched. 
+[behavior_server-7] 	Waiting on external lifecycle transitions to activate
+[behavior_server-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1783059239.318637396] [local_costmap.local_costmap]: 
+[controller_server-4] 	local_costmap lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1783059239.326103519] [local_costmap.local_costmap]: Creating Costmap
+[map_server-1] [INFO] [1783059239.402760461] [map_server]: Configuring
+[map_server-1] [INFO] [1783059239.403046627] [map_io]: Loading yaml file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.yaml
+[map_server-1] [INFO] [1783059239.404068335] [map_io]: resolution: 0.05
+[map_server-1] [INFO] [1783059239.404145210] [map_io]: origin[0]: -7.45
+[map_server-1] [INFO] [1783059239.404177252] [map_io]: origin[1]: -5.43
+[map_server-1] [INFO] [1783059239.404204960] [map_io]: origin[2]: 0
+[map_server-1] [INFO] [1783059239.404233294] [map_io]: free_thresh: 0.25
+[map_server-1] [INFO] [1783059239.404261169] [map_io]: occupied_thresh: 0.65
+[map_server-1] [INFO] [1783059239.404297544] [map_io]: mode: trinary
+[map_server-1] [INFO] [1783059239.404327627] [map_io]: negate: 0
+[map_server-1] [INFO] [1783059239.405206668] [map_io]: Loading image_file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm
+[map_server-1] [INFO] [1783059239.631756534] [map_io]: Read map /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm: 215 X 196 map @ 0.05 m/cell
+[planner_server-6] [INFO] [1783059239.636516950] [global_costmap.global_costmap]: 
+[planner_server-6] 	global_costmap lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] [INFO] [1783059239.638843616] [global_costmap.global_costmap]: Creating Costmap
+[lifecycle_manager-3] [INFO] [1783059239.907475264] [lifecycle_manager_localization]: [34m[1mConfiguring amcl[0m[0m
+[amcl-2] [INFO] [1783059239.908817598] [amcl]: Configuring
+[amcl-2] [INFO] [1783059239.909168847] [amcl]: initTransforms
+[amcl-2] [INFO] [1783059240.192796117] [amcl]: initPubSub
+[lifecycle_manager-11] [INFO] [1783059240.217709279] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-11] [INFO] [1783059240.221851944] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-4] [INFO] [1783059240.257771645] [controller_server]: Configuring controller interface
+[controller_server-4] [INFO] [1783059240.259291019] [controller_server]: getting goal checker plugins..
+[controller_server-4] [INFO] [1783059240.260329477] [controller_server]: Controller frequency set to 20.0000Hz
+[controller_server-4] [INFO] [1783059240.260619602] [local_costmap.local_costmap]: Configuring
+[amcl-2] [INFO] [1783059240.307323175] [amcl]: Subscribed to map topic.
+[lifecycle_manager-3] [INFO] [1783059240.375863660] [lifecycle_manager_localization]: [34m[1mActivating map_server[0m[0m
+[map_server-1] [INFO] [1783059240.379884617] [map_server]: Activating
+[map_server-1] [INFO] [1783059240.380941450] [map_server]: Creating bond (map_server) to lifecycle manager.
+[amcl-2] [INFO] [1783059240.399318530] [amcl]: Received a 215 X 196 map @ 0.050 m/pix
+[controller_server-4] [INFO] [1783059240.411497819] [local_costmap.local_costmap]: Using plugin "static_layer"
+[controller_server-4] [INFO] [1783059240.464709515] [local_costmap.local_costmap]: Subscribing to the map topic (/map) with transient local durability
+[controller_server-4] [INFO] [1783059240.495684841] [local_costmap.local_costmap]: Initialized plugin "static_layer"
+[controller_server-4] [INFO] [1783059240.495860341] [local_costmap.local_costmap]: Using plugin "voxel_layer"
+[lifecycle_manager-3] [INFO] [1783059240.523335460] [lifecycle_manager_localization]: Server map_server connected with bond.
+[lifecycle_manager-3] [INFO] [1783059240.523577127] [lifecycle_manager_localization]: [34m[1mActivating amcl[0m[0m
+[controller_server-4] [INFO] [1783059240.526405585] [local_costmap.local_costmap]: Subscribed to Topics: scan
+[amcl-2] [INFO] [1783059240.527078126] [amcl]: Activating
+[amcl-2] [INFO] [1783059240.527258084] [amcl]: Creating bond (amcl) to lifecycle manager.
+[amcl-2] [INFO] [1783059240.550430371] [amcl]: createLaserObject
+[lifecycle_manager-3] [INFO] [1783059240.676675843] [lifecycle_manager_localization]: Server amcl connected with bond.
+[lifecycle_manager-3] [INFO] [1783059240.676840801] [lifecycle_manager_localization]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-3] [INFO] [1783059240.676924343] [lifecycle_manager_localization]: [34m[1mCreating bond timer...[0m[0m
+[controller_server-4] [INFO] [1783059240.684435966] [local_costmap.local_costmap]: Initialized plugin "voxel_layer"
+[controller_server-4] [INFO] [1783059240.684597633] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-4] [INFO] [1783059240.693373381] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-4] [INFO] [1783059240.815270978] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-4] [INFO] [1783059240.815949187] [local_costmap.local_costmap]: StaticLayer: Resizing static layer to 215 X 196 at 0.050000 m/pix
+[controller_server-4] [INFO] [1783059240.830586808] [controller_server]: Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-4] [INFO] [1783059240.841589681] [controller_server]: Controller Server has general_goal_checker  goal checkers available.
+[controller_server-4] [INFO] [1783059240.851308512] [controller_server]: Created controller : FollowPath of type dwb_core::DWBLocalPlanner
+[controller_server-4] [INFO] [1783059240.888463420] [controller_server]: Setting transform_tolerance to 0.200000
+[controller_server-4] [INFO] [1783059241.111687412] [controller_server]: Using critic "RotateToGoal" (dwb_critics::RotateToGoalCritic)
+[controller_server-4] [INFO] [1783059241.118923744] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1783059241.120755452] [controller_server]: Using critic "Oscillation" (dwb_critics::OscillationCritic)
+[controller_server-4] [INFO] [1783059241.127979158] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1783059241.129663741] [controller_server]: Using critic "BaseObstacle" (dwb_critics::BaseObstacleCritic)
+[controller_server-4] [INFO] [1783059241.137780198] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1783059241.140388447] [controller_server]: Using critic "GoalAlign" (dwb_critics::GoalAlignCritic)
+[controller_server-4] [INFO] [1783059241.146468404] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1783059241.148872654] [controller_server]: Using critic "PathAlign" (dwb_critics::PathAlignCritic)
+[controller_server-4] [INFO] [1783059241.156109944] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1783059241.161117818] [controller_server]: Using critic "PathDist" (dwb_critics::PathDistCritic)
+[controller_server-4] [INFO] [1783059241.166267775] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1783059241.169351774] [controller_server]: Using critic "GoalDist" (dwb_critics::GoalDistCritic)
+[controller_server-4] [INFO] [1783059241.174214898] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1783059241.174387065] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-11] [INFO] [1783059241.265554378] [lifecycle_manager_navigation]: [34m[1mConfiguring smoother_server[0m[0m
+[smoother_server-5] [INFO] [1783059241.267483836] [smoother_server]: Configuring smoother server
+[smoother_server-5] [INFO] [1783059241.363651772] [smoother_server]: Created smoother : simple_smoother of type nav2_smoother::SimpleSmoother
+[smoother_server-5] [INFO] [1783059241.391822558] [smoother_server]: Smoother Server has simple_smoother  smoothers available.
+[lifecycle_manager-11] [INFO] [1783059241.486588453] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-6] [INFO] [1783059241.488078036] [planner_server]: Configuring
+[planner_server-6] [INFO] [1783059241.488282536] [global_costmap.global_costmap]: Configuring
+[planner_server-6] [INFO] [1783059241.544298690] [global_costmap.global_costmap]: Using plugin "static_layer"
+[planner_server-6] [INFO] [1783059241.575427642] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+[planner_server-6] [INFO] [1783059241.586987014] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+[planner_server-6] [INFO] [1783059241.587872056] [global_costmap.global_costmap]: Using plugin "obstacle_layer"
+[planner_server-6] [INFO] [1783059241.602933927] [global_costmap.global_costmap]: Subscribed to Topics: scan
+[planner_server-6] [INFO] [1783059241.664412330] [global_costmap.global_costmap]: Initialized plugin "obstacle_layer"
+[planner_server-6] [INFO] [1783059241.664577455] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-6] [INFO] [1783059241.675684369] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-6] [INFO] [1783059241.800245550] [planner_server]: Created global planner plugin GridBased of type nav2_navfn_planner/NavfnPlanner
+[planner_server-6] [INFO] [1783059241.800433342] [planner_server]: Configuring plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1783059241.813207964] [global_costmap.global_costmap]: StaticLayer: Resizing costmap to 215 X 196 at 0.050000 m/pix
+[planner_server-6] [INFO] [1783059241.819391962] [planner_server]: Planner Server has GridBased  planners available.
+[amcl-2] [WARN] [1783059241.947886725] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[lifecycle_manager-11] [INFO] [1783059241.988649591] [lifecycle_manager_navigation]: [34m[1mConfiguring behavior_server[0m[0m
+[behavior_server-7] [INFO] [1783059241.990225924] [behavior_server]: Configuring
+[behavior_server-7] [INFO] [1783059242.096547775] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors/Spin
+[behavior_server-7] [INFO] [1783059242.103785024] [behavior_server]: Configuring spin
+[behavior_server-7] [INFO] [1783059242.202179293] [behavior_server]: Creating behavior plugin backup of type nav2_behaviors/BackUp
+[behavior_server-7] [INFO] [1783059242.208668584] [behavior_server]: Configuring backup
+[behavior_server-7] [INFO] [1783059242.301308855] [behavior_server]: Creating behavior plugin drive_on_heading of type nav2_behaviors/DriveOnHeading
+[behavior_server-7] [INFO] [1783059242.306051062] [behavior_server]: Configuring drive_on_heading
+[behavior_server-7] [INFO] [1783059242.421616661] [behavior_server]: Creating behavior plugin assisted_teleop of type nav2_behaviors/AssistedTeleop
+[behavior_server-7] [INFO] [1783059242.437166158] [behavior_server]: Configuring assisted_teleop
+[behavior_server-7] [INFO] [1783059242.732254008] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors/Wait
+[behavior_server-7] [INFO] [1783059242.749194213] [behavior_server]: Configuring wait
+[lifecycle_manager-11] [INFO] [1783059242.814347698] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-8] [INFO] [1783059242.818060739] [bt_navigator]: Configuring
+[amcl-2] [WARN] [1783059244.047777422] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[lifecycle_manager-11] [INFO] [1783059244.127588738] [lifecycle_manager_navigation]: [34m[1mConfiguring waypoint_follower[0m[0m
+[waypoint_follower-9] [INFO] [1783059244.131210737] [waypoint_follower]: Configuring
+[waypoint_follower-9] [INFO] [1783059244.256780792] [waypoint_follower]: Created waypoint_task_executor : wait_at_waypoint of type nav2_waypoint_follower::WaitAtWaypoint
+[lifecycle_manager-11] [INFO] [1783059244.263995707] [lifecycle_manager_navigation]: [34m[1mConfiguring velocity_smoother[0m[0m
+[velocity_smoother-10] [INFO] [1783059244.265887290] [velocity_smoother]: Configuring velocity smoother
+[lifecycle_manager-11] [INFO] [1783059244.296053075] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-4] [INFO] [1783059244.297613158] [controller_server]: Activating
+[controller_server-4] [INFO] [1783059244.297820075] [local_costmap.local_costmap]: Activating
+[controller_server-4] [INFO] [1783059244.297910617] [local_costmap.local_costmap]: Checking transform
+[controller_server-4] [INFO] [1783059244.298323950] [local_costmap.local_costmap]: start
+[controller_server-4] [ERROR] [1783059244.807265044] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [INFO] [1783059244.852968992] [controller_server]: Creating bond (controller_server) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783059245.003043917] [lifecycle_manager_navigation]: Server controller_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783059245.003229376] [lifecycle_manager_navigation]: [34m[1mActivating smoother_server[0m[0m
+[smoother_server-5] [INFO] [1783059245.004819917] [smoother_server]: Activating
+[smoother_server-5] [INFO] [1783059245.005017542] [smoother_server]: Creating bond (smoother_server) to lifecycle manager.
+[controller_server-4] [ERROR] [1783059245.118259850] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[lifecycle_manager-11] [INFO] [1783059245.156097425] [lifecycle_manager_navigation]: Server smoother_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783059245.156266591] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-6] [INFO] [1783059245.157651466] [planner_server]: Activating
+[planner_server-6] [INFO] [1783059245.157843091] [global_costmap.global_costmap]: Activating
+[planner_server-6] [INFO] [1783059245.157910466] [global_costmap.global_costmap]: Checking transform
+[planner_server-6] [INFO] [1783059245.158031633] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059245.425433948] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059245.658104521] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059245.829596774] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [ERROR] [1783059246.138177455] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[amcl-2] [WARN] [1783059246.143742620] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783059246.158089909] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059246.441779012] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059246.658080422] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059246.846613963] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [ERROR] [1783059247.154457603] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059247.158062810] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059247.462910034] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059247.658076282] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059247.861280736] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[amcl-2] [WARN] [1783059248.144649006] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783059248.166480793] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059248.172935958] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [ERROR] [1783059248.477737640] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059248.658086891] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059248.880818550] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059249.158073446] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059249.190475314] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [ERROR] [1783059249.499466828] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059249.658079918] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059249.898173864] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059250.158074139] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059250.208044253] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[amcl-2] [WARN] [1783059250.242368870] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[controller_server-4] [ERROR] [1783059250.529888681] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059250.658075110] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059250.915516178] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059251.158072665] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059251.224119442] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [ERROR] [1783059251.532638498] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059251.658070470] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059251.931078492] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059252.158077650] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059252.238006173] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[amcl-2] [WARN] [1783059252.339175401] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[controller_server-4] [ERROR] [1783059252.545198938] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059252.662282870] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059252.953012555] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059253.158083134] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059253.259968986] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [ERROR] [1783059253.567428042] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059253.658064480] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059253.967486494] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059254.158078618] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059254.275355884] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[amcl-2] [WARN] [1783059254.439445555] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[controller_server-4] [ERROR] [1783059254.582719773] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059254.658134006] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059254.986115058] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059255.158083769] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059255.294177822] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[controller_server-4] [ERROR] [1783059255.604878628] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059255.658069366] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059256.002778705] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059256.158072879] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [ERROR] [1783059256.314985468] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[amcl-2] [WARN] [1783059256.539465793] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[controller_server-4] [ERROR] [1783059256.632539106] [local_costmap.local_costmap]: StaticLayer: "map" passed to lookupTransform argument target_frame does not exist. 
+[planner_server-6] [INFO] [1783059256.658112725] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [INFO] [1783059256.726332793] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059256.726754710] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059256.726506 but the latest data is at time 1783059256.710968, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059256.726863168] [amcl]: Setting pose (1783059256.726858): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059257.139628242] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059257.139966784] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the past.  Requested time 1783059257.139802 but the earliest data is at time 1783059257.638114, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059257.140051075] [amcl]: Setting pose (1783059257.140047): 2.479 0.873 1.116
+[planner_server-6] [INFO] [1783059257.158286988] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1783059257.134969 but the earliest data is at time 1783059257.638114, when looking up transform from frame [base_link] to frame [map]
+[amcl-2] [INFO] [1783059257.562230356] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059257.562595106] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the past.  Requested time 1783059257.562424 but the earliest data is at time 1783059257.638114, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059257.562681772] [amcl]: Setting pose (1783059257.562677): 2.479 0.873 1.116
+[planner_server-6] [INFO] [1783059257.658146042] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1783059257.634824 but the earliest data is at time 1783059257.638114, when looking up transform from frame [base_link] to frame [map]
+[amcl-2] [INFO] [1783059257.979954554] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059257.980258095] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059257.980101 but the latest data is at time 1783059257.967056, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059257.980365637] [amcl]: Setting pose (1783059257.980361): 2.479 0.873 1.116
+[planner_server-6] [INFO] [1783059258.158272972] [global_costmap.global_costmap]: start
+[amcl-2] [INFO] [1783059258.397720418] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059258.398042377] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059258.397885 but the latest data is at time 1783059258.367036, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059258.398126918] [amcl]: Setting pose (1783059258.398123): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059258.819490365] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059258.819816407] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059258.819645 but the latest data is at time 1783059258.800380, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059258.820125949] [amcl]: Setting pose (1783059258.820120): 2.479 0.873 1.116
+[planner_server-6] [INFO] [1783059259.163354413] [planner_server]: Activating plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1783059259.172536828] [planner_server]: Creating bond (planner_server) to lifecycle manager.
+[amcl-2] [INFO] [1783059259.239034313] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059259.239386938] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059259.239217 but the latest data is at time 1783059259.235027, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059259.239515480] [amcl]: Setting pose (1783059259.239510): 2.479 0.873 1.116
+[lifecycle_manager-11] [INFO] [1783059259.298796008] [lifecycle_manager_navigation]: Server planner_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783059259.298995341] [lifecycle_manager_navigation]: [34m[1mActivating behavior_server[0m[0m
+[behavior_server-7] [INFO] [1783059259.301128174] [behavior_server]: Activating
+[behavior_server-7] [INFO] [1783059259.301319966] [behavior_server]: Activating spin
+[behavior_server-7] [INFO] [1783059259.301427007] [behavior_server]: Activating backup
+[behavior_server-7] [INFO] [1783059259.301496424] [behavior_server]: Activating drive_on_heading
+[behavior_server-7] [INFO] [1783059259.301553674] [behavior_server]: Activating assisted_teleop
+[behavior_server-7] [INFO] [1783059259.301605882] [behavior_server]: Activating wait
+[behavior_server-7] [INFO] [1783059259.301673132] [behavior_server]: Creating bond (behavior_server) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783059259.431893062] [lifecycle_manager_navigation]: Server behavior_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783059259.432031562] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-8] [INFO] [1783059259.433923186] [bt_navigator]: Activating
+[amcl-2] [INFO] [1783059259.665940634] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059259.666267509] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059259.666105 but the latest data is at time 1783059259.637678, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059259.666393801] [amcl]: Setting pose (1783059259.666389): 2.479 0.873 1.116
+[bt_navigator-8] [INFO] [1783059259.898691832] [bt_navigator]: Creating bond (bt_navigator) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783059260.021207304] [lifecycle_manager_navigation]: Server bt_navigator connected with bond.
+[lifecycle_manager-11] [INFO] [1783059260.021372638] [lifecycle_manager_navigation]: [34m[1mActivating waypoint_follower[0m[0m
+[waypoint_follower-9] [INFO] [1783059260.022730804] [waypoint_follower]: Activating
+[waypoint_follower-9] [INFO] [1783059260.022909429] [waypoint_follower]: Creating bond (waypoint_follower) to lifecycle manager.
+[amcl-2] [INFO] [1783059260.101174286] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059260.101495620] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059260.101353 but the latest data is at time 1783059260.067202, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059260.101581578] [amcl]: Setting pose (1783059260.101578): 2.479 0.873 1.116
+[lifecycle_manager-11] [INFO] [1783059260.154003525] [lifecycle_manager_navigation]: Server waypoint_follower connected with bond.
+[lifecycle_manager-11] [INFO] [1783059260.154161525] [lifecycle_manager_navigation]: [34m[1mActivating velocity_smoother[0m[0m
+[velocity_smoother-10] [INFO] [1783059260.155478649] [velocity_smoother]: Activating
+[velocity_smoother-10] [INFO] [1783059260.155731774] [velocity_smoother]: Creating bond (velocity_smoother) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783059260.291378869] [lifecycle_manager_navigation]: Server velocity_smoother connected with bond.
+[lifecycle_manager-11] [INFO] [1783059260.291531369] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-11] [INFO] [1783059260.291593452] [lifecycle_manager_navigation]: [34m[1mCreating bond timer...[0m[0m
+[amcl-2] [INFO] [1783059260.503711655] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059260.504025654] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059260.503868 but the latest data is at time 1783059260.500355, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059260.504142904] [amcl]: Setting pose (1783059260.504138): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059260.906680106] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059260.907001064] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059260.906841 but the latest data is at time 1783059260.900393, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059260.907084689] [amcl]: Setting pose (1783059260.907081): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059261.340584800] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059261.340947842] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059261.340784 but the latest data is at time 1783059261.335850, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059261.341047675] [amcl]: Setting pose (1783059261.341044): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059261.742793043] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059261.743107668] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059261.742947 but the latest data is at time 1783059261.735842, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059261.743194335] [amcl]: Setting pose (1783059261.743191): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059262.143559328] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059262.144512703] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059262.144331 but the latest data is at time 1783059262.136129, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059262.144629828] [amcl]: Setting pose (1783059262.144626): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059262.553635361] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059262.555089403] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059262.554609 but the latest data is at time 1783059262.537168, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059262.555332944] [amcl]: Setting pose (1783059262.555328): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059262.973828642] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059262.974617559] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059262.974415 but the latest data is at time 1783059262.967185, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059262.974786184] [amcl]: Setting pose (1783059262.974781): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059263.406061420] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059263.406381879] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059263.406227 but the latest data is at time 1783059263.400478, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059263.406464254] [amcl]: Setting pose (1783059263.406461): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059263.806842580] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059263.807162164] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059263.806997 but the latest data is at time 1783059263.800471, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059263.807261539] [amcl]: Setting pose (1783059263.807258): 2.479 0.873 1.116
+[amcl-2] [INFO] [1783059264.208059865] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783059264.208429407] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783059264.208252 but the latest data is at time 1783059264.200538, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783059264.208530282] [amcl]: Setting pose (1783059264.208526): 2.479 0.873 1.116
+[planner_server-6] [WARN] [1783059452.003550539] [planner_server]: No planners specified in action call. Server will use only plugin GridBased  in server. This warning will appear once.
+[bt_navigator-8] [INFO] [1783059452.016195251] [bt_navigator]: Begin navigating from current location (2.46, 0.90) to (0.18, -0.50)
+[controller_server-4] [INFO] [1783059452.056788096] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059452.057058388] [controller_server]: No goal checker was specified in parameter 'current_goal_checker'. Server will use only plugin loaded general_goal_checker . This warning will appear once.
+[controller_server-4] [INFO] [1783059453.108279413] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059454.158361563] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059455.208542087] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059455.564043902] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059455.569657695] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059456.258578193] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059457.308294383] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059458.310659557] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059459.408474468] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059459.538026507] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059459.737982567] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059460.408274849] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059460.738635364] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059461.508289635] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059462.068722010] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059462.113178523] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059462.508287974] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059462.553535820] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059463.558347410] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059463.738600546] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059464.360902981] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059464.387260447] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059464.608283387] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059465.658295155] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059466.708293090] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059467.758287857] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059468.808293041] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059469.858276557] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059470.908290781] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059471.898036612] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059471.959762214] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059472.030036901] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059473.008295061] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059474.060116618] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059474.536607798] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059475.108280672] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059475.764558530] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059476.160044269] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059477.208281281] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059478.229355285] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059478.258445710] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059478.761357980] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059479.061026025] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059479.287916341] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059479.308284888] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059479.561992128] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059479.666574658] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059480.358283857] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059481.408915285] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059482.458374878] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059482.509110767] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059483.508287554] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059484.561451480] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059485.614183948] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059486.658275662] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059487.658617238] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059488.251038240] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059488.708286203] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059489.759966835] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059490.559590978] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059490.808499382] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059490.872529650] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059490.911936078] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059491.158931690] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059491.620391195] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059491.858371096] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059492.908283017] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059493.962825022] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059495.008388858] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059495.759245485] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059496.008390389] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059497.108360489] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059497.420551493] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059497.429774578] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059498.158296532] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059499.208296075] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059500.208275187] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059500.217169648] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059501.258352480] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059502.308280063] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059503.358652729] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059504.408286019] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059504.780682414] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059504.854304893] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059504.914343284] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059505.242543333] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059505.464443728] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059506.169734589] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059506.515419143] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059507.564444848] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059508.520306194] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059508.614758387] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059508.668197693] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059508.715852914] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059509.078435056] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059509.667117384] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059509.947148960] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059510.664428990] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059511.727125656] [bt_navigator_navigate_to_pose_rclcpp_node]: Timed out while waiting for action server to acknowledge goal request for compute_path_to_pose
+[planner_server-6] [INFO] [1783059511.729480906] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [ERROR] [1783059512.064732623] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1783059512.065084539] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059512.108565676] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1783059512.130789641] [controller_server]: Received a goal, begin computing control effort.
+[planner_server-6] [WARN] [1783059512.170875443] [planner_server]: Planner loop missed its desired rate of 20.0000 Hz. Current loop rate is 2.4864 Hz
+[controller_server-4] [INFO] [1783059512.236233878] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059513.242407194] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059513.243575236] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059514.286151603] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059514.836070919] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059515.055654854] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059515.336162680] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059515.561055366] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059516.336165492] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059517.386158902] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059518.004043985] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059518.386165797] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059519.141761834] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059519.240127527] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059519.407964281] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059519.414172824] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059519.448620167] [bt_navigator_navigate_to_pose_rclcpp_node]: Timed out while waiting for action server to acknowledge goal request for compute_path_to_pose
+[bt_navigator-8] [WARN] [1783059519.455107502] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[planner_server-6] [INFO] [1783059519.460421045] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[bt_navigator-8] [WARN] [1783059519.486987885] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059519.494125762] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[planner_server-6] [WARN] [1783059520.163490526] [planner_server]: Planner loop missed its desired rate of 20.0000 Hz. Current loop rate is 1.4658 Hz
+[controller_server-4] [INFO] [1783059520.236170837] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059521.236159564] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059522.119054051] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059522.286166929] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059523.040175298] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059523.094324479] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059523.336308586] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059523.744833403] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059524.386160783] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059525.386159634] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059526.436217205] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059526.475029590] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059527.486150484] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059528.486160083] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059528.739436775] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059529.536426945] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059530.586578306] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059531.586143612] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059531.624177163] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059532.636163597] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059533.257382635] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059533.295164562] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059533.700323502] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059533.737665095] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059534.736149649] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059535.736154078] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059535.954498760] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059536.786155936] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059537.836805544] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059538.886157901] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059539.936145674] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059540.986152989] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059542.015108130] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059542.036149886] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059542.696029307] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059543.086767908] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059544.086313249] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059544.838365735] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059545.136157854] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059546.236151220] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059547.236151060] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059547.806856207] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059548.236392859] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059548.242786860] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059548.286303413] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059549.089597535] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059549.336242390] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059550.336583979] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059551.386169747] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059552.436150014] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059552.495727821] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059552.571590507] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059552.614083185] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059553.486419156] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059554.518184376] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059554.536165298] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059555.528045132] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059555.586556022] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059556.636802496] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059557.636202373] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059558.686168179] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059559.736209526] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059560.786417123] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059561.836154636] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059562.836153636] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059563.188104432] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059563.886975690] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059564.936168326] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059565.986165129] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059566.986616794] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059567.499014379] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059567.543728765] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059567.592036527] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059567.681899299] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059567.734741687] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059567.769455446] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059568.036183720] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059569.087373272] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059569.938921107] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059570.136150031] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059571.136168069] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059571.196599250] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [ERROR] [1783059572.137662731] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1783059572.138020940] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059572.165276405] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[bt_navigator-8] [WARN] [1783059572.170289781] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[planner_server-6] [INFO] [1783059572.175855366] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[planner_server-6] [WARN] [1783059573.172696027] [planner_server]: Planner loop missed its desired rate of 20.0000 Hz. Current loop rate is 1.0176 Hz
+[controller_server-4] [INFO] [1783059573.192092990] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1783059574.244281331] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059575.300526923] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059576.344316719] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059576.660457463] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059577.396891892] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059578.394266301] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059579.444280681] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059580.494490227] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059581.494274594] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059582.544785639] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059583.547533589] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059584.594268840] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059585.644397217] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059586.694267386] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059587.744268845] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059588.744335500] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059589.794344209] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059590.532615592] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059590.844674542] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059591.844716487] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059592.894707194] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059593.944263276] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059594.944284886] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059595.625395422] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059596.061850525] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059596.100877575] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059597.023797126] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059597.094429767] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059598.144399264] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059599.195747093] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059599.629255694] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059600.202875703] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059600.244723005] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059601.244265196] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059601.802375868] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059602.294257774] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059603.294273006] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059604.344286791] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059605.100301966] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059605.244344875] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059605.353752108] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059605.468499468] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059605.472082011] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059605.500915434] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059606.283072865] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059606.494282413] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059606.698647461] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059607.498880603] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059608.544534927] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059609.594990877] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059610.644272034] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059611.075355174] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059611.313264645] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059611.624012675] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059611.643786138] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059611.694283774] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059612.194650180] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059612.246604442] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059612.744612056] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059613.794270086] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059614.856214453] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059615.803293876] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059615.894393022] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059616.894265832] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059617.944746153] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059618.994346056] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059619.142772215] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059619.364454640] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059619.378915851] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059619.705673508] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059619.994307906] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059620.165441278] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059621.044294351] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059622.094268003] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059623.144282363] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059624.160064924] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059624.165782300] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059624.194277223] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059625.194303196] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059625.555261860] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059626.124041445] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059626.294904191] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059627.294270746] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059628.345802938] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059628.535164480] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059629.344261284] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059630.394948433] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059631.255398539] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059631.444263706] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059632.494288187] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1783059633.194634007] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1783059633.194963757] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059633.214402095] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1783059633.236682850] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059633.342131873] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059633.364057711] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059633.501628741] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059634.123496877] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059634.160424594] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059634.202191561] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059634.544091886] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059635.532655769] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059635.594267074] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059636.594253293] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059637.644085605] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059638.694093041] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059639.694086217] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059640.303154099] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059640.495237807] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059640.745095903] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059640.994208207] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059641.045492634] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059641.088384352] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059641.104741647] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059641.123129526] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059641.147922615] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059641.198597834] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059641.334864572] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059641.390065542] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059641.450845555] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059641.800950173] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059642.850954774] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059643.850946614] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059644.703906089] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059644.900955590] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059645.951013815] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059647.000985040] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059647.623712798] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059647.913530818] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059648.050974848] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059649.051065769] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059650.100973201] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059651.150954840] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059651.263627573] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059652.200961105] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059653.200994233] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059653.228375905] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059653.483175292] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059653.516257424] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059654.250963329] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059655.300954259] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059655.500996884] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059655.955141522] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059656.125328724] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059656.306239720] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059656.564106108] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059657.283361759] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059657.316864891] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059657.350979356] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059658.351023232] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059658.413492537] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059659.400954743] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059660.450947962] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059660.659016131] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059661.500959514] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059662.551102357] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059662.608022452] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059663.056433587] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059663.600947200] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059664.664428128] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059664.823630786] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059665.700963092] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059666.700949215] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059667.750969764] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059668.800958730] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059669.850963695] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059670.213633519] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059670.385480387] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059670.850951482] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059671.900985946] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059672.950950493] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059673.851227843] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059674.001447290] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059675.050995128] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059676.100951757] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059676.914897838] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059677.201111896] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059677.256436657] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059677.308887876] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059677.413356438] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059678.200957722] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059678.513885868] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059679.266029311] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059680.250960800] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059681.301034927] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059681.904036964] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059682.350956929] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059683.350957378] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059684.400957795] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059685.450959879] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059685.810476700] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059686.500978337] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059687.501140993] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059688.550977200] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059689.600966115] [controller_server]: Passing new path to controller.
+[bt_navigator-8] [WARN] [1783059690.313329672] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059690.651037655] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059691.700966194] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059692.700947723] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1783059693.351218892] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1783059693.357770143] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059693.388555066] [behavior_server]: Running spin
+[behavior_server-7] [INFO] [1783059693.389176608] [behavior_server]: Turning 1.57 for spin behavior.
+[bt_navigator-8] [WARN] [1783059693.733281467] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[behavior_server-7] [ERROR] [1783059694.890229484] [behavior_server]: Pose Goes Off Grid.
+[behavior_server-7] [WARN] [1783059694.890561900] [behavior_server]: Collision Ahead - Exiting Spin
+[behavior_server-7] [WARN] [1783059694.890636984] [behavior_server]: spin failed
+[behavior_server-7] [WARN] [1783059694.890695817] [behavior_server]: [spin] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059694.920545073] [behavior_server]: Running wait
+[bt_navigator-8] [WARN] [1783059699.623787067] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[behavior_server-7] [INFO] [1783059699.921142166] [behavior_server]: wait completed successfully
+[controller_server-4] [INFO] [1783059700.006608516] [controller_server]: Received a goal, begin computing control effort.
+[bt_navigator-8] [WARN] [1783059701.004535708] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [INFO] [1783059701.058913344] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059701.163035697] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059701.563490274] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059701.611652575] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059702.059300119] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059703.108912945] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1783059704.158920479] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059704.709017251] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059705.208917055] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059705.468128813] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059705.505119403] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059705.566641415] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059705.611426548] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059705.661747599] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059705.709771734] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059705.769864078] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059705.877517724] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059705.933567360] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059705.963834115] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059706.175878822] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059706.217196163] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059706.261843130] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059706.869435329] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059706.905437086] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059706.944404093] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059706.995866353] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059707.040484445] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059707.090026079] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059707.132260837] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059707.187975890] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059707.189379723] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059707.190289265] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059707.206847310] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1783059707.216364645] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1783059707.329243750] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059707.361842964] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059707.816502051] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059708.220502127] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [INFO] [1783059708.361947279] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1783059708.670153879] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059708.724903848] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059708.727040015] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059708.771181065] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059708.772291148] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059708.820142949] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059708.820926241] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059708.846090621] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059708.890723712] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059708.958004183] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.004845651] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059709.007935568] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059709.012089735] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059709.052585826] [behavior_server]: Running backup
+[behavior_server-7] [INFO] [1783059709.058356994] [behavior_server]: DriveOnHeading: no acceleration or deceleration limits set
+[behavior_server-7] [ERROR] [1783059709.063271245] [behavior_server]: Pose Goes Off Grid.
+[behavior_server-7] [WARN] [1783059709.067322912] [behavior_server]: Collision Ahead - Exiting DriveOnHeading
+[behavior_server-7] [WARN] [1783059709.067499288] [behavior_server]: backup failed
+[behavior_server-7] [WARN] [1783059709.067574871] [behavior_server]: [backup] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059709.102575502] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[planner_server-6] [INFO] [1783059709.108268045] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[planner_server-6] [WARN] [1783059709.164396806] [planner_server]: Planner loop missed its desired rate of 20.0000 Hz. Current loop rate is 18.9719 Hz
+[controller_server-4] [INFO] [1783059709.217874399] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059709.277439619] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.278199661] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059709.309185333] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.358867634] [controller_server]: No valid trajectories out of 272! 
+[bt_navigator-8] [WARN] [1783059709.404811601] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059709.419921562] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.425530147] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059709.463696112] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.514099122] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.569811382] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059709.571134341] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059709.571357133] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059709.588363928] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1783059709.609365390] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059709.762444252] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.767062961] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059709.813002345] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.903337404] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059709.959732623] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059709.961328331] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059709.961863832] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059709.966975249] [behavior_server]: Running spin
+[behavior_server-7] [INFO] [1783059709.970461041] [behavior_server]: Turning 1.57 for spin behavior.
+[behavior_server-7] [ERROR] [1783059710.072820227] [behavior_server]: Pose Goes Off Grid.
+[behavior_server-7] [WARN] [1783059710.073128311] [behavior_server]: Collision Ahead - Exiting Spin
+[behavior_server-7] [WARN] [1783059710.073200061] [behavior_server]: spin failed
+[behavior_server-7] [WARN] [1783059710.073255519] [behavior_server]: [spin] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059710.104716733] [behavior_server]: Running wait
+[bt_navigator-8] [WARN] [1783059713.123665218] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059714.073495021] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[bt_navigator-8] [WARN] [1783059714.194272252] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[behavior_server-7] [INFO] [1783059715.105381798] [behavior_server]: wait completed successfully
+[controller_server-4] [INFO] [1783059715.157649474] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059715.210781484] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.211470234] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059715.261438368] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.263359369] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059715.299375917] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.337144174] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.388079934] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.431923650] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.511776832] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059715.517367791] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059715.524917251] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059715.554113423] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1783059715.565706883] [controller_server]: Received a goal, begin computing control effort.
+[bt_navigator-8] [WARN] [1783059715.605686308] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059715.759607336] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.762143003] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[bt_navigator-8] [WARN] [1783059715.796901427] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[controller_server-4] [WARN] [1783059715.801208719] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059715.897076279] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059715.900819738] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059715.901730113] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059715.927556451] [behavior_server]: Running backup
+[behavior_server-7] [ERROR] [1783059715.930416577] [behavior_server]: Pose Goes Off Grid.
+[behavior_server-7] [WARN] [1783059715.930667993] [behavior_server]: Collision Ahead - Exiting DriveOnHeading
+[behavior_server-7] [WARN] [1783059715.930731952] [behavior_server]: backup failed
+[behavior_server-7] [WARN] [1783059715.930781327] [behavior_server]: [backup] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059715.956198248] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[planner_server-6] [INFO] [1783059715.960759082] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[bt_navigator-8] [WARN] [1783059715.963928916] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[planner_server-6] [WARN] [1783059716.168042663] [planner_server]: Planner loop missed its desired rate of 20.0000 Hz. Current loop rate is 4.9032 Hz
+[controller_server-4] [INFO] [1783059716.195869251] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059716.229463966] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.301379646] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.305683230] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059716.329960276] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.381065411] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.430250753] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.492665931] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.549851525] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059716.550335150] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059716.550631609] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059716.574732613] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1783059716.585456449] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059716.751334938] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.756111605] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059716.791508612] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.877542461] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059716.935581014] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059716.939479515] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059716.943782432] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059716.974756604] [behavior_server]: Running spin
+[behavior_server-7] [INFO] [1783059716.975671313] [behavior_server]: Turning 1.57 for spin behavior.
+[behavior_server-7] [ERROR] [1783059717.276254702] [behavior_server]: Pose Goes Off Grid.
+[behavior_server-7] [WARN] [1783059717.277609911] [behavior_server]: Collision Ahead - Exiting Spin
+[behavior_server-7] [WARN] [1783059717.278202494] [behavior_server]: spin failed
+[behavior_server-7] [WARN] [1783059717.278464536] [behavior_server]: [spin] [ActionServer] Aborting handle.
+[behavior_server-7] [INFO] [1783059717.304458624] [behavior_server]: Running wait
+[bt_navigator-8] [WARN] [1783059718.603212407] [BehaviorTreeEngine]: Behavior Tree tick rate 100.00 was exceeded!
+[behavior_server-7] [INFO] [1783059722.304863758] [behavior_server]: wait completed successfully
+[controller_server-4] [INFO] [1783059722.356128225] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059722.408874735] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059722.415585903] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059722.465365912] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059722.467373579] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059722.522931048] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059722.525374090] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059722.583291059] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059722.588413685] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059722.625895900] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059722.635196693] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059722.710027416] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059722.711314791] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059722.711757083] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1783059722.735092378] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1783059722.746650339] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [WARN] [1783059722.970407172] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059722.971099380] [controller_server]: Control loop missed its desired rate of 20.0000Hz
+[controller_server-4] [WARN] [1783059723.000044844] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [WARN] [1783059723.089212860] [controller_server]: No valid trajectories out of 272! 
+[controller_server-4] [ERROR] [1783059723.089625902] [controller_server]: Controller patience exceeded
+[controller_server-4] [WARN] [1783059723.090463236] [controller_server]: [follow_path] [ActionServer] Aborting handle.
+[bt_navigator-8] [WARN] [1783059723.113837240] [bt_navigator]: [navigate_to_pose] [ActionServer] Aborting handle.
+[bt_navigator-8] [ERROR] [1783059723.114663407] [bt_navigator]: Goal failed

@@ -7,7 +7,7 @@ Node name: slam_toolbox
 Node namespace: /
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: PUBLISHER
-GID: 01.0f.c9.96.50.18.34.54.00.00.01.00.00.00.18.03.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.3b.74.f8.d3.00.00.01.00.00.00.18.03.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -19,25 +19,11 @@ QoS profile:
 
 Subscription count: 2
 
-Node name: foxglove_bridge
-Node namespace: /
-Topic type: nav_msgs/msg/OccupancyGrid
-Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.44.19.b3.c4.00.00.01.00.00.00.e1.04.00.00.00.00.00.00.00.00
-QoS profile:
-  Reliability: RELIABLE
-  History (Depth): UNKNOWN
-  Durability: TRANSIENT_LOCAL
-  Lifespan: Infinite
-  Deadline: Infinite
-  Liveliness: AUTOMATIC
-  Liveliness lease duration: Infinite
-
 Node name: slam_toolbox
 Node namespace: /
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.50.18.34.54.00.00.01.00.00.00.25.04.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.3b.74.f8.d3.00.00.01.00.00.00.25.04.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -47,20 +33,34 @@ QoS profile:
   Liveliness: AUTOMATIC
   Liveliness lease duration: Infinite
 
+Node name: foxglove_bridge
+Node namespace: /
+Topic type: nav_msgs/msg/OccupancyGrid
+Endpoint type: SUBSCRIPTION
+GID: 01.0f.c9.96.88.75.f5.b4.00.00.01.00.00.00.b9.04.00.00.00.00.00.00.00.00
+QoS profile:
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: TRANSIENT_LOCAL
+  Lifespan: Infinite
+  Deadline: Infinite
+  Liveliness: AUTOMATIC
+  Liveliness lease duration: Infinite
 
-[INFO] [1782996336.235753810] [map_saver]: 
+
+[INFO] [1783057316.042671277] [map_saver]: 
 	map_saver lifecycle node launched. 
 	Waiting on external lifecycle transitions to activate
 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
-[INFO] [1782996336.236449352] [map_saver]: Creating
-[INFO] [1782996336.236959560] [map_saver]: Configuring
-[INFO] [1782996336.257921932] [map_saver]: Saving map from '/map' topic to '/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260702_204528' file
-[WARN] [1782996336.258169765] [map_saver]: Free threshold unspecified. Setting it to default value: 0.250000
-[WARN] [1782996336.258334723] [map_saver]: Occupied threshold unspecified. Setting it to default value: 0.650000
-[WARN] [1782996337.837027753] [map_io]: Image format unspecified. Setting it to: pgm
-[INFO] [1782996337.840839210] [map_io]: Received a 143 X 166 map @ 0.05 m/pix
-[INFO] [1782996337.906492368] [map_io]: Writing map occupancy data to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260702_204528.pgm
-[INFO] [1782996337.908999326] [map_io]: Writing map metadata to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260702_204528.yaml
-[INFO] [1782996337.909544701] [map_io]: Map saved
-[INFO] [1782996337.909609284] [map_saver]: Map saved successfully
-[INFO] [1782996337.911959492] [map_saver]: Destroying
+[INFO] [1783057316.043361443] [map_saver]: Creating
+[INFO] [1783057316.044553151] [map_saver]: Configuring
+[INFO] [1783057316.052834230] [map_saver]: Saving map from '/map' topic to '/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260703_134148' file
+[WARN] [1783057316.053548396] [map_saver]: Free threshold unspecified. Setting it to default value: 0.250000
+[WARN] [1783057316.054058896] [map_saver]: Occupied threshold unspecified. Setting it to default value: 0.650000
+[WARN] [1783057316.089130377] [map_io]: Image format unspecified. Setting it to: pgm
+[INFO] [1783057316.089942002] [map_io]: Received a 215 X 196 map @ 0.05 m/pix
+[INFO] [1783057316.179972412] [map_io]: Writing map occupancy data to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260703_134148.pgm
+[INFO] [1783057316.183112910] [map_io]: Writing map metadata to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260703_134148.yaml
+[INFO] [1783057316.183878410] [map_io]: Map saved
+[INFO] [1783057316.183982285] [map_saver]: Map saved successfully
+[INFO] [1783057316.186965450] [map_saver]: Destroying

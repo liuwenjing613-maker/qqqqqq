@@ -1,0 +1,45 @@
+[INFO] [1783052840.649446249] [foxglove_click_goal_bridge]: Foxglove click goal bridge started.
+[INFO] [1783052840.676388767] [foxglove_click_goal_bridge]: Listening point click topic:
+[INFO] [1783052840.690138797] [foxglove_click_goal_bridge]:   /foxglove_goal_point
+[INFO] [1783052840.703397994] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PointStamped
+[INFO] [1783052840.707110907] [foxglove_click_goal_bridge]: Listening pose click topic:
+[INFO] [1783052840.710985362] [foxglove_click_goal_bridge]:   /foxglove_goal_pose
+[INFO] [1783052840.716101274] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PoseStamped
+[INFO] [1783052840.720617812] [foxglove_click_goal_bridge]: Recommended Foxglove tool:
+[INFO] [1783052840.727706681] [foxglove_click_goal_bridge]:   Publish -> 2D point -> /foxglove_goal_point
+[INFO] [1783052840.732256177] [foxglove_click_goal_bridge]: Visual path topic: /foxglove_click_planned_path
+[INFO] [1783052967.247264799] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=0.500, y=0.000, goal_yaw=0.201
+[INFO] [1783052967.276664363] [foxglove_click_goal_bridge]: [1] Accepted goal: frame=map, x=0.500, y=0.000
+[INFO] [1783052967.344090318] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.000 m, recoveries=0
+[INFO] [1783052967.349898731] [foxglove_click_goal_bridge]: [1] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783052967.373403590] [foxglove_click_goal_bridge]: [1] Planned path published: 14 poses -> /foxglove_click_planned_path
+[INFO] [1783052969.349060362] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.258 m, recoveries=0
+[INFO] [1783052970.139515713] [foxglove_click_goal_bridge]: [1] Navigation succeeded. status=4
+[INFO] [1783052970.142622127] [foxglove_click_goal_bridge]: Navigation succeeded. Current pose will be updated by pose_memory_node.
+[INFO] [1783053006.338596863] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=0.300, y=0.200, goal_yaw=-0.716
+[INFO] [1783053006.344373443] [foxglove_click_goal_bridge]: [2] Accepted goal: frame=map, x=0.300, y=0.200
+[INFO] [1783053006.368995011] [foxglove_click_goal_bridge]: [2] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783053006.382694503] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.133 m, recoveries=0
+[WARN] [1783053006.400144242] [foxglove_click_goal_bridge]: [2] Planner returned an empty path. Goal may be unreachable or localization is not ready.
+[INFO] [1783053008.384475389] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.241 m, recoveries=0
+[INFO] [1783053010.392706484] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.491 m, recoveries=0
+[INFO] [1783053012.393872463] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.558 m, recoveries=0
+[INFO] [1783053014.420408764] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.733 m, recoveries=0
+[INFO] [1783053016.431591828] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.700 m, recoveries=0
+[INFO] [1783053018.435831443] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.583 m, recoveries=0
+[INFO] [1783053020.437509188] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.458 m, recoveries=0
+[INFO] [1783053022.448592598] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=0.308 m, recoveries=0
+[INFO] [1783053023.348104931] [foxglove_click_goal_bridge]: [2] Navigation succeeded. status=4
+[INFO] [1783053023.353689345] [foxglove_click_goal_bridge]: Navigation succeeded. Current pose will be updated by pose_memory_node.
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 425, in <module>
+    pass
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 421, in main
+    node = FoxgloveClickGoalBridge(args)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

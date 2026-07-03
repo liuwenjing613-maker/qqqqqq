@@ -1,0 +1,442 @@
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-03-14-03-37-435092-ubuntu-40934
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [foxglove_bridge-1]: process started with pid [40959]
+[foxglove_bridge-1] [INFO] [1783058618.569626714] [foxglove_bridge]: Starting foxglove_bridge (humble, 3.3.0@)
+[foxglove_bridge-1] [INFO] [1783058618.579252879] [foxglove_bridge]: Server listening on port 8765
+[foxglove_bridge-1] [INFO] [1783058618.585347086] [foxglove_bridge]: Advertising new channel 2 for topic "/tf_static"
+[foxglove_bridge-1] [INFO] [1783058618.585540586] [foxglove_bridge]: Advertising new channel 3 for topic "/tf"
+[foxglove_bridge-1] [INFO] [1783058618.586768877] [foxglove_bridge]: Advertising new channel 4 for topic "/rosout"
+[foxglove_bridge-1] [INFO] [1783058618.588021836] [foxglove_bridge]: Advertising new channel 5 for topic "/scan"
+[foxglove_bridge-1] [INFO] [1783058618.589620877] [foxglove_bridge]: Advertising new channel 6 for topic "/parameter_events"
+[foxglove_bridge-1] [INFO] [1783058618.591107043] [foxglove_bridge]: Advertising new channel 7 for topic "/initialpose"
+[foxglove_bridge-1] [INFO] [1783058618.592749835] [foxglove_bridge]: Advertising new channel 8 for topic "/odom"
+[foxglove_bridge-1] [INFO] [1783058618.593331126] [foxglove_bridge]: Advertising new channel 9 for topic "/cmd_vel_sent"
+[foxglove_bridge-1] [INFO] [1783058618.593450335] [foxglove_bridge]: Advertising new channel 10 for topic "/scan_filtered"
+[foxglove_bridge-1] [INFO] [1783058618.593509168] [foxglove_bridge]: Advertising new channel 11 for topic "/cmd_vel"
+[foxglove_bridge-1] [INFO] [1783058618.593946793] [foxglove_bridge]: Advertising new channel 12 for topic "/chassis_bridge_state"
+[foxglove_bridge-1] [INFO] [1783058621.734100656] [foxglove_bridge]: received connection graph subscribe request
+[foxglove_bridge-1] [INFO] [1783058621.734382198] [foxglove_bridge]: received subscribe request for channel 11 from client 1
+[foxglove_bridge-1] [INFO] [1783058621.743592613] [foxglove_bridge]: Created ROS subscription on /cmd_vel (geometry_msgs/msg/Twist) for channel 11
+[foxglove_bridge-1] [INFO] [1783058621.743860655] [foxglove_bridge]: received subscribe request for channel 3 from client 1
+[foxglove_bridge-1] [INFO] [1783058621.754543694] [foxglove_bridge]: Created ROS subscription on /tf (tf2_msgs/msg/TFMessage) for channel 3
+[foxglove_bridge-1] [INFO] [1783058621.754801236] [foxglove_bridge]: received subscribe request for channel 2 from client 1
+[foxglove_bridge-1] [INFO] [1783058621.758698693] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058621.759795776] [foxglove_bridge]: Created ROS subscription on /tf_static (tf2_msgs/msg/TFMessage) for channel 2
+[foxglove_bridge-1] [INFO] [1783058621.760034568] [foxglove_bridge]: received subscribe request for channel 5 from client 1
+[foxglove_bridge-1] [INFO] [1783058621.768353067] [foxglove_bridge]: Created ROS subscription on /scan (sensor_msgs/msg/LaserScan) for channel 5
+[foxglove_bridge-1] [INFO] [1783058621.768622858] [foxglove_bridge]: received subscribe request for channel 10 from client 1
+[foxglove_bridge-1] [INFO] [1783058621.772352149] [foxglove_bridge]: Created ROS subscription on /scan_filtered (sensor_msgs/msg/LaserScan) for channel 10
+[foxglove_bridge-1] [INFO] [1783058622.263719223] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058624.478762636] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058625.041326612] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058625.578833635] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058625.878968245] [foxglove_bridge]: received subscribe request for channel 2 from client 2
+[foxglove_bridge-1] [INFO] [1783058625.879206662] [foxglove_bridge]: received subscribe request for channel 3 from client 2
+[foxglove_bridge-1] [INFO] [1783058625.879307078] [foxglove_bridge]: received subscribe request for channel 10 from client 2
+[foxglove_bridge-1] [INFO] [1783058626.087850122] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058626.592896568] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058630.367402392] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [ERROR] [1783058631.093863629] [foxglove_bridge]: Failed to retrieve parameters from node '/nav2_wait_odom_base': Timed out waiting for 1 parameter(s) from node '/nav2_wait_odom_base'
+[foxglove_bridge-1] [WARN] [1783058631.094071213] [foxglove_bridge]: Adding node /nav2_wait_odom_base to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [INFO] [1783058631.094973087] [foxglove_bridge]: received subscribe request for channel 3 from client 4
+[foxglove_bridge-1] [INFO] [1783058631.095157504] [foxglove_bridge]: received subscribe request for channel 2 from client 4
+[foxglove_bridge-1] [INFO] [1783058631.095264004] [foxglove_bridge]: received subscribe request for channel 7 from client 4
+[foxglove_bridge-1] [INFO] [1783058631.297836674] [foxglove_bridge]: Created ROS subscription on /initialpose (geometry_msgs/msg/PoseWithCovarianceStamped) for channel 7
+[foxglove_bridge-1] [INFO] [1783058631.298127215] [foxglove_bridge]: received subscribe request for channel 5 from client 4
+[foxglove_bridge-1] [INFO] [1783058631.302325465] [foxglove_bridge]: received subscribe request for channel 10 from client 4
+[foxglove_bridge-1] [INFO] [1783058634.220150743] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058634.732707687] [foxglove_bridge]: Advertising new channel 13 for topic "/waypoint_follower/transition_event"
+[foxglove_bridge-1] [INFO] [1783058634.739084644] [foxglove_bridge]: Advertising new channel 14 for topic "/planner_server/transition_event"
+[foxglove_bridge-1] [INFO] [1783058634.750742891] [foxglove_bridge]: Advertising new channel 15 for topic "/particle_cloud"
+[foxglove_bridge-1] [INFO] [1783058634.754602057] [foxglove_bridge]: Advertising new channel 16 for topic "/global_costmap/global_costmap/transition_event"
+[foxglove_bridge-1] [INFO] [1783058634.761782389] [foxglove_bridge]: Advertising new channel 17 for topic "/diagnostics"
+[foxglove_bridge-1] [INFO] [1783058634.764993930] [foxglove_bridge]: Advertising new channel 18 for topic "/bt_navigator/transition_event"
+[foxglove_bridge-1] [INFO] [1783058634.767816555] [foxglove_bridge]: Advertising new channel 19 for topic "/amcl/transition_event"
+[foxglove_bridge-1] [INFO] [1783058635.177983268] [foxglove_bridge]: received subscribe request for channel 3 from client 3
+[foxglove_bridge-1] [INFO] [1783058635.178256643] [foxglove_bridge]: received subscribe request for channel 2 from client 3
+[foxglove_bridge-1] [INFO] [1783058635.178399893] [foxglove_bridge]: received subscribe request for channel 11 from client 3
+[foxglove_bridge-1] [INFO] [1783058635.178493352] [foxglove_bridge]: received subscribe request for channel 10 from client 3
+[foxglove_bridge-1] [INFO] [1783058637.853196092] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058638.360828162] [foxglove_bridge]: Advertising new channel 20 for topic "/speed_limit"
+[foxglove_bridge-1] [INFO] [1783058638.361914662] [foxglove_bridge]: Advertising new channel 21 for topic "/plan"
+[foxglove_bridge-1] [INFO] [1783058638.362204036] [foxglove_bridge]: Advertising new channel 22 for topic "/received_global_plan"
+[foxglove_bridge-1] [INFO] [1783058638.362479036] [foxglove_bridge]: Advertising new channel 23 for topic "/transformed_global_plan"
+[foxglove_bridge-1] [INFO] [1783058638.362799203] [foxglove_bridge]: Advertising new channel 24 for topic "/map_server/transition_event"
+[foxglove_bridge-1] [INFO] [1783058638.363005328] [foxglove_bridge]: Advertising new channel 25 for topic "/plan_smoothed"
+[foxglove_bridge-1] [INFO] [1783058638.364164244] [foxglove_bridge]: Advertising new channel 26 for topic "/map"
+[foxglove_bridge-1] [INFO] [1783058638.365564286] [foxglove_bridge]: Advertising new channel 27 for topic "/local_costmap/published_footprint"
+[foxglove_bridge-1] [INFO] [1783058638.365996119] [foxglove_bridge]: Advertising new channel 28 for topic "/local_costmap/local_costmap/transition_event"
+[foxglove_bridge-1] [INFO] [1783058638.367393285] [foxglove_bridge]: Advertising new channel 29 for topic "/local_costmap/costmap_raw"
+[foxglove_bridge-1] [INFO] [1783058638.368766577] [foxglove_bridge]: Advertising new channel 30 for topic "/local_costmap/clearing_endpoints"
+[foxglove_bridge-1] [INFO] [1783058638.369075035] [foxglove_bridge]: Advertising new channel 31 for topic "/global_costmap/published_footprint"
+[foxglove_bridge-1] [INFO] [1783058638.369316868] [foxglove_bridge]: Advertising new channel 32 for topic "/local_plan"
+[foxglove_bridge-1] [INFO] [1783058638.370031493] [foxglove_bridge]: Advertising new channel 33 for topic "/goal_pose"
+[foxglove_bridge-1] [INFO] [1783058638.370641243] [foxglove_bridge]: Advertising new channel 34 for topic "/global_costmap/footprint"
+[foxglove_bridge-1] [INFO] [1783058638.370988410] [foxglove_bridge]: Advertising new channel 35 for topic "/smoother_server/transition_event"
+[foxglove_bridge-1] [INFO] [1783058638.371622493] [foxglove_bridge]: Advertising new channel 36 for topic "/global_costmap/costmap_updates"
+[foxglove_bridge-1] [INFO] [1783058638.371992993] [foxglove_bridge]: Advertising new channel 37 for topic "/velocity_smoother/transition_event"
+[foxglove_bridge-1] [INFO] [1783058638.372247576] [foxglove_bridge]: Advertising new channel 38 for topic "/global_costmap/costmap_raw"
+[foxglove_bridge-1] [INFO] [1783058638.373088618] [foxglove_bridge]: Advertising new channel 39 for topic "/local_costmap/voxel_grid"
+[foxglove_bridge-1] [INFO] [1783058638.373305993] [foxglove_bridge]: Advertising new channel 40 for topic "/local_costmap/footprint"
+[foxglove_bridge-1] [INFO] [1783058638.373696701] [foxglove_bridge]: Advertising new channel 41 for topic "/global_costmap/costmap"
+[foxglove_bridge-1] [INFO] [1783058638.373934451] [foxglove_bridge]: Advertising new channel 42 for topic "/local_costmap/costmap"
+[foxglove_bridge-1] [INFO] [1783058638.376758784] [foxglove_bridge]: Advertising new channel 43 for topic "/evaluation"
+[foxglove_bridge-1] [INFO] [1783058638.377142742] [foxglove_bridge]: Advertising new channel 44 for topic "/cost_cloud"
+[foxglove_bridge-1] [INFO] [1783058638.380149200] [foxglove_bridge]: Advertising new channel 45 for topic "/marker"
+[foxglove_bridge-1] [INFO] [1783058638.380600908] [foxglove_bridge]: Advertising new channel 46 for topic "/controller_server/transition_event"
+[foxglove_bridge-1] [INFO] [1783058638.380800950] [foxglove_bridge]: Advertising new channel 47 for topic "/cmd_vel_teleop"
+[foxglove_bridge-1] [INFO] [1783058638.380963950] [foxglove_bridge]: Advertising new channel 48 for topic "/cmd_vel_nav"
+[foxglove_bridge-1] [INFO] [1783058638.381113950] [foxglove_bridge]: Advertising new channel 49 for topic "/local_costmap/costmap_updates"
+[foxglove_bridge-1] [INFO] [1783058638.381612491] [foxglove_bridge]: Advertising new channel 50 for topic "/preempt_teleop"
+[foxglove_bridge-1] [INFO] [1783058638.382132408] [foxglove_bridge]: Advertising new channel 51 for topic "/bond"
+[foxglove_bridge-1] [INFO] [1783058638.382634033] [foxglove_bridge]: Advertising new channel 52 for topic "/behavior_server/transition_event"
+[foxglove_bridge-1] [INFO] [1783058638.382690824] [foxglove_bridge]: received subscribe request for channel 21 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.382934283] [foxglove_bridge]: Advertising new channel 53 for topic "/amcl_pose"
+[foxglove_bridge-1] [INFO] [1783058638.394234614] [foxglove_bridge]: received subscribe request for channel 26 from client 2
+[foxglove_bridge-1] [INFO] [1783058638.397966405] [foxglove_bridge]: Created ROS subscription on /plan (nav_msgs/msg/Path) for channel 21
+[foxglove_bridge-1] [INFO] [1783058638.398333946] [foxglove_bridge]: received subscribe request for channel 22 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.408009944] [foxglove_bridge]: received subscribe request for channel 26 from client 3
+[foxglove_bridge-1] [INFO] [1783058638.415841693] [foxglove_bridge]: Created ROS subscription on /received_global_plan (nav_msgs/msg/Path) for channel 22
+[foxglove_bridge-1] [INFO] [1783058638.416123151] [foxglove_bridge]: received subscribe request for channel 23 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.432513690] [foxglove_bridge]: Created ROS subscription on /map (nav_msgs/msg/OccupancyGrid) for channel 26
+[foxglove_bridge-1] [INFO] [1783058638.458212226] [foxglove_bridge]: Created ROS subscription on /transformed_global_plan (nav_msgs/msg/Path) for channel 23
+[foxglove_bridge-1] [INFO] [1783058638.458555226] [foxglove_bridge]: received subscribe request for channel 25 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.480389931] [foxglove_bridge]: Created ROS subscription on /plan_smoothed (nav_msgs/msg/Path) for channel 25
+[foxglove_bridge-1] [INFO] [1783058638.480654097] [foxglove_bridge]: received subscribe request for channel 26 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.480841097] [foxglove_bridge]: received subscribe request for channel 27 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.502573010] [foxglove_bridge]: Created ROS subscription on /local_costmap/published_footprint (geometry_msgs/msg/PolygonStamped) for channel 27
+[foxglove_bridge-1] [INFO] [1783058638.502868593] [foxglove_bridge]: received subscribe request for channel 30 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.523055589] [foxglove_bridge]: Created ROS subscription on /local_costmap/clearing_endpoints (sensor_msgs/msg/PointCloud2) for channel 30
+[foxglove_bridge-1] [INFO] [1783058638.523338881] [foxglove_bridge]: received subscribe request for channel 31 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.543099169] [foxglove_bridge]: Created ROS subscription on /global_costmap/published_footprint (geometry_msgs/msg/PolygonStamped) for channel 31
+[foxglove_bridge-1] [INFO] [1783058638.543390377] [foxglove_bridge]: received subscribe request for channel 32 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.560015499] [foxglove_bridge]: Created ROS subscription on /local_plan (nav_msgs/msg/Path) for channel 32
+[foxglove_bridge-1] [INFO] [1783058638.560316415] [foxglove_bridge]: received subscribe request for channel 33 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.577714704] [foxglove_bridge]: Created ROS subscription on /goal_pose (geometry_msgs/msg/PoseStamped) for channel 33
+[foxglove_bridge-1] [INFO] [1783058638.577991245] [foxglove_bridge]: received subscribe request for channel 44 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.597226742] [foxglove_bridge]: Created ROS subscription on /cost_cloud (sensor_msgs/msg/PointCloud2) for channel 44
+[foxglove_bridge-1] [INFO] [1783058638.597511450] [foxglove_bridge]: received subscribe request for channel 45 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.626438361] [foxglove_bridge]: Created ROS subscription on /marker (visualization_msgs/msg/MarkerArray) for channel 45
+[foxglove_bridge-1] [INFO] [1783058638.639557984] [foxglove_bridge]: received subscribe request for channel 53 from client 4
+[foxglove_bridge-1] [INFO] [1783058638.661631813] [foxglove_bridge]: Created ROS subscription on /amcl_pose (geometry_msgs/msg/PoseWithCovarianceStamped) for channel 53
+[foxglove_bridge-1] [INFO] [1783058639.407208504] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058639.947128442] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058641.684540694] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058641.808067587] [foxglove_bridge]: received subscribe request for channel 26 from client 1
+[foxglove_bridge-1] [INFO] [1783058642.418853637] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058643.049900100] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058643.705221558] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058644.254025328] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058644.802400557] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [ERROR] [1783058648.929694725] [foxglove_bridge]: Failed to retrieve parameters from node '/planner_server': Failed to retrieve parameter names for node '/planner_server'
+[foxglove_bridge-1] [WARN] [1783058648.929884850] [foxglove_bridge]: Adding node /planner_server to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058648.930574475] [foxglove_bridge]: Failed to retrieve parameters from node '/bt_navigator_navigate_to_pose_rclcpp_node': Failed to retrieve parameter names for node '/bt_navigator_navigate_to_pose_rclcpp_node'
+[foxglove_bridge-1] [WARN] [1783058648.930665350] [foxglove_bridge]: Adding node /bt_navigator_navigate_to_pose_rclcpp_node to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058648.930806392] [foxglove_bridge]: Failed to retrieve parameters from node '/bt_navigator_navigate_through_poses_rclcpp_node': Failed to retrieve parameter names for node '/bt_navigator_navigate_through_poses_rclcpp_node'
+[foxglove_bridge-1] [WARN] [1783058648.930858225] [foxglove_bridge]: Adding node /bt_navigator_navigate_through_poses_rclcpp_node to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [INFO] [1783058649.131460687] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058649.837402926] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058650.418844357] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058652.039024004] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058652.583146525] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058654.503369365] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058655.055068218] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058655.599213113] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058656.363355425] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058657.083777911] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058657.792623817] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058658.376266413] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058661.058203606] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058661.603617376] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058662.480960040] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058663.894350227] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058664.502123776] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058665.049871088] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058665.592113941] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058666.317358510] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058666.827825495] [foxglove_bridge]: Advertising new channel 54 for topic "/behavior_tree_log"
+[foxglove_bridge-1] [INFO] [1783058666.904110064] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058667.460438206] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058668.014843308] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058673.356394027] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058673.914645711] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058675.074901153] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058675.835072798] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058676.695527715] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058677.954611763] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058678.606584553] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058679.201849146] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058679.896091387] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058680.469386901] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [ERROR] [1783058685.022668560] [foxglove_bridge]: Failed to retrieve parameters from node '/controller_server': Timed out waiting for 91 parameter(s) from node '/controller_server'
+[foxglove_bridge-1] [WARN] [1783058685.022874851] [foxglove_bridge]: Adding node /controller_server to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058685.023009101] [foxglove_bridge]: Failed to retrieve parameters from node '/local_costmap/local_costmap': Failed to retrieve parameter names for node '/local_costmap/local_costmap'
+[foxglove_bridge-1] [WARN] [1783058685.023093143] [foxglove_bridge]: Adding node /local_costmap/local_costmap to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058685.023181185] [foxglove_bridge]: Failed to retrieve parameters from node '/ydlidar_ros2_driver_node': Failed to retrieve parameter names for node '/ydlidar_ros2_driver_node'
+[foxglove_bridge-1] [WARN] [1783058685.023240476] [foxglove_bridge]: Adding node /ydlidar_ros2_driver_node to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058685.023462935] [foxglove_bridge]: Failed to retrieve parameters from node '/waypoint_follower': Timed out waiting for 8 parameter(s) from node '/waypoint_follower'
+[foxglove_bridge-1] [WARN] [1783058685.023531185] [foxglove_bridge]: Adding node /waypoint_follower to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058685.024056768] [foxglove_bridge]: Failed to retrieve parameters from node '/map_server': Failed to retrieve parameter names for node '/map_server'
+[foxglove_bridge-1] [WARN] [1783058685.024156018] [foxglove_bridge]: Adding node /map_server to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058685.024541601] [foxglove_bridge]: Failed to retrieve parameters from node '/amcl': Timed out waiting for 51 parameter(s) from node '/amcl'
+[foxglove_bridge-1] [WARN] [1783058685.024630934] [foxglove_bridge]: Adding node /amcl to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058685.025147059] [foxglove_bridge]: Failed to retrieve parameters from node '/static_transform_publisher_rSprSXnjCDTwRxNz': Timed out waiting for 17 parameter(s) from node '/static_transform_publisher_rSprSXnjCDTwRxNz'
+[foxglove_bridge-1] [WARN] [1783058685.025259643] [foxglove_bridge]: Adding node /static_transform_publisher_rSprSXnjCDTwRxNz to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.067583038] [foxglove_bridge]: Failed to retrieve parameters from node '/simple_scan_filter': Failed to retrieve parameter names for node '/simple_scan_filter'
+[foxglove_bridge-1] [WARN] [1783058690.067782413] [foxglove_bridge]: Adding node /simple_scan_filter to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.268141874] [foxglove_bridge]: Failed to retrieve parameters from node '/pose_memory_node': Timed out waiting for 1 parameter(s) from node '/pose_memory_node'
+[foxglove_bridge-1] [WARN] [1783058690.271146666] [foxglove_bridge]: Adding node /pose_memory_node to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.275766165] [foxglove_bridge]: Failed to retrieve parameters from node '/global_costmap/global_costmap': Timed out waiting for 60 parameter(s) from node '/global_costmap/global_costmap'
+[foxglove_bridge-1] [WARN] [1783058690.275930415] [foxglove_bridge]: Adding node /global_costmap/global_costmap to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.290923745] [foxglove_bridge]: Failed to retrieve parameters from node '/m1_pwm_cmd_vel_bridge': Timed out waiting for 1 parameter(s) from node '/m1_pwm_cmd_vel_bridge'
+[foxglove_bridge-1] [WARN] [1783058690.291115912] [foxglove_bridge]: Adding node /m1_pwm_cmd_vel_bridge to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.291286662] [foxglove_bridge]: Failed to retrieve parameters from node '/lifecycle_manager_navigation': Failed to retrieve parameter names for node '/lifecycle_manager_navigation'
+[foxglove_bridge-1] [WARN] [1783058690.291346203] [foxglove_bridge]: Adding node /lifecycle_manager_navigation to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.291473203] [foxglove_bridge]: Failed to retrieve parameters from node '/lifecycle_manager_localization': Failed to retrieve parameter names for node '/lifecycle_manager_localization'
+[foxglove_bridge-1] [WARN] [1783058690.291523412] [foxglove_bridge]: Adding node /lifecycle_manager_localization to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.291649662] [foxglove_bridge]: Failed to retrieve parameters from node '/bt_navigator': Timed out waiting for 23 parameter(s) from node '/bt_navigator'
+[foxglove_bridge-1] [WARN] [1783058690.291698453] [foxglove_bridge]: Adding node /bt_navigator to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.291809203] [foxglove_bridge]: Failed to retrieve parameters from node '/smoother_server': Timed out waiting for 13 parameter(s) from node '/smoother_server'
+[foxglove_bridge-1] [WARN] [1783058690.291860620] [foxglove_bridge]: Adding node /smoother_server to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.291978245] [foxglove_bridge]: Failed to retrieve parameters from node '/behavior_server': Timed out waiting for 27 parameter(s) from node '/behavior_server'
+[foxglove_bridge-1] [WARN] [1783058690.292027495] [foxglove_bridge]: Adding node /behavior_server to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058690.292138953] [foxglove_bridge]: Failed to retrieve parameters from node '/velocity_smoother': Timed out waiting for 13 parameter(s) from node '/velocity_smoother'
+[foxglove_bridge-1] [WARN] [1783058690.292187995] [foxglove_bridge]: Adding node /velocity_smoother to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [ERROR] [1783058695.298128104] [foxglove_bridge]: Failed to retrieve parameters from node '/nav2_wait_amcl_settle': Failed to retrieve parameter names for node '/nav2_wait_amcl_settle'
+[foxglove_bridge-1] [WARN] [1783058695.298332354] [foxglove_bridge]: Adding node /nav2_wait_amcl_settle to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [INFO] [1783058695.452928741] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058696.099482907] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058701.329172845] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058702.004208630] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058704.674904359] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058706.658154096] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058707.297047846] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058712.650465632] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058713.297093130] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058714.667064112] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058715.328508857] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058718.126897850] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058720.546901417] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058726.246785838] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058727.034952307] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058727.622256567] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058728.307242182] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058733.899738371] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058734.815344857] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058738.128403995] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058740.554437557] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058745.874540338] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058746.519120377] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058748.246574118] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058748.851474414] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058753.583419975] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058755.790244454] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058758.179488895] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058759.562847329] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058760.896973230] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058761.933983273] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058764.617459614] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058765.287863939] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058766.768828393] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058767.511267162] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058793.821186101] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058797.209221711] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058797.720088358] [foxglove_bridge]: Advertising new channel 55 for topic "/foxglove_click_path_marker"
+[foxglove_bridge-1] [INFO] [1783058797.720606816] [foxglove_bridge]: Advertising new channel 56 for topic "/foxglove_click_goal_marker"
+[foxglove_bridge-1] [INFO] [1783058797.721036775] [foxglove_bridge]: Advertising new channel 57 for topic "/foxglove_click_accepted_goal"
+[foxglove_bridge-1] [INFO] [1783058797.721374191] [foxglove_bridge]: Advertising new channel 58 for topic "/foxglove_click_planned_path"
+[foxglove_bridge-1] [INFO] [1783058797.746051478] [foxglove_bridge]: received subscribe request for channel 55 from client 4
+[foxglove_bridge-1] [INFO] [1783058797.988146554] [foxglove_bridge]: Created ROS subscription on /foxglove_click_path_marker (visualization_msgs/msg/Marker) for channel 55
+[foxglove_bridge-1] [INFO] [1783058797.988476512] [foxglove_bridge]: received subscribe request for channel 57 from client 4
+[foxglove_bridge-1] [INFO] [1783058798.174059308] [foxglove_bridge]: Created ROS subscription on /foxglove_click_accepted_goal (geometry_msgs/msg/PoseStamped) for channel 57
+[foxglove_bridge-1] [INFO] [1783058798.175605600] [foxglove_bridge]: received subscribe request for channel 58 from client 4
+[foxglove_bridge-1] [INFO] [1783058798.302758366] [foxglove_bridge]: Created ROS subscription on /foxglove_click_planned_path (nav_msgs/msg/Path) for channel 58
+[foxglove_bridge-1] [INFO] [1783058798.601495597] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058799.117351910] [foxglove_bridge]: Advertising new channel 59 for topic "/foxglove_goal_pose"
+[foxglove_bridge-1] [INFO] [1783058799.121770451] [foxglove_bridge]: Advertising new channel 60 for topic "/foxglove_goal_point"
+[foxglove_bridge-1] [INFO] [1783058799.127557491] [foxglove_bridge]: received subscribe request for channel 59 from client 4
+[foxglove_bridge-1] [INFO] [1783058799.164196067] [foxglove_bridge]: Created ROS subscription on /foxglove_goal_pose (geometry_msgs/msg/PoseStamped) for channel 59
+[foxglove_bridge-1] [INFO] [1783058799.259072215] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058799.905996960] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058811.123099446] [foxglove_bridge]: received unsubscribe request for channel 3 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.123371237] [foxglove_bridge]: received unsubscribe request for channel 2 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.123469112] [foxglove_bridge]: received unsubscribe request for channel 7 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.123517904] [foxglove_bridge]: Cleaned up ROS subscription for channel 7 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.123640112] [foxglove_bridge]: received unsubscribe request for channel 5 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.123710362] [foxglove_bridge]: received unsubscribe request for channel 10 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.123775029] [foxglove_bridge]: received unsubscribe request for channel 21 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.123817446] [foxglove_bridge]: Cleaned up ROS subscription for channel 21 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.123894112] [foxglove_bridge]: received unsubscribe request for channel 22 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.123935112] [foxglove_bridge]: Cleaned up ROS subscription for channel 22 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124006112] [foxglove_bridge]: received unsubscribe request for channel 23 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124047362] [foxglove_bridge]: Cleaned up ROS subscription for channel 23 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124115779] [foxglove_bridge]: received unsubscribe request for channel 25 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124157237] [foxglove_bridge]: Cleaned up ROS subscription for channel 25 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124227071] [foxglove_bridge]: received unsubscribe request for channel 26 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124294571] [foxglove_bridge]: received unsubscribe request for channel 27 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124336196] [foxglove_bridge]: Cleaned up ROS subscription for channel 27 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124438071] [foxglove_bridge]: received unsubscribe request for channel 30 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124480321] [foxglove_bridge]: Cleaned up ROS subscription for channel 30 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124553696] [foxglove_bridge]: received unsubscribe request for channel 31 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124596029] [foxglove_bridge]: Cleaned up ROS subscription for channel 31 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124668029] [foxglove_bridge]: received unsubscribe request for channel 32 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124709196] [foxglove_bridge]: Cleaned up ROS subscription for channel 32 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124777612] [foxglove_bridge]: received unsubscribe request for channel 33 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124818821] [foxglove_bridge]: Cleaned up ROS subscription for channel 33 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.124891695] [foxglove_bridge]: received unsubscribe request for channel 44 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.124934487] [foxglove_bridge]: Cleaned up ROS subscription for channel 44 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.125006695] [foxglove_bridge]: received unsubscribe request for channel 45 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.125049154] [foxglove_bridge]: Cleaned up ROS subscription for channel 45 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.125120070] [foxglove_bridge]: received unsubscribe request for channel 53 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.130792653] [foxglove_bridge]: Cleaned up ROS subscription for channel 53 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.130993153] [foxglove_bridge]: received unsubscribe request for channel 55 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.131058903] [foxglove_bridge]: Cleaned up ROS subscription for channel 55 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.137085860] [foxglove_bridge]: received unsubscribe request for channel 57 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.137242693] [foxglove_bridge]: Cleaned up ROS subscription for channel 57 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.137363860] [foxglove_bridge]: received unsubscribe request for channel 58 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.137413443] [foxglove_bridge]: Cleaned up ROS subscription for channel 58 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.140323776] [foxglove_bridge]: received unsubscribe request for channel 59 from client 4
+[foxglove_bridge-1] [INFO] [1783058811.140753192] [foxglove_bridge]: Cleaned up ROS subscription for channel 59 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783058811.392141516] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058812.026343847] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [ERROR] [1783058816.490455860] [foxglove_bridge]: Failed to retrieve parameters from node '/foxglove_click_goal_bridge': Failed to retrieve parameter names for node '/foxglove_click_goal_bridge'
+[foxglove_bridge-1] [WARN] [1783058816.490653027] [foxglove_bridge]: Adding node /foxglove_click_goal_bridge to the ignore list to prevent repeated timeouts or failures in future parameter requests.
+[foxglove_bridge-1] [INFO] [1783058816.490915652] [foxglove_bridge]: received subscribe request for channel 3 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.491042235] [foxglove_bridge]: received subscribe request for channel 2 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.517640354] [foxglove_bridge]: Client ID 4 is advertising "/foxglove_goal_pose" (geometry_msgs/PoseStamped) on channel 1 with encoding "cdr"
+[foxglove_bridge-1] [INFO] [1783058816.542409724] [foxglove_bridge]: Client ID 4 is advertising "/foxglove_goal_point" (geometry_msgs/PointStamped) on channel 2 with encoding "cdr"
+[foxglove_bridge-1] [INFO] [1783058816.580170925] [foxglove_bridge]: Client ID 4 is advertising "/initialpose" (geometry_msgs/PoseWithCovarianceStamped) on channel 3 with encoding "cdr"
+[foxglove_bridge-1] [INFO] [1783058816.596532422] [foxglove_bridge]: Client ID 4 is advertising "/move_base_simple/goal" (geometry_msgs/PoseStamped) on channel 4 with encoding "cdr"
+[foxglove_bridge-1] [INFO] [1783058816.638786705] [foxglove_bridge]: Client ID 4 is advertising "/clicked_point" (geometry_msgs/PointStamped) on channel 5 with encoding "cdr"
+[foxglove_bridge-1] [INFO] [1783058816.639156122] [foxglove_bridge]: received subscribe request for channel 53 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.678392405] [foxglove_bridge]: Created ROS subscription on /amcl_pose (geometry_msgs/msg/PoseWithCovarianceStamped) for channel 53
+[foxglove_bridge-1] [INFO] [1783058816.678774780] [foxglove_bridge]: received subscribe request for channel 44 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.710607065] [foxglove_bridge]: Created ROS subscription on /cost_cloud (sensor_msgs/msg/PointCloud2) for channel 44
+[foxglove_bridge-1] [INFO] [1783058816.714405565] [foxglove_bridge]: received subscribe request for channel 57 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.728077270] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058816.737584602] [foxglove_bridge]: Created ROS subscription on /foxglove_click_accepted_goal (geometry_msgs/msg/PoseStamped) for channel 57
+[foxglove_bridge-1] [INFO] [1783058816.739261143] [foxglove_bridge]: received subscribe request for channel 55 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.758733597] [foxglove_bridge]: Created ROS subscription on /foxglove_click_path_marker (visualization_msgs/msg/Marker) for channel 55
+[foxglove_bridge-1] [INFO] [1783058816.760021847] [foxglove_bridge]: received subscribe request for channel 58 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.778365052] [foxglove_bridge]: Created ROS subscription on /foxglove_click_planned_path (nav_msgs/msg/Path) for channel 58
+[foxglove_bridge-1] [INFO] [1783058816.778634677] [foxglove_bridge]: received subscribe request for channel 59 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.791569466] [foxglove_bridge]: Created ROS subscription on /foxglove_goal_pose (geometry_msgs/msg/PoseStamped) for channel 59
+[foxglove_bridge-1] [INFO] [1783058816.791868924] [foxglove_bridge]: received subscribe request for channel 31 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.812590586] [foxglove_bridge]: Created ROS subscription on /global_costmap/published_footprint (geometry_msgs/msg/PolygonStamped) for channel 31
+[foxglove_bridge-1] [INFO] [1783058816.812883961] [foxglove_bridge]: received subscribe request for channel 33 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.829765875] [foxglove_bridge]: Created ROS subscription on /goal_pose (geometry_msgs/msg/PoseStamped) for channel 33
+[foxglove_bridge-1] [INFO] [1783058816.830237541] [foxglove_bridge]: received subscribe request for channel 7 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.850778412] [foxglove_bridge]: Created ROS subscription on /initialpose (geometry_msgs/msg/PoseWithCovarianceStamped) for channel 7
+[foxglove_bridge-1] [INFO] [1783058816.851265995] [foxglove_bridge]: received subscribe request for channel 30 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.881517614] [foxglove_bridge]: Created ROS subscription on /local_costmap/clearing_endpoints (sensor_msgs/msg/PointCloud2) for channel 30
+[foxglove_bridge-1] [INFO] [1783058816.881792531] [foxglove_bridge]: received subscribe request for channel 27 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.907553317] [foxglove_bridge]: Created ROS subscription on /local_costmap/published_footprint (geometry_msgs/msg/PolygonStamped) for channel 27
+[foxglove_bridge-1] [INFO] [1783058816.907858359] [foxglove_bridge]: received subscribe request for channel 32 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.932636937] [foxglove_bridge]: Created ROS subscription on /local_plan (nav_msgs/msg/Path) for channel 32
+[foxglove_bridge-1] [INFO] [1783058816.932926312] [foxglove_bridge]: received subscribe request for channel 26 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.934914353] [foxglove_bridge]: received subscribe request for channel 45 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.959905682] [foxglove_bridge]: Created ROS subscription on /marker (visualization_msgs/msg/MarkerArray) for channel 45
+[foxglove_bridge-1] [INFO] [1783058816.960199390] [foxglove_bridge]: received subscribe request for channel 21 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.980150344] [foxglove_bridge]: Created ROS subscription on /plan (nav_msgs/msg/Path) for channel 21
+[foxglove_bridge-1] [INFO] [1783058816.980475552] [foxglove_bridge]: received subscribe request for channel 25 from client 4
+[foxglove_bridge-1] [INFO] [1783058816.996251091] [foxglove_bridge]: Created ROS subscription on /plan_smoothed (nav_msgs/msg/Path) for channel 25
+[foxglove_bridge-1] [INFO] [1783058816.997233049] [foxglove_bridge]: received subscribe request for channel 22 from client 4
+[foxglove_bridge-1] [INFO] [1783058817.015087545] [foxglove_bridge]: Created ROS subscription on /received_global_plan (nav_msgs/msg/Path) for channel 22
+[foxglove_bridge-1] [INFO] [1783058817.017168587] [foxglove_bridge]: received subscribe request for channel 5 from client 4
+[foxglove_bridge-1] [INFO] [1783058817.017328003] [foxglove_bridge]: received subscribe request for channel 10 from client 4
+[foxglove_bridge-1] [INFO] [1783058817.017416128] [foxglove_bridge]: received subscribe request for channel 23 from client 4
+[foxglove_bridge-1] [INFO] [1783058817.031359209] [foxglove_bridge]: Created ROS subscription on /transformed_global_plan (nav_msgs/msg/Path) for channel 23
+[foxglove_bridge-1] [INFO] [1783058817.246897582] [foxglove_bridge]: Advertising new channel 61 for topic "/move_base_simple/goal"
+[foxglove_bridge-1] [INFO] [1783058817.251841747] [foxglove_bridge]: Advertising new channel 62 for topic "/clicked_point"
+[foxglove_bridge-1] [INFO] [1783058817.402773259] [foxglove_bridge]: received subscribe request for channel 61 from client 4
+[foxglove_bridge-1] [INFO] [1783058817.423463921] [foxglove_bridge]: Created ROS subscription on /move_base_simple/goal (geometry_msgs/msg/PoseStamped) for channel 61
+[foxglove_bridge-1] [INFO] [1783058817.445274667] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058818.084257245] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058953.913812406] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058954.689785493] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058975.805263249] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058976.633381491] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058977.356150629] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058980.124366377] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783058980.819336563] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059047.148508914] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059047.790572651] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059048.454711217] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059049.132973029] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059051.768125838] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059052.629272819] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059053.298519842] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059055.873148787] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059056.767733261] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059057.414399455] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059069.301843057] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059076.611803311] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059183.253107273] [foxglove_bridge]: received unsubscribe request for channel 55 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253317107] [foxglove_bridge]: Cleaned up ROS subscription for channel 55 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.253404107] [foxglove_bridge]: received unsubscribe request for channel 33 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253448857] [foxglove_bridge]: Cleaned up ROS subscription for channel 33 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.253497648] [foxglove_bridge]: received unsubscribe request for channel 7 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253537190] [foxglove_bridge]: Cleaned up ROS subscription for channel 7 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.253595857] [foxglove_bridge]: received unsubscribe request for channel 27 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253637982] [foxglove_bridge]: Cleaned up ROS subscription for channel 27 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.253688273] [foxglove_bridge]: received unsubscribe request for channel 2 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253728857] [foxglove_bridge]: received unsubscribe request for channel 10 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253767607] [foxglove_bridge]: received unsubscribe request for channel 57 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253804732] [foxglove_bridge]: Cleaned up ROS subscription for channel 57 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.253858232] [foxglove_bridge]: received unsubscribe request for channel 53 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253897273] [foxglove_bridge]: Cleaned up ROS subscription for channel 53 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.253948065] [foxglove_bridge]: received unsubscribe request for channel 59 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.253987482] [foxglove_bridge]: Cleaned up ROS subscription for channel 59 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.254033898] [foxglove_bridge]: received unsubscribe request for channel 26 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.254073690] [foxglove_bridge]: received unsubscribe request for channel 45 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.254110815] [foxglove_bridge]: Cleaned up ROS subscription for channel 45 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.254849773] [foxglove_bridge]: received unsubscribe request for channel 22 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.254964231] [foxglove_bridge]: Cleaned up ROS subscription for channel 22 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.255020023] [foxglove_bridge]: received unsubscribe request for channel 32 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.255059856] [foxglove_bridge]: Cleaned up ROS subscription for channel 32 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.255110815] [foxglove_bridge]: received unsubscribe request for channel 61 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.261013230] [foxglove_bridge]: Cleaned up ROS subscription for channel 61 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.261166147] [foxglove_bridge]: received unsubscribe request for channel 31 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.261220980] [foxglove_bridge]: Cleaned up ROS subscription for channel 31 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.261281313] [foxglove_bridge]: received unsubscribe request for channel 25 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.261322438] [foxglove_bridge]: Cleaned up ROS subscription for channel 25 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.261369188] [foxglove_bridge]: received unsubscribe request for channel 5 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.261409730] [foxglove_bridge]: received unsubscribe request for channel 30 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.261447188] [foxglove_bridge]: Cleaned up ROS subscription for channel 30 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.261900896] [foxglove_bridge]: received unsubscribe request for channel 44 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.261962188] [foxglove_bridge]: Cleaned up ROS subscription for channel 44 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.262013480] [foxglove_bridge]: received unsubscribe request for channel 21 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.263892896] [foxglove_bridge]: Cleaned up ROS subscription for channel 21 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.264060854] [foxglove_bridge]: received unsubscribe request for channel 58 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.264116688] [foxglove_bridge]: Cleaned up ROS subscription for channel 58 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.264175146] [foxglove_bridge]: received unsubscribe request for channel 3 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.264217104] [foxglove_bridge]: received unsubscribe request for channel 23 from client 4
+[foxglove_bridge-1] [INFO] [1783059183.264255271] [foxglove_bridge]: Cleaned up ROS subscription for channel 23 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059183.645372937] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059184.262158509] [foxglove_bridge]: publishing connection graph
+[foxglove_bridge-1] [INFO] [1783059193.139922669] [rclcpp]: signal_handler(signum=2)
+[foxglove_bridge-1] [INFO] [1783059193.156955790] [foxglove_bridge]: Shutting down foxglove_bridge
+[foxglove_bridge-1] [INFO] [1783059193.158671956] [foxglove_bridge]: received unsubscribe request for channel 26 from client 1
+[foxglove_bridge-1] [INFO] [1783059193.158734373] [foxglove_bridge]: received unsubscribe request for channel 5 from client 1
+[foxglove_bridge-1] [INFO] [1783059193.158748665] [foxglove_bridge]: Cleaned up ROS subscription for channel 5 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059193.162023414] [foxglove_bridge]: received unsubscribe request for channel 2 from client 2
+[foxglove_bridge-1] [INFO] [1783059193.255134060] [foxglove_bridge]: received unsubscribe request for channel 10 from client 2
+[foxglove_bridge-1] [INFO] [1783059193.255208518] [foxglove_bridge]: received unsubscribe request for channel 26 from client 2
+[foxglove_bridge-1] [INFO] [1783059193.255227935] [foxglove_bridge]: received unsubscribe request for channel 3 from client 2
+[foxglove_bridge-1] [INFO] [1783059193.262231892] [foxglove_bridge]: received unsubscribe request for channel 11 from client 1
+[foxglove_bridge-1] [INFO] [1783059193.262332600] [foxglove_bridge]: received unsubscribe request for channel 3 from client 1
+[foxglove_bridge-1] [INFO] [1783059193.262358933] [foxglove_bridge]: received unsubscribe request for channel 2 from client 1
+[foxglove_bridge-1] [INFO] [1783059193.262373142] [foxglove_bridge]: received unsubscribe request for channel 10 from client 1
+[foxglove_bridge-1] [INFO] [1783059195.182192175] [foxglove_bridge]: received connection graph subscribe request
+[foxglove_bridge-1] [INFO] [1783059195.182268091] [foxglove_bridge]: received unsubscribe request for channel 10 from client 3
+[foxglove_bridge-1] [INFO] [1783059195.182291716] [foxglove_bridge]: Cleaned up ROS subscription for channel 10 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059195.192351964] [foxglove_bridge]: received unsubscribe request for channel 3 from client 3
+[foxglove_bridge-1] [INFO] [1783059195.192418214] [foxglove_bridge]: Cleaned up ROS subscription for channel 3 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059195.200711296] [foxglove_bridge]: received unsubscribe request for channel 11 from client 3
+[foxglove_bridge-1] [INFO] [1783059195.200779379] [foxglove_bridge]: Cleaned up ROS subscription for channel 11 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059195.209650252] [foxglove_bridge]: received unsubscribe request for channel 26 from client 3
+[foxglove_bridge-1] [INFO] [1783059195.209718002] [foxglove_bridge]: Cleaned up ROS subscription for channel 26 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059195.218581167] [foxglove_bridge]: received unsubscribe request for channel 2 from client 3
+[foxglove_bridge-1] [INFO] [1783059195.218653042] [foxglove_bridge]: Cleaned up ROS subscription for channel 2 (no more subscribers)
+[foxglove_bridge-1] [INFO] [1783059195.230597372] [foxglove_bridge]: Shutdown complete
+[INFO] [foxglove_bridge-1]: process has finished cleanly [pid 40959]

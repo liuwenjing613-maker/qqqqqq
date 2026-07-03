@@ -9,6 +9,7 @@ LOG_FILE="${PROJECT_DIR}/logs/lidar_driver.log"
 mkdir -p "${PROJECT_DIR}/logs"
 cd "$PROJECT_DIR"
 source "$PROJECT_DIR/scripts/lidar/source_ydlidar.sh"
+[ -f "$PROJECT_DIR/scripts/lib/ros_dds_env.sh" ] && source "$PROJECT_DIR/scripts/lib/ros_dds_env.sh"
 
 echo "============================================================"
 echo " Start YDLidar T-MINI PLUS driver -> /scan"

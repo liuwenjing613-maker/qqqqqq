@@ -30,3 +30,31 @@ foxglove_bridge_running() {
 slam_toolbox_running() {
   pgrep -f "slam_toolbox" >/dev/null 2>&1
 }
+
+odom_base_link_tf_ready() {
+  timeout 4 ros2 run tf2_ros tf2_echo odom base_link 2>/dev/null \
+    | head -8 | grep -q "Translation:" \
+    || timeout 8 ros2 topic hz /odom --window 5 2>/dev/null | grep -q "average rate"
+}
+
+map_base_link_tf_ready() {
+  timeout 4 ros2 run tf2_ros tf2_echo map base_link 2>/dev/null \
+    | head -10 | grep -q "Translation:" \
+    || timeout 4 ros2 topic echo /tf --once 2>/dev/null \
+    | awk '/frame_id: map/{m=1} m && /child_frame_id: base_link/{exit 0} END{exit 1}'
+}
+
+wait_map_base_link_tf() {
+  local timeout_sec="${1:-45}"
+  local start
+  start="$(date +%s)"
+  while true; do
+    if map_base_link_tf_ready; then
+      return 0
+    fi
+    if [ $(( $(date +%s) - start )) -ge "$timeout_sec" ]; then
+      return 1
+    fi
+    sleep 1
+  done
+}

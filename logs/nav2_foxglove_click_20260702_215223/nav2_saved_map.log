@@ -1,0 +1,28 @@
+[lidar_frame_config] base_link -> laser
+[lidar_frame_config] xyz=(0.10, 0.0, 0.12) rpy=(0.0, 0.0, 3.141592653589793)
+[lidar_frame_config] WARN: LASER_YAW=3.141592653589793 (non-zero compensation enabled)
+[NAV2] MAP_YAML=/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.yaml
+[NAV2] NAV2_PARAMS=/root/rdk_x5_vln_robot/configs/nav2_params.yaml
+[NAV2] CHASSIS_DEV=/dev/rosmaster
+[NAV2] LASER_FRAME=laser
+[NAV2] POSE_STATE_FILE=/root/rdk_x5_vln_robot/state/last_pose_map.json
+[NAV2] NAV2_STOP_CONFLICTS=1 NAV2_REUSE_EXISTING=0
+[NAV2] logs=/root/rdk_x5_vln_robot/logs/nav2_20260702_215232
+[NAV2] NAV2_STOP_CONFLICTS=1: stopping mapping/joystick conflicts...
+[NAV2] start lidar: bash /root/rdk_x5_vln_robot/scripts/lidar/start_lidar_only.sh
+[NAV2] start scan_filter: python3 /root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py --in-topic /scan --out-topic /scan_filtered --min-range 0.18 --max-range 4.0 --isolated-window 2 --isolated-delta 0.25 --min-support-neighbors 1 --stats-every 50
+[NAV2] start static_tf: ros2 run tf2_ros static_transform_publisher --x 0.10 --y 0.0 --z 0.12 --roll 0.0 --pitch 0.0 --yaw 3.141592653589793 --frame-id base_link --child-frame-id laser
+[NAV2] start fresh chassis bridge (need odom->base_link TF)
+[NAV2] start foxglove: ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+[NAV2] topic OK: /scan
+[NAV2] topic OK: /scan_filtered
+[NAV2] topic OK: /odom
+[NAV2] topic OK: /tf
+[NAV2] WARN: map->base_link not ready before Nav2; pose_memory will publish /initialpose first
+[NAV2] launch Nav2...
+[NAV2] start nav2: ros2 launch nav2_bringup bringup_launch.py use_sim_time:=False autostart:=True map:=/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.yaml params_file:=/root/rdk_x5_vln_robot/configs/nav2_params.yaml use_composition:=False
+[NAV2] initialpose subscriber OK (count=2)
+[NAV2] start pose_memory: python3 /root/rdk_x5_vln_robot/scripts/slam/pose_memory_node.py --state-file /root/rdk_x5_vln_robot/state/last_pose_map.json --map-frame map --base-frame base_link --fallback-base-frame base_footprint --save-period 1.0 --publish-initial --initial-repeat 5 --initial-interval 0.3
+[NAV2] WARN: map->base_link still missing; set /initialpose in Foxglove if localization fails
+[NAV2] cleanup...
+[NAV2] cleanup...
