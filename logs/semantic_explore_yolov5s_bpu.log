@@ -1,0 +1,108 @@
+[BPU_PLAT]BPU Platform Version(1.3.6)! soc info(x5)
+[HBRT] set log level as 0. version = 3.15.55.0
+[DNN] Runtime version = 1.24.5_(3.15.55 HBRT)
+[A][DNN][packed_model.cpp:247][Model](2026-07-03,17:09:45.415.632) [HorizonRT] The model builder version = 1.23.8
+[INFO] [1783069785.806901942] [yolov5s_bpu_web_node]: subscribing raw image: /image_raw
+[INFO] [1783069785.825749480] [yolov5s_bpu_web_node]: semantic depth overlay ON topic=/semantic_observations
+[INFO] [1783069785.837123186] [yolov5s_bpu_web_node]: ===== YOLOv5s-BPU web node started =====
+[INFO] [1783069785.839776435] [yolov5s_bpu_web_node]: model=/root/rdk_model_zoo/samples/vision/yolov5/model/yolov5s_tag_v7.0_detect_640x640_bayese_nv12.bin
+[INFO] [1783069785.842169018] [yolov5s_bpu_web_node]: target_classes=['backpack', 'book', 'bottle', 'cell phone', 'chair', 'couch', 'cup', 'dining table', 'potted plant']
+[INFO] [1783069785.844548726] [yolov5s_bpu_web_node]: out_topic=/target_bbox_json
+[INFO] [1783069785.846759725] [yolov5s_bpu_web_node]: annotated_topic=/yolov5s_bpu/annotated/compressed
+[INFO] [1783069785.848963267] [yolov5s_bpu_web_node]: web=http://<RDK_IP>:8088/
+[INFO] [1783069785.851201641] [yolov5s_bpu_web_node]: nav overlay topics state=/nav_state cmd=/cmd_vel
+[INFO] [1783069799.491526480] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069802.493114025] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069805.380481884] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069808.429224044] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069811.354442646] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069814.350843358] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069817.392476518] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069820.323365410] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069823.354286948] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069826.359814408] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069829.316004545] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069832.369854369] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069835.386140785] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069838.343925921] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069841.359165962] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069844.346976341] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069847.357346841] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069850.357695677] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069853.371710968] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069856.364625096] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069859.359530308] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069862.358619935] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069865.351709146] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069868.352845523] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069871.360386315] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069874.351623943] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069877.359757193] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069880.351908613] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069883.365375862] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069886.360671031] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069889.380763361] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+----------------------------------------
+Exception occurred during processing of request from ('192.168.137.1', 54710)
+[INFO] [1783069892.384568612] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/socketserver.py", line 316, in _handle_request_noblock
+    self.process_request(request, client_address)
+  File "/usr/lib/python3.10/socketserver.py", line 347, in process_request
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.10/socketserver.py", line 360, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.10/socketserver.py", line 747, in __init__
+    self.handle()
+  File "/usr/lib/python3.10/http/server.py", line 433, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.10/http/server.py", line 421, in handle_one_request
+    method()
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 112, in do_GET
+    self.send_error(404)
+  File "/usr/lib/python3.10/http/server.py", line 488, in send_error
+    self.wfile.write(body)
+  File "/usr/lib/python3.10/socketserver.py", line 826, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+[INFO] [1783069895.348067871] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069898.353037121] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069901.363256870] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069904.362975704] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069907.353344916] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069910.350559376] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069913.347865086] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069916.343237421] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069919.358562752] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783069922.355522545] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[W][DNN]bpu_model_info.cpp:491][Version](2026-07-03,17:09:45.546.580) Model: yolov5s_tag_v7.0_detect_640x640_bayese_nv12. Inconsistency between the hbrt library version 3.15.55.0 and the model build version 3.15.54.0 detected, in order to ensure correct model results, it is recommended to use compilation tools and the BPU SDK from the same OpenExplorer package.
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 609, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 596, in _wait_for_ready_callbacks
+    wait_set = _rclpy.WaitSet(
+rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 616, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 612, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

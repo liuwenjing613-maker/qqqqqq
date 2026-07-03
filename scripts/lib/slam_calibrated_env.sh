@@ -7,7 +7,7 @@ export CHASSIS_DEV="${CHASSIS_DEV:-/dev/rosmaster}"
 
 # ===== 底盘控制参数（影响真实小车运动）=====
 export CHASSIS_MAX_VX=0.04
-export CHASSIS_MAX_WZ=0.10
+export CHASSIS_MAX_WZ=0.18
 
 export CHASSIS_VX_PWM_DEADBAND=10.0
 export CHASSIS_VX_PWM_GAIN=200.0

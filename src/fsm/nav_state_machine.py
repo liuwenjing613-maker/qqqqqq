@@ -78,6 +78,8 @@ class NavFSMConfig:
     birth_scan_wz: float = 0.03
     birth_scan_effective_wz: float = 0.03
     birth_scan_deg: float = 360.0
+    birth_scan_max_rotations: float = 2.0
+    birth_scan_max_wall_timeout_sec: float = 0.0
     birth_scan_turn_dir: float = 1.0
 
 
@@ -114,6 +116,9 @@ class NavStateMachine:
         self.last_height_ratio: Optional[float] = None
         self._last_result_reason = "init"
         self.birth_phase_completed = False
+        self.birth_scan_yaw_accumulated_rad = 0.0
+        self._birth_scan_last_tick_time: Optional[float] = None
+        self._birth_flow_start_time: Optional[float] = None
 
     def reset(self, now: Optional[float] = None) -> None:
         self.state = NavState.BOOT
@@ -132,6 +137,9 @@ class NavStateMachine:
         self.last_height_ratio = None
         self._last_result_reason = "reset"
         self.birth_phase_completed = False
+        self.birth_scan_yaw_accumulated_rad = 0.0
+        self._birth_scan_last_tick_time = None
+        self._birth_flow_start_time = None
 
     def update(self, obs: NavObservation) -> NavFSMResult:
         if self.task_start_time is None:

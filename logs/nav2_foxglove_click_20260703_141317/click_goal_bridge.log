@@ -153,3 +153,56 @@
 [INFO] [1783059719.950833782] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.492 m, recoveries=22
 [INFO] [1783059721.955076860] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.492 m, recoveries=22
 [ERROR] [1783059723.145402329] [foxglove_click_goal_bridge]: [1] Navigation ended. status=6, error_code=None, error_msg=
+[INFO] [1783059925.549702096] [foxglove_click_goal_bridge]: Goal marker published at (2.738, -9.199) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783059925.554758388] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=2.738, y=-9.199, goal_yaw=-0.067
+[ERROR] [1783059925.558550014] [foxglove_click_goal_bridge]: Reject goal (2.738, -9.199): out_of_map. Click only on scanned white (free) area, not gray unknown.
+[INFO] [1783059925.568308473] [foxglove_click_goal_bridge]: Goal marker published at (2.738, -9.199) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783059937.960480653] [foxglove_click_goal_bridge]: Goal marker published at (2.578, 2.448) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783059937.966731362] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=2.578, y=2.448, goal_yaw=-0.067
+[INFO] [1783059937.970237820] [foxglove_click_goal_bridge]: Goal map cell OK: (2.578, 2.448) -> free(val=0)
+[INFO] [1783059937.983580863] [foxglove_click_goal_bridge]: Goal marker published at (2.578, 2.448) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783059937.989082864] [foxglove_click_goal_bridge]: [2] Accepted goal: frame=map, x=2.578, y=2.448
+[INFO] [1783059938.078876999] [foxglove_click_goal_bridge]: [2] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783059938.194034512] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=0
+[INFO] [1783059938.266874270] [foxglove_click_goal_bridge]: [2] Planned path published: 53 poses -> /foxglove_click_planned_path
+[INFO] [1783059940.190294939] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=7
+[INFO] [1783059942.200330366] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=7
+[INFO] [1783059944.194524041] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=7
+[INFO] [1783059946.239450637] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=11
+[INFO] [1783059948.243378810] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=14
+[INFO] [1783059950.262352358] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=14
+[INFO] [1783059952.260604695] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=14
+[INFO] [1783059954.269471990] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=20
+[INFO] [1783059956.274318950] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=21
+[INFO] [1783059958.280947826] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=21
+[INFO] [1783059960.287555784] [foxglove_click_goal_bridge]: [2] navigating: distance_remaining=1.336 m, recoveries=21
+[ERROR] [1783059961.290445054] [foxglove_click_goal_bridge]: [2] Navigation ended. status=6, error_code=None, error_msg=
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 667, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 596, in _wait_for_ready_callbacks
+    wait_set = _rclpy.WaitSet(
+rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 676, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 672, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

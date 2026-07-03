@@ -13,6 +13,13 @@ set -u
 PORT="${FOXGLOVE_PORT:-8765}"
 WHITELIST="${FOXGLOVE_TOPIC_WHITELIST:-['.*']}"
 
+if command -v ss >/dev/null 2>&1 && ss -tln 2>/dev/null | grep -q ":${PORT} "; then
+  echo "[foxglove] ERROR: port ${PORT} already in use; cannot start bridge"
+  echo "[foxglove] HINT: run ensure_foxglove_port_free or stop the other Foxglove stack first"
+  ss -tlnp 2>/dev/null | grep ":${PORT} " || true
+  exit 1
+fi
+
 echo "[foxglove] starting bridge on port ${PORT} whitelist=${WHITELIST}"
 
 exec ros2 launch foxglove_bridge foxglove_bridge_launch.xml \

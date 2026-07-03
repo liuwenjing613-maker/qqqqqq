@@ -13,14 +13,19 @@ source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
 source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
 source "${PROJECT_DIR}/scripts/lib/nav2_stack_reuse.sh"
 source "${PROJECT_DIR}/scripts/lib/nav2_localization_bootstrap.sh"
+export_ros_dds_env
 # 与 calibrated 建图一致：底盘口 /dev/rosmaster + odom 校准参数
 if [ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]; then
   # shellcheck source=scripts/lib/slam_calibrated_env.sh
   source "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh"
 fi
 # Nav-only PWM smoothing: gentler motor steps, no change to odom signs/offsets.
-export CHASSIS_PWM_SMOOTH_ALPHA="${CHASSIS_NAV_PWM_SMOOTH_ALPHA:-0.42}"
-export CHASSIS_MAX_PWM_DELTA="${CHASSIS_NAV_MAX_PWM_DELTA:-2.5}"
+export CHASSIS_PWM_SMOOTH_ALPHA="${CHASSIS_NAV_PWM_SMOOTH_ALPHA:-0.50}"
+export CHASSIS_MAX_PWM_DELTA="${CHASSIS_NAV_MAX_PWM_DELTA:-2.0}"
+export CHASSIS_NAV_VX_PWM_DEADBAND="${CHASSIS_NAV_VX_PWM_DEADBAND:-3.0}"
+export CHASSIS_NAV_WZ_PWM_DEADBAND="${CHASSIS_NAV_WZ_PWM_DEADBAND:-7.0}"
+export CHASSIS_NAV_CMD_WZ_DEADZONE="${CHASSIS_NAV_CMD_WZ_DEADZONE:-0.015}"
+export CHASSIS_NAV_CONTROL_RATE_HZ="${CHASSIS_NAV_CONTROL_RATE_HZ:-10.0}"
 # Nav2 velocity limits must match chassis; keep calibrated caps after mvp_tune load.
 _NAV_CHASSIS_MAX_VX="${CHASSIS_MAX_VX:-0.04}"
 _NAV_CHASSIS_MAX_WZ="${CHASSIS_MAX_WZ:-0.10}"
@@ -150,8 +155,10 @@ fi
 if [ "$NAV2_STOP_CONFLICTS" = "1" ]; then
   log "NAV2_STOP_CONFLICTS=1: stopping mapping/joystick conflicts..."
   pkill -f "teleop_twist_joy|joy_node|run_joy_mapping_all|run_joy_mapping_calibrated|run_corridor_mapping_live_foxglove|run_slam_calibrated" 2>/dev/null || true
+  cleanup_stale_nav2_processes
   cleanup_lidar_slam_nav_processes
-  sleep 1
+  cleanup_ros2_fastrtps_shm
+  sleep 2
 else
   log "NAV2_STOP_CONFLICTS=0: skip external pkill; reuse sensors when already running"
 fi
@@ -174,7 +181,7 @@ else
   start_bg scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
     --in-topic /scan \
     --out-topic /scan_filtered \
-    --min-range 0.18 \
+    --min-range "${SCAN_FILTER_MIN_RANGE:-0.22}" \
     --max-range "${SCAN_FILTER_MAX_RANGE:-4.0}" \
     --isolated-window "${SCAN_FILTER_ISOLATED_WINDOW:-2}" \
     --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
@@ -198,6 +205,10 @@ fi
 source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
 export CHASSIS_MAX_VX="${_NAV_CHASSIS_MAX_VX}"
 export CHASSIS_MAX_WZ="${_NAV_CHASSIS_MAX_WZ}"
+export CHASSIS_VX_PWM_DEADBAND="${CHASSIS_NAV_VX_PWM_DEADBAND}"
+export CHASSIS_WZ_PWM_DEADBAND="${CHASSIS_NAV_WZ_PWM_DEADBAND}"
+export CHASSIS_CMD_WZ_DEADZONE="${CHASSIS_NAV_CMD_WZ_DEADZONE}"
+export CHASSIS_CONTROL_RATE_HZ="${CHASSIS_NAV_CONTROL_RATE_HZ}"
 source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
 export CHASSIS_PORT="$CHASSIS_DEV"
 export CHASSIS_REUSE_IF_RUNNING=0
@@ -242,29 +253,33 @@ start_bg nav2 ros2 launch nav2_bringup bringup_launch.py \
   params_file:="$NAV2_PARAMS" \
   use_composition:=False
 
-sleep 5
-wait_lifecycle_active /map_server 120 || exit 1
-wait_lifecycle_active /amcl 120 || exit 1
-wait_map_topic_data 60 || exit 1
-sleep 2
+sleep 15
+wait_map_topic_data 120 || exit 1
+wait_lifecycle_active /amcl 90 || exit 1
+sleep 3
 
 print_pose_state_summary "$POSE_STATE_FILE" || true
 
 if ! bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 90; then
   log "WARN: AMCL bootstrap from $POSE_STATE_FILE failed."
-  log "Set initial pose in Foxglove: Publish -> Pose estimate -> /initialpose"
-  if ! wait_map_base_link_tf 30; then
+  log "Set initial pose in Foxglove: Publish -> 2D Pose estimate -> /initialpose"
+  log "Align laser scan with map walls, then click-nav goals."
+  if ! wait_map_base_link_tf 60; then
     log "ERROR: map->base_link still missing after bootstrap"
+    log "HINT: saved pose may be stale; use /initialpose in Foxglove then restart."
     exit 1
   fi
 else
   log "TF OK: map -> base_link (AMCL localized)"
-  wait_amcl_localization_settle 25 || log "WARN: AMCL settle check incomplete; verify scan/map alignment in Foxglove"
+fi
+if ! wait_amcl_localization_settle 60; then
+  log "WARN: AMCL not fully settled; align scan/map in Foxglove before click-nav."
+  log "Use Publish -> 2D Pose estimate -> /initialpose if walls do not match scan."
 fi
 
-wait_lifecycle_active /controller_server 120 || exit 1
-wait_lifecycle_active /planner_server 120 || exit 1
-wait_lifecycle_active /bt_navigator 120 || exit 1
+if ! wait_nav_actions_ready 180; then
+  retry_navigation_bringup 90 || exit 1
+fi
 log "Nav2 navigation stack active"
 
 touch "$LOG_DIR/ready"

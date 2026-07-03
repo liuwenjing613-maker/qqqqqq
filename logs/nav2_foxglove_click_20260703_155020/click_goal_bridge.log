@@ -1,0 +1,51 @@
+[INFO] [1783065254.019055222] [foxglove_click_goal_bridge]: Foxglove click goal bridge started.
+[INFO] [1783065254.022569431] [foxglove_click_goal_bridge]: Listening point click topic:
+[INFO] [1783065254.025772890] [foxglove_click_goal_bridge]:   /foxglove_goal_point
+[INFO] [1783065254.028822307] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PointStamped
+[INFO] [1783065254.032183974] [foxglove_click_goal_bridge]: Listening pose click topic:
+[INFO] [1783065254.035886641] [foxglove_click_goal_bridge]:   /foxglove_goal_pose
+[INFO] [1783065254.040926016] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PoseStamped
+[INFO] [1783065254.044773725] [foxglove_click_goal_bridge]: Recommended Foxglove tool:
+[INFO] [1783065254.048562642] [foxglove_click_goal_bridge]:   Publish -> 2D point -> /foxglove_goal_point
+[INFO] [1783065254.052184643] [foxglove_click_goal_bridge]: Visual path topic: /foxglove_click_planned_path
+[INFO] [1783065254.055606060] [foxglove_click_goal_bridge]: Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label
+[INFO] [1783065256.824190494] [foxglove_click_goal_bridge]: >>> CLICK READY: Foxglove 可以单击地图白色区域发送导航目标。 Topic=/foxglove_goal_point, frame=map。 若 scan 与地图错位，请先用 /initialpose 校正。导航进行中会忽略新点击。
+[INFO] [1783065269.623587274] [foxglove_click_goal_bridge]: Goal marker published at (-1.066, -1.299) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783065269.630293691] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=-1.066, y=-1.299, goal_yaw=2.488
+[INFO] [1783065269.637662651] [foxglove_click_goal_bridge]: Goal map cell OK: (-1.066, -1.299) -> free(val=0)
+[INFO] [1783065269.667502571] [foxglove_click_goal_bridge]: Goal marker published at (-1.066, -1.299) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783065269.675295697] [foxglove_click_goal_bridge]: [1] Accepted goal: frame=map, x=-1.066, y=-1.299
+[INFO] [1783065269.762438583] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.000 m, recoveries=0
+[INFO] [1783065269.769914292] [foxglove_click_goal_bridge]: [1] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783065269.785392169] [foxglove_click_goal_bridge]: [1] Planned path published: 57 poses -> /foxglove_click_planned_path
+[INFO] [1783065271.772480960] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065273.781627378] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065275.779039043] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065277.784822918] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065279.787869209] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065281.800478209] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065283.801727540] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065285.801813663] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065287.804152724] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065289.806895844] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065291.809664665] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065293.816606692] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=0
+[INFO] [1783065295.819489264] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=1
+[INFO] [1783065297.830071957] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=1
+[INFO] [1783065299.837105112] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=1
+[INFO] [1783065301.846899598] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=1
+[INFO] [1783065303.846613384] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=1
+[INFO] [1783065305.849696544] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=1
+[INFO] [1783065307.853452954] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.462 m, recoveries=1
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 676, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/scripts/slam/foxglove_click_goal_bridge.py", line 672, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

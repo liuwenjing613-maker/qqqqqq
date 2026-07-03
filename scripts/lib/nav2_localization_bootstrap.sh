@@ -1,29 +1,74 @@
 #!/usr/bin/env bash
 # Localization bootstrap helpers for saved-map Nav2 (ported from nav2_oneclick_goal.sh).
 
+_LIFECYCLE_PROBE="${PROJECT_DIR:-/root/rdk_x5_vln_robot}/scripts/lib/lifecycle_probe.py"
+
+export_ros_dds_env() {
+  local project_dir="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
+  export FASTRTPS_DEFAULT_PROFILES="${project_dir}/configs/fastdds_no_shm.xml"
+}
+
 lifecycle_get() {
-  timeout 5 ros2 lifecycle get "$1" 2>/dev/null || true
+  # Legacy helper; prefer lifecycle_probe_rclpy for readiness checks.
+  timeout 20 ros2 lifecycle get "$1" 2>/dev/null || true
+}
+
+lifecycle_probe_rclpy() {
+  local node="$1"
+  local timeout_sec="${2:-120}"
+  python3 "$_LIFECYCLE_PROBE" wait "$node" "$timeout_sec"
+}
+
+lifecycle_primary_state() {
+  sed 's/\x1b\[[0-9;]*m//g' <<<"$1" \
+    | grep -oE '(unconfigured|inactive|active|configured|finalized|no_service|call_failed|NO RESPONSE) ?(\[[0-9]+\])?' \
+    | tail -1
+}
+
+lifecycle_is_active_label() {
+  local label="$1"
+  [[ "$label" == active\ \[3\] ]]
+}
+
+retry_navigation_bringup() {
+  local timeout_sec="${1:-90}"
+  echo "[NAV2_BOOT] WARN: navigation stack not fully active; requesting lifecycle_manager_navigation STARTUP"
+  timeout 15 ros2 service call /lifecycle_manager_navigation/manage_nodes \
+    nav2_msgs/srv/ManageLifecycleNodes "{command: 0}" >/dev/null 2>&1 || true
+  sleep 3
+  wait_nav_actions_ready "$timeout_sec"
+}
+
+wait_nav_actions_ready() {
+  local timeout_sec="${1:-180}"
+  echo "[NAV2_BOOT] wait Nav2 actions: /navigate_to_pose + /compute_path_to_pose (timeout=${timeout_sec}s)"
+  if python3 "$_LIFECYCLE_PROBE" nav-actions "$timeout_sec"; then
+    echo "[NAV2_BOOT] Nav2 navigation actions ready"
+    return 0
+  fi
+  echo "[NAV2_BOOT] ERROR: Nav2 navigation actions not ready after ${timeout_sec}s"
+  return 1
 }
 
 wait_lifecycle_active() {
   local node="$1"
   local timeout_sec="${2:-120}"
-  local start now state
+  local start now label rc
 
-  echo "[NAV2_BOOT] wait lifecycle active: $node (timeout=${timeout_sec}s)"
+  echo "[NAV2_BOOT] wait lifecycle active: $node (timeout=${timeout_sec}s, rclpy)"
   start="$(date +%s)"
   while true; do
-    state="$(lifecycle_get "$node")"
-    if echo "$state" | grep -q "active"; then
-      echo "[NAV2_BOOT] $node active: ${state}"
+    label="$(python3 "$_LIFECYCLE_PROBE" wait "$node" 15 2>/dev/null || true)"
+    if lifecycle_is_active_label "$label"; then
+      echo "[NAV2_BOOT] $node active: ${label}"
       return 0
     fi
     now="$(date +%s)"
     if [ $((now - start)) -ge "$timeout_sec" ]; then
-      echo "[NAV2_BOOT] ERROR: $node not active after ${timeout_sec}s (last: ${state:-NO RESPONSE})"
+      echo "[NAV2_BOOT] ERROR: $node not active after ${timeout_sec}s (last: ${label:-NO RESPONSE})"
       return 1
     fi
-    sleep 2
+    sleep 1
   done
 }
 
@@ -127,14 +172,25 @@ timeout = float(sys.argv[4])
 
 rclpy.init()
 node = Node("nav2_bootstrap_amcl")
-qos = QoSProfile(
+initial_qos = QoSProfile(
     depth=10,
     durability=DurabilityPolicy.TRANSIENT_LOCAL,
     reliability=ReliabilityPolicy.RELIABLE,
 )
-pub = node.create_publisher(PoseWithCovarianceStamped, "/initialpose", qos)
+amcl_qos = QoSProfile(
+    depth=10,
+    durability=DurabilityPolicy.VOLATILE,
+    reliability=ReliabilityPolicy.RELIABLE,
+)
+pub = node.create_publisher(PoseWithCovarianceStamped, "/initialpose", initial_qos)
 tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
 TransformListener(tf_buffer, node, spin_thread=False)
+amcl_samples = []
+
+def on_amcl_pose(msg: PoseWithCovarianceStamped) -> None:
+    amcl_samples.append(time.time())
+
+node.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", on_amcl_pose, amcl_qos)
 
 msg = PoseWithCovarianceStamped()
 msg.header.frame_id = "map"
@@ -148,29 +204,58 @@ msg.pose.covariance[7] = 0.25
 msg.pose.covariance[35] = 0.0685
 
 start = time.time()
-last_pub = 0.0
-map_base_ok = False
-tf_ok_since = None
-
-while time.time() - start < timeout:
-    now = time.time()
-    if now - last_pub >= 0.4:
-        msg.header.stamp = node.get_clock().now().to_msg()
-        pub.publish(msg)
-        last_pub = now
+odom_ok = False
+while time.time() - start < min(timeout, 30.0):
     rclpy.spin_once(node, timeout_sec=0.1)
     try:
-        tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
-        if not map_base_ok:
-            map_base_ok = True
-            tf_ok_since = now
-            print("[NAV2_BOOT] TF map -> base_link OK", flush=True)
-        # Keep publishing initialpose briefly so AMCL can ingest scans.
-        if tf_ok_since is not None and now - tf_ok_since >= 4.0:
-            break
+        tf_buffer.lookup_transform("odom", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
+        odom_ok = True
+        break
     except Exception:
-        tf_ok_since = None
+        pass
+
+if not odom_ok:
+    print("[NAV2_BOOT] ERROR: odom -> base_link TF not ready before AMCL bootstrap", flush=True)
+    node.destroy_node()
+    rclpy.shutdown()
+    raise SystemExit(1)
+
+# Publish initialpose periodically until AMCL converges (not just 2 bursts at t=0).
+last_publish = 0.0
+publish_interval = 3.0
+publish_count = 0
+
+map_base_ok = False
+while time.time() - start < timeout:
+    rclpy.spin_once(node, timeout_sec=0.1)
+    now = time.time()
+    if now - last_publish >= publish_interval:
+        msg.header.stamp = node.get_clock().now().to_msg()
+        pub.publish(msg)
+        last_publish = now
+        publish_count += 1
+        if publish_count == 1 or publish_count % 3 == 0:
+            print(
+                f"[NAV2_BOOT] publish /initialpose #{publish_count} "
+                f"({len(amcl_samples)} /amcl_pose samples)",
+                flush=True,
+            )
+    try:
+        tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
+        map_base_ok = True
+    except Exception:
         map_base_ok = False
+    if map_base_ok and len(amcl_samples) >= 1:
+        print(
+            f"[NAV2_BOOT] AMCL bootstrap OK: map->base_link TF + {len(amcl_samples)} /amcl_pose samples",
+            flush=True,
+        )
+        break
+
+if map_base_ok:
+    print("[NAV2_BOOT] TF map -> base_link OK", flush=True)
+else:
+    print("[NAV2_BOOT] ERROR: map -> base_link TF missing after AMCL bootstrap", flush=True)
 
 node.destroy_node()
 rclpy.shutdown()
@@ -325,11 +410,8 @@ bootstrap_amcl_from_state_file() {
 }
 
 verify_nav2_navigation_ready() {
-  local timeout_sec="${1:-30}"
-  wait_lifecycle_active /map_server "$timeout_sec" || return 1
-  wait_lifecycle_active /amcl "$timeout_sec" || return 1
-  wait_lifecycle_active /controller_server "$timeout_sec" || return 1
-  wait_lifecycle_active /planner_server "$timeout_sec" || return 1
-  wait_lifecycle_active /bt_navigator "$timeout_sec" || return 1
+  local timeout_sec="${1:-90}"
+  wait_map_topic_data 30 || return 1
+  wait_nav_actions_ready "$timeout_sec" || return 1
   return 0
 }
