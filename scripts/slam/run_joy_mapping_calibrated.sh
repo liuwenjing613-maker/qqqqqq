@@ -61,6 +61,15 @@ stop_joystick_nodes() {
   pkill -f "cmd_vel_pulse_crawl.py" 2>/dev/null || true
 }
 
+# semantic explore / nav 会以 20Hz 向 /cmd_vel 发零，盖掉手柄指令
+stop_competing_cmd_vel_publishers() {
+  log "Stopping nav/semantic explore cmd_vel publishers ..."
+  pkill -f "run_shared_nav_semantic_explore.py" 2>/dev/null || true
+  pkill -f "run_shared_nav.py" 2>/dev/null || true
+  pkill -f "explore_goal_selector" 2>/dev/null || true
+  sleep 1
+}
+
 zero_cmd() {
   source_ros
   timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
@@ -361,6 +370,8 @@ show_status() {
   echo "odom_use_vy=${CHASSIS_ODOM_USE_VY}"
   echo "max_vx=${CHASSIS_MAX_VX} max_wz=${CHASSIS_MAX_WZ}"
   echo "joy_scale_linear=${JOY_SCALE_LINEAR_X} joy_scale_angular=${JOY_SCALE_ANGULAR_YAW}"
+  echo "joy_axes linear=${JOY_AXIS_LINEAR} angular=${JOY_AXIS_ANGULAR} deadzone=${JOY_DEADZONE}"
+  echo "If forward dead but turn works: try JOY_AXIS_LINEAR=0 JOY_AXIS_ANGULAR=1"
 
   echo
   echo "========== ROS topics =========="
@@ -420,6 +431,7 @@ main() {
   log "Stopping old joystick/control nodes first..."
   zero_cmd
   stop_joystick_nodes
+  stop_competing_cmd_vel_publishers
   sleep 1
 
   log "Ensure Foxglove port 8765 is free (avoid nav2/semantic bridge stealing /scan)..."
@@ -500,7 +512,7 @@ main() {
   log "[3/4] Start joystick /joy (dev=${JOY_DEV})"
   start_bg joy_node ros2 run joy joy_node --ros-args \
     -p dev:="${JOY_DEV}" \
-    -p deadzone:=0.15 \
+    -p deadzone:="${JOY_DEADZONE}" \
     -p autorepeat_rate:=20.0
 
   wait_topic_exists /joy 30 || {
@@ -512,9 +524,9 @@ main() {
   log "[4/4] Start teleop /joy -> /cmd_vel"
   start_bg teleop ros2 run teleop_twist_joy teleop_node --ros-args \
     -p require_enable_button:=false \
-    -p axis_linear.x:=1 \
+    -p axis_linear.x:="${JOY_AXIS_LINEAR}" \
     -p scale_linear.x:="${JOY_SCALE_LINEAR_X}" \
-    -p axis_angular.yaw:=0 \
+    -p axis_angular.yaw:="${JOY_AXIS_ANGULAR}" \
     -p scale_angular.yaw:="${JOY_SCALE_ANGULAR_YAW}"
 
   sleep 2

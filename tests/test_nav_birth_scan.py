@@ -139,16 +139,15 @@ def test_max_two_rotations_total():
     assert fsm.birth_scan_yaw_accumulated_rad >= math.radians(720.0) - 1e-3
 
 
-def test_sensor_stale_resumes_scanning_not_birth_wait():
+def test_sensor_stale_holds_scanning_not_birth_wait():
     fsm = NavStateMachine(birth_cfg(birth_scan_wait_sec=0.0))
     enter_scanning(fsm)
     fsm.birth_scan_yaw_accumulated_rad = 0.5
-    fsm.update(obs(0.3, scan_fresh=False))
-    assert fsm.state == NavState.WAIT_SENSORS
-    result = fsm.update(obs(0.4))
+    result = fsm.update(obs(0.3, scan_fresh=False))
     assert result.state == NavState.SCANNING
-    assert result.reason == "sensor_ready_birth_scan_resume"
-    assert not fsm.birth_phase_completed
+    assert result.reason == "scanning"
+    result = fsm.update(obs(0.4, scan_fresh=True))
+    assert result.state == NavState.SCANNING
 
 
 def test_birth_scan_budget_exhausted_no_reentry():
@@ -202,16 +201,50 @@ def test_load_birth_scan_config():
     assert abs(cfg["max_total_duration_sec"] - birth_scan_duration_sec(720.0, 0.03)) < 1e-6
 
 
+def test_birth_wait_holds_through_image_stale():
+    fsm = NavStateMachine(birth_cfg())
+    fsm.update(obs(0.0))
+    fsm.update(obs(0.1))
+    assert fsm.state == NavState.BIRTH_WAIT
+    assert fsm.update(obs(0.2, image_fresh=False)).state == NavState.BIRTH_WAIT
+    assert fsm.update(obs(0.2, image_fresh=False)).reason == "birth_wait"
+
+
+def test_wait_sensors_recovers_birth_with_scan_only():
+    fsm = NavStateMachine(birth_cfg())
+    fsm.update(obs(0.0))
+    result = fsm.update(obs(0.1, image_fresh=False, scan_fresh=True))
+    assert result.state == NavState.BIRTH_WAIT
+    assert result.reason == "sensor_ready_birth_wait"
+
+
+def test_birth_wait_timer_survives_wait_sensors_bounce():
+    fsm = NavStateMachine(birth_cfg(birth_scan_wait_sec=1.0))
+    fsm.update(obs(0.0))
+    fsm.update(obs(0.1))
+    assert fsm._birth_wait_started_at == 0.1
+    fsm.state = NavState.WAIT_SENSORS
+    result = fsm.update(obs(0.5, scan_fresh=True))
+    assert result.state == NavState.BIRTH_WAIT
+    assert fsm._birth_wait_started_at == 0.1
+    result = fsm.update(obs(1.15, scan_fresh=True))
+    assert result.state == NavState.SCANNING
+    assert result.reason == "birth_wait_timeout_scan"
+
+
 if __name__ == "__main__":
     test_birth_wait_then_scanning()
     test_birth_wait_target_goes_candidate_lock()
     test_scanning_target_goes_candidate_lock()
     test_scanning_complete_goes_search()
     test_max_two_rotations_total()
-    test_sensor_stale_resumes_scanning_not_birth_wait()
+    test_sensor_stale_holds_scanning_not_birth_wait()
     test_birth_scan_budget_exhausted_no_reentry()
     test_birth_scan_disabled_keeps_legacy_flow()
     test_scanning_ignores_emergency()
     test_load_birth_scan_effective_wz_clipped()
     test_load_birth_scan_config()
+    test_birth_wait_holds_through_image_stale()
+    test_wait_sensors_recovers_birth_with_scan_only()
+    test_birth_wait_timer_survives_wait_sensors_bounce()
     print("PASS test_nav_birth_scan")

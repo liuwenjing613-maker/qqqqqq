@@ -119,7 +119,7 @@ controller_server:
     progress_checker:
       plugin: nav2_controller::SimpleProgressChecker
       required_movement_radius: 0.015
-      movement_time_allowance: 100.0
+      movement_time_allowance: 45.0
     general_goal_checker:
       stateful: true
       plugin: nav2_controller::SimpleGoalChecker
@@ -127,24 +127,24 @@ controller_server:
       yaw_goal_tolerance: 6.28
     FollowPath:
       plugin: nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
-      # Match chassis CHASSIS_MAX_VX=0.04 / CHASSIS_MAX_WZ=0.10 (slam_calibrated_env).
-      desired_linear_vel: 0.04
-      max_linear_accel: 0.12
-      max_linear_decel: 0.12
+      # Match chassis CHASSIS_MAX_VX=0.06 (mvp_tune breakaway ~0.055 m/s).
+      desired_linear_vel: 0.06
+      max_linear_accel: 0.10
+      max_linear_decel: 0.10
       # Longer lookahead: track a farther carrot, fewer micro heading corrections.
       lookahead_dist: 0.80
       min_lookahead_dist: 0.55
       max_lookahead_dist: 1.10
       lookahead_time: 2.5
-      rotate_to_heading_angular_vel: 0.06
+      rotate_to_heading_angular_vel: 0.08
       transform_tolerance: 0.25
       use_velocity_scaled_lookahead_dist: true
-      min_approach_linear_velocity: 0.03
+      min_approach_linear_velocity: 0.04
       approach_velocity_scaling_dist: 0.45
       use_regulated_linear_velocity_scaling: true
       use_cost_regulated_linear_velocity_scaling: false
       regulated_linear_scaling_min_radius: 1.20
-      regulated_linear_scaling_min_speed: 0.03
+      regulated_linear_scaling_min_speed: 0.05
       # Prefer arc-forward over stop-and-spin; only large heading error would spin.
       use_rotate_to_heading: false
       rotate_to_heading_min_angle: 1.20
@@ -168,22 +168,35 @@ local_costmap:
       width: 4
       height: 4
       resolution: 0.05
-      robot_radius: 0.11
-      # Saved-map corridor nav: trust static map walls, not live laser marking.
-      # Live voxel marks near walls when AMCL is slightly off -> phantom obstacles -> stop.
+      robot_radius: 0.13
+      # Local: live laser only (no static map) — static in odom frame blocks motion when AMCL drifts.
       plugins:
-      - static_layer
+      - voxel_layer
       - inflation_layer
-      static_layer:
-        plugin: nav2_costmap_2d::StaticLayer
-        map_subscribe_transient_local: true
-        trinary_costmap: true
-        unknown_cost_value: 255
-        lethal_cost_threshold: 100
+      voxel_layer:
+        plugin: nav2_costmap_2d::VoxelLayer
+        enabled: true
+        publish_voxel_map: false
+        origin_z: 0.0
+        z_resolution: 0.05
+        z_voxels: 16
+        max_obstacle_height: 2.0
+        mark_threshold: 0
+        observation_sources: scan
+        scan:
+          topic: /scan_filtered
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: LaserScan
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.18
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.18
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 2.0
-        inflation_radius: 0.12
+        inflation_radius: 0.14
       always_send_full_costmap: true
 global_costmap:
   global_costmap:
@@ -291,19 +304,19 @@ velocity_smoother:
     scale_velocities: false
     feedback: OPEN_LOOP
     max_velocity:
-    - 0.04
+    - 0.06
     - 0.0
-    - 0.08
+    - 0.10
     min_velocity:
-    - -0.04
+    - -0.06
     - 0.0
-    - -0.08
+    - -0.10
     max_accel:
-    - 0.12
+    - 0.10
     - 0.0
     - 0.08
     max_decel:
-    - -0.12
+    - -0.10
     - 0.0
     - -0.08
     odom_topic: odom
@@ -311,7 +324,7 @@ velocity_smoother:
     deadband_velocity:
     - 0.0
     - 0.0
-    - 0.018
+    - 0.012
     velocity_timeout: 1.0
 lifecycle_manager_localization:
   ros__parameters:

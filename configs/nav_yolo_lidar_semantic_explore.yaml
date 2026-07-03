@@ -15,6 +15,7 @@ camera_hfov_deg: 70.0
 topics:
   image_raw: /image_raw
   scan: /scan
+  odom: /odom
   cmd_vel: /cmd_vel
   target_bbox_json: /target_bbox_json
   target_words: /target_words
@@ -92,9 +93,10 @@ fsm:
 birth_scan:
   enabled: true
   wait_sec: 5.0
-  scan_wz: 0.04
+  scan_wz: 0.08
+  effective_scan_wz: 0.08
   scan_deg: 360.0
-  max_rotations: 2
+  max_rotations: 1.0
   turn_dir: 1.0
   views: 8
   record_sector: true
@@ -132,7 +134,7 @@ safety:
   hard_stop_distance: 0.35
   slow_distance: 0.9
   max_cmd_vx: 0.06
-  max_cmd_wz: 0.06
+  max_cmd_wz: 0.08
   turn_zero_vx_wz: 0.05
   turn_slow_vx_wz: 0.035
   turn_slow_vx_scale: 0.5
@@ -154,8 +156,8 @@ search:
 track:
   blocked_hold_on_target: true
 freshness:
-  image_stale_sec: 0.4
-  scan_stale_sec: 0.3
+  image_stale_sec: 1.2
+  scan_stale_sec: 0.5
   bbox_stale_sec: 0.45
 rates:
   decision_hz: 10
@@ -166,7 +168,7 @@ chassis:
   bridge: pwm
   port: /dev/ttyUSB0
   max_vx: 0.06
-  max_wz: 0.06
+  max_wz: 0.10
   watchdog_timeout: 0.5
   control_rate_hz: 20.0
   wheel_layout: fl-rl-fr-rr
@@ -389,7 +391,7 @@ planner:
   path_publish_topic: /explore_path
   path_follow_lookahead_m: 0.35
   bearing_first:
-    max_vx: 0.025
+    max_vx: 0.035
     max_wz: 0.05
     turn_in_place_threshold_rad: 0.35
     forward_bearing_threshold_rad: 0.22
