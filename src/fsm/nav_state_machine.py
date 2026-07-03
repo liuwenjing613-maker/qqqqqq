@@ -154,6 +154,7 @@ class NavStateMachine:
         sensors_ok = obs.image_fresh and (not obs.require_lidar or obs.scan_fresh)
         task_elapsed = max(0.0, obs.now - self.task_start_time)
         self._update_target_memory(obs)
+        self._tick_birth_scan_yaw(obs)
 
         if self.state in (NavState.SUCCESS, NavState.FAILED):
             reason = "terminal"
@@ -178,9 +179,22 @@ class NavStateMachine:
             reason = "boot"
         elif self.state == NavState.WAIT_SENSORS:
             if sensors_ok:
-                if self.cfg.birth_scan_enabled and not self.birth_phase_completed:
-                    self._enter(NavState.BIRTH_WAIT, obs.now)
-                    reason = "sensor_ready_birth_wait"
+                if self._should_start_or_resume_birth_scan():
+                    if self._birth_scan_budget_exhausted():
+                        self._finish_birth_phase()
+                        self._enter(NavState.SEARCH, obs.now)
+                        reason = "birth_budget_exhausted_on_sensor_ready"
+                    elif self._birth_scan_wall_timeout(obs.now):
+                        self._finish_birth_phase()
+                        self._enter(NavState.SEARCH, obs.now)
+                        reason = "birth_wall_timeout_on_sensor_ready"
+                    elif self.birth_scan_yaw_accumulated_rad > 1e-6:
+                        self._enter(NavState.SCANNING, obs.now)
+                        reason = "sensor_ready_birth_scan_resume"
+                    else:
+                        self._mark_birth_flow_started(obs.now)
+                        self._enter(NavState.BIRTH_WAIT, obs.now)
+                        reason = "sensor_ready_birth_wait"
                 elif target_ok:
                     self._enter(NavState.CANDIDATE_LOCK, obs.now)
                     self.stable_frames = 1
@@ -200,8 +214,13 @@ class NavStateMachine:
                 self.stable_frames = 1
                 reason = "birth_wait_target"
             elif self._state_elapsed(obs.now) >= self.cfg.birth_scan_wait_sec:
-                self._enter(NavState.SCANNING, obs.now)
-                reason = "birth_wait_timeout_scan"
+                if self._birth_scan_budget_exhausted():
+                    self._finish_birth_phase()
+                    self._enter(NavState.SEARCH, obs.now)
+                    reason = "birth_budget_exhausted_before_scan"
+                else:
+                    self._enter(NavState.SCANNING, obs.now)
+                    reason = "birth_wait_timeout_scan"
             else:
                 reason = "birth_wait"
         elif self.state == NavState.SCANNING:
@@ -213,10 +232,14 @@ class NavStateMachine:
                 self._enter(NavState.CANDIDATE_LOCK, obs.now)
                 self.stable_frames = 1
                 reason = "scanning_target"
-            elif self._state_elapsed(obs.now) >= self._birth_scan_duration_sec():
+            elif self._birth_scan_budget_exhausted():
                 self._finish_birth_phase()
                 self._enter(NavState.SEARCH, obs.now)
-                reason = "scanning_complete"
+                reason = "birth_scan_budget_exhausted"
+            elif self._birth_scan_wall_timeout(obs.now):
+                self._finish_birth_phase()
+                self._enter(NavState.SEARCH, obs.now)
+                reason = "birth_scan_wall_timeout"
             else:
                 reason = "scanning"
         elif self.state == NavState.SEARCH:
@@ -297,6 +320,18 @@ class NavStateMachine:
                         self._enter(NavState.CANDIDATE_LOCK, obs.now)
                         self.stable_frames = 1
                         reason = "block_clear_target"
+                    elif self._should_start_or_resume_birth_scan():
+                        if self._birth_scan_budget_exhausted() or self._birth_scan_wall_timeout(obs.now):
+                            self._finish_birth_phase()
+                            self._enter(NavState.SEARCH, obs.now)
+                            reason = "block_clear_birth_budget_done"
+                        elif self.birth_scan_yaw_accumulated_rad > 1e-6:
+                            self._enter(NavState.SCANNING, obs.now)
+                            reason = "block_clear_birth_scan_resume"
+                        else:
+                            self._mark_birth_flow_started(obs.now)
+                            self._enter(NavState.BIRTH_WAIT, obs.now)
+                            reason = "block_clear_birth_wait"
                     else:
                         self._enter(NavState.SEARCH, obs.now)
                         reason = "block_clear_search"
@@ -406,12 +441,49 @@ class NavStateMachine:
         self.last_area_ratio = obs.target_area_ratio
         self.last_height_ratio = obs.target_height_ratio
 
-    def _birth_scan_duration_sec(self) -> float:
-        wz = max(abs(float(self.cfg.birth_scan_effective_wz)), 1e-6)
-        return math.radians(abs(float(self.cfg.birth_scan_deg))) / wz
+    def _in_birth_flow(self) -> bool:
+        return bool(self.cfg.birth_scan_enabled and not self.birth_phase_completed)
+
+    def _should_start_or_resume_birth_scan(self) -> bool:
+        return self._in_birth_flow()
+
+    def _birth_scan_budget_rad(self) -> float:
+        rotations = max(0.0, float(self.cfg.birth_scan_max_rotations))
+        deg_per_rotation = abs(float(self.cfg.birth_scan_deg))
+        return math.radians(rotations * deg_per_rotation)
+
+    def _birth_scan_budget_exhausted(self) -> bool:
+        budget = self._birth_scan_budget_rad()
+        if budget <= 1e-9:
+            return True
+        return self.birth_scan_yaw_accumulated_rad >= budget - 1e-6
+
+    def _birth_scan_wall_timeout(self, now: float) -> bool:
+        if self._birth_flow_start_time is None:
+            return False
+        limit = float(self.cfg.birth_scan_max_wall_timeout_sec)
+        if limit <= 0.0:
+            return False
+        return max(0.0, now - self._birth_flow_start_time) >= limit
+
+    def _mark_birth_flow_started(self, now: float) -> None:
+        if self._birth_flow_start_time is None:
+            self._birth_flow_start_time = now
+
+    def _tick_birth_scan_yaw(self, obs: NavObservation) -> None:
+        if self.state != NavState.SCANNING:
+            self._birth_scan_last_tick_time = None
+            return
+        self._mark_birth_flow_started(obs.now)
+        if self._birth_scan_last_tick_time is not None:
+            dt = max(0.0, obs.now - self._birth_scan_last_tick_time)
+            wz = max(abs(float(self.cfg.birth_scan_effective_wz)), 0.0)
+            self.birth_scan_yaw_accumulated_rad += wz * dt
+        self._birth_scan_last_tick_time = obs.now
 
     def _finish_birth_phase(self) -> None:
         self.birth_phase_completed = True
+        self._birth_scan_last_tick_time = None
 
     def _enter(self, state: NavState, now: float) -> None:
         if state == self.state:

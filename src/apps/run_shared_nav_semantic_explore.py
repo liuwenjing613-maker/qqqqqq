@@ -139,6 +139,8 @@ class SharedNavSemanticExplore(Node):
                 birth_scan_wz=float(birth_scan_cfg["scan_wz"]),
                 birth_scan_effective_wz=float(birth_scan_cfg["effective_scan_wz"]),
                 birth_scan_deg=float(birth_scan_cfg["scan_deg"]),
+                birth_scan_max_rotations=float(birth_scan_cfg["max_rotations"]),
+                birth_scan_max_wall_timeout_sec=float(birth_scan_cfg["max_wall_timeout_sec"]),
                 birth_scan_turn_dir=float(birth_scan_cfg["turn_dir"]),
             )
         )
@@ -270,7 +272,6 @@ class SharedNavSemanticExplore(Node):
         self.observe_update_start: Optional[float] = None
         self.observe_scan_accum_rad = 0.0
         self.birth_sectors: list = []
-        self._birth_scan_yaw_accum = 0.0
         self._birth_last_wz = 0.0
         self.last_explore_candidate_id: Optional[str] = None
 
@@ -320,7 +321,9 @@ class SharedNavSemanticExplore(Node):
             self.get_logger().info(
                 "birth_scan enabled "
                 f"wait={birth_scan_cfg['wait_sec']}s scan_wz={birth_scan_cfg['scan_wz']} "
-                f"scan_deg={birth_scan_cfg['scan_deg']} duration={birth_scan_cfg['scan_duration_sec']:.1f}s"
+                f"scan_deg={birth_scan_cfg['scan_deg']} max_rotations={birth_scan_cfg['max_rotations']} "
+                f"max_total_deg={birth_scan_cfg['max_total_scan_deg']:.0f} "
+                f"max_total_duration={birth_scan_cfg['max_total_duration_sec']:.1f}s"
             )
             if float(birth_scan_cfg["scan_wz"]) > self.chassis_max_wz + 1e-6:
                 self.get_logger().warn(
@@ -457,11 +460,8 @@ class SharedNavSemanticExplore(Node):
             return
         views = max(self.birth_views, 1)
         sector_span = 2.0 * math.pi / views
-        if not self.birth_sectors:
-            self._birth_scan_yaw_accum = 0.0
-        dt = 1.0 / max(float(section(self.cfg, "rates").get("decision_hz", 10)), 1.0)
-        self._birth_scan_yaw_accum += abs(self.birth_scan_wz) * dt
-        idx = int(self._birth_scan_yaw_accum / sector_span)
+        yaw_accum = self.fsm.birth_scan_yaw_accumulated_rad
+        idx = int(yaw_accum / sector_span)
         if idx >= views:
             return
         sector_id = f"spawn_sector_{idx:02d}"
@@ -471,7 +471,7 @@ class SharedNavSemanticExplore(Node):
         self.birth_sectors.append(
             {
                 "sector_id": sector_id,
-                "yaw_robot": self._birth_scan_yaw_accum,
+                "yaw_robot": yaw_accum,
                 "front_clearance_m": front if front is not None else 0.0,
                 "target_seen": self.target_ok(self.last_target),
                 "visited": True,
@@ -950,6 +950,9 @@ class SharedNavSemanticExplore(Node):
             "loss_age_sec": self.loss_age(time.time()),
             "last_target_u": self.search_mem.last_target_u,
             "last_target_ex": self.search_mem.last_target_ex,
+            "birth_phase_completed": self.fsm.birth_phase_completed,
+            "birth_scan_yaw_deg": math.degrees(self.fsm.birth_scan_yaw_accumulated_rad),
+            "birth_scan_budget_deg": math.degrees(self.fsm._birth_scan_budget_rad()),
             "time": time.time(),
         }
         if self.active_explore_goal:
