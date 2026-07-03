@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import math
 import os
 import sys
 
@@ -47,12 +48,23 @@ def birth_cfg(**kwargs):
         birth_scan_enabled=True,
         birth_scan_wait_sec=5.0,
         birth_scan_wz=0.03,
+        birth_scan_effective_wz=0.03,
         birth_scan_deg=360.0,
+        birth_scan_max_rotations=2.0,
+        birth_scan_max_wall_timeout_sec=0.0,
         stable_frames_required=1,
         max_task_sec=0,
     )
     base.update(kwargs)
     return NavFSMConfig(**base)
+
+
+def enter_scanning(fsm: NavStateMachine, t0: float = 0.0) -> float:
+    fsm.update(obs(t0))
+    fsm.update(obs(t0 + 0.1))
+    fsm.update(obs(t0 + 0.2))
+    assert fsm.state == NavState.SCANNING
+    return t0 + 0.2
 
 
 def test_birth_wait_then_scanning():
@@ -73,25 +85,83 @@ def test_birth_wait_target_goes_candidate_lock():
 
 def test_scanning_target_goes_candidate_lock():
     fsm = NavStateMachine(birth_cfg(birth_scan_wait_sec=0.0))
-    fsm.update(obs(0.0))
-    fsm.update(obs(0.1))
-    fsm.update(obs(0.2))
-    assert fsm.state == NavState.SCANNING
+    enter_scanning(fsm)
     assert fsm.update(target_obs(0.3)).state == NavState.CANDIDATE_LOCK
+
+
+def advance_scanning(fsm: NavStateMachine, t_start: float, duration: float, dt: float = 0.05) -> float:
+    t = t_start + dt
+    while t <= t_start + duration + dt:
+        fsm.update(obs(t))
+        t += dt
+    return t
 
 
 def test_scanning_complete_goes_search():
     scan_deg = 18.0
-    duration = birth_scan_duration_sec(scan_deg, 0.03)
-    fsm = NavStateMachine(birth_cfg(birth_scan_wait_sec=0.0, birth_scan_deg=scan_deg))
-    fsm.update(obs(0.0))
-    fsm.update(obs(0.1))
-    fsm.update(obs(0.2))
+    max_rot = 1
+    wz = 0.03
+    duration = birth_scan_duration_sec(scan_deg * max_rot, wz)
+    fsm = NavStateMachine(
+        birth_cfg(
+            birth_scan_wait_sec=0.0,
+            birth_scan_deg=scan_deg,
+            birth_scan_max_rotations=max_rot,
+            birth_scan_effective_wz=wz,
+        )
+    )
+    t_enter = enter_scanning(fsm)
+    advance_scanning(fsm, t_enter, duration - 0.05)
     assert fsm.state == NavState.SCANNING
-    t_enter = 0.2
-    assert fsm.update(obs(t_enter + duration - 0.01)).state == NavState.SCANNING
-    assert fsm.update(obs(t_enter + duration + 0.01)).state == NavState.SEARCH
+    result = fsm.update(obs(t_enter + duration + 0.2))
+    assert result.state == NavState.SEARCH
     assert fsm.birth_phase_completed
+
+
+def test_max_two_rotations_total():
+    wz = 0.03
+    duration = birth_scan_duration_sec(720.0, wz)
+    fsm = NavStateMachine(
+        birth_cfg(
+            birth_scan_wait_sec=0.0,
+            birth_scan_deg=360.0,
+            birth_scan_max_rotations=2.0,
+            birth_scan_effective_wz=wz,
+        )
+    )
+    t_enter = enter_scanning(fsm)
+    advance_scanning(fsm, t_enter, duration - 0.05)
+    assert fsm.state == NavState.SCANNING
+    result = fsm.update(obs(t_enter + duration + 0.2))
+    assert result.state == NavState.SEARCH
+    assert result.reason == "birth_scan_budget_exhausted"
+    assert fsm.birth_phase_completed
+    assert fsm.birth_scan_yaw_accumulated_rad >= math.radians(720.0) - 1e-3
+
+
+def test_sensor_stale_resumes_scanning_not_birth_wait():
+    fsm = NavStateMachine(birth_cfg(birth_scan_wait_sec=0.0))
+    enter_scanning(fsm)
+    fsm.birth_scan_yaw_accumulated_rad = 0.5
+    fsm.update(obs(0.3, scan_fresh=False))
+    assert fsm.state == NavState.WAIT_SENSORS
+    result = fsm.update(obs(0.4))
+    assert result.state == NavState.SCANNING
+    assert result.reason == "sensor_ready_birth_scan_resume"
+    assert not fsm.birth_phase_completed
+
+
+def test_birth_scan_budget_exhausted_no_reentry():
+    fsm = NavStateMachine(birth_cfg(birth_scan_wait_sec=0.0))
+    enter_scanning(fsm)
+    fsm.birth_scan_yaw_accumulated_rad = fsm._birth_scan_budget_rad()
+    result = fsm.update(obs(0.3))
+    assert result.state == NavState.SEARCH
+    assert fsm.birth_phase_completed
+    fsm.update(obs(1.0, scan_fresh=False))
+    result = fsm.update(obs(1.1))
+    assert result.state == NavState.SEARCH
+    assert not fsm._should_start_or_resume_birth_scan()
 
 
 def test_birth_scan_disabled_keeps_legacy_flow():
@@ -102,10 +172,7 @@ def test_birth_scan_disabled_keeps_legacy_flow():
 
 def test_scanning_ignores_emergency():
     fsm = NavStateMachine(birth_cfg(birth_scan_wait_sec=0.0))
-    fsm.update(obs(0.0))
-    fsm.update(obs(0.1))
-    fsm.update(obs(0.2))
-    assert fsm.state == NavState.SCANNING
+    enter_scanning(fsm)
     assert fsm.update(obs(0.3, emergency=True, front_distance=0.08)).state == NavState.SCANNING
 
 
@@ -117,7 +184,10 @@ def test_load_birth_scan_effective_wz_clipped():
         }
     )
     assert cfg["effective_scan_wz"] == 0.06
+    assert cfg["max_rotations"] == 2.0
+    assert abs(cfg["max_total_scan_deg"] - 720.0) < 1e-6
     assert abs(cfg["scan_duration_sec"] - birth_scan_duration_sec(360.0, 0.06)) < 1e-6
+    assert abs(cfg["max_total_duration_sec"] - birth_scan_duration_sec(720.0, 0.06)) < 1e-6
 
 
 def test_load_birth_scan_config():
@@ -127,7 +197,9 @@ def test_load_birth_scan_config():
     assert cfg["enabled"] is True
     assert cfg["wait_sec"] == 5.0
     assert cfg["scan_wz"] == 0.03
+    assert cfg["max_rotations"] == 2.0
     assert abs(cfg["scan_duration_sec"] - birth_scan_duration_sec(360.0, 0.03)) < 1e-6
+    assert abs(cfg["max_total_duration_sec"] - birth_scan_duration_sec(720.0, 0.03)) < 1e-6
 
 
 if __name__ == "__main__":
@@ -135,6 +207,9 @@ if __name__ == "__main__":
     test_birth_wait_target_goes_candidate_lock()
     test_scanning_target_goes_candidate_lock()
     test_scanning_complete_goes_search()
+    test_max_two_rotations_total()
+    test_sensor_stale_resumes_scanning_not_birth_wait()
+    test_birth_scan_budget_exhausted_no_reentry()
     test_birth_scan_disabled_keeps_legacy_flow()
     test_scanning_ignores_emergency()
     test_load_birth_scan_effective_wz_clipped()

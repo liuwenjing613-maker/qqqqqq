@@ -139,6 +139,8 @@ class SharedNav(Node):
                 birth_scan_wz=float(birth_scan_cfg["scan_wz"]),
                 birth_scan_effective_wz=float(birth_scan_cfg["effective_scan_wz"]),
                 birth_scan_deg=float(birth_scan_cfg["scan_deg"]),
+                birth_scan_max_rotations=float(birth_scan_cfg["max_rotations"]),
+                birth_scan_max_wall_timeout_sec=float(birth_scan_cfg["max_wall_timeout_sec"]),
                 birth_scan_turn_dir=float(birth_scan_cfg["turn_dir"]),
             )
         )
@@ -276,7 +278,9 @@ class SharedNav(Node):
             self.get_logger().info(
                 "birth_scan enabled "
                 f"wait={birth_scan_cfg['wait_sec']}s scan_wz={birth_scan_cfg['scan_wz']} "
-                f"scan_deg={birth_scan_cfg['scan_deg']} duration={birth_scan_cfg['scan_duration_sec']:.1f}s"
+                f"scan_deg={birth_scan_cfg['scan_deg']} max_rotations={birth_scan_cfg['max_rotations']} "
+                f"max_total_deg={birth_scan_cfg['max_total_scan_deg']:.0f} "
+                f"max_total_duration={birth_scan_cfg['max_total_duration_sec']:.1f}s"
             )
             if float(birth_scan_cfg["scan_wz"]) > self.chassis_max_wz + 1e-6:
                 self.get_logger().warn(
