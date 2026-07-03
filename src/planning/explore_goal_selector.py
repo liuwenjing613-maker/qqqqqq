@@ -11,20 +11,20 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path as PathLib
 from typing import Any, Dict, List, Optional, Tuple
 
 import rclpy
 import yaml
-from geometry_msgs.msg import Point, PoseStamped
-from nav_msgs.msg import OccupancyGrid, Path
+from geometry_msgs.msg import Point, PoseStamped, PoseWithCovarianceStamped
+from nav_msgs.msg import OccupancyGrid, Odometry, Path as NavPath
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import ColorRGBA, Header, String
 from visualization_msgs.msg import Marker, MarkerArray
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = PathLib(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -44,6 +44,13 @@ try:
 except ImportError:
     tf2_ros = None
     euler_from_quaternion = None
+
+
+def _yaw_from_quaternion(qx: float, qy: float, qz: float, qw: float) -> float:
+    if euler_from_quaternion is not None:
+        _, _, yaw = euler_from_quaternion([qx, qy, qz, qw])
+        return float(yaw)
+    return math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
 
 
 def _section(raw: Dict[str, Any], key: str) -> Dict[str, Any]:
@@ -117,6 +124,14 @@ class ExploreGoalSelector(Node):
         rates = _section(cfg, "rates")
         topics = _section(cfg, "topics")
         target_cfg = _section(cfg, "target")
+        mapping_cfg = _section(cfg, "semantic_mapping")
+        frames_cfg = _section(mapping_cfg, "frames")
+        mapping_topics = _section(mapping_cfg, "topics")
+
+        self._frame_fixed = str(frames_cfg.get("fixed_frame", "map"))
+        self._frame_fallback = str(frames_cfg.get("fallback_frame", "odom"))
+        self._base_frame = str(frames_cfg.get("base_frame", "base_link"))
+        self._pose_frame = self._frame_fixed
 
         self.explore_enabled = bool(explore.get("enabled", True))
         self.hint_topic = str(explore.get("hint_topic", topics.get("explore_goal_hint", "/explore_goal_hint")))
@@ -154,6 +169,8 @@ class ExploreGoalSelector(Node):
         self.latest_map: Optional[OccupancyGrid] = None
         self.latest_scan: Optional[LaserScan] = None
         self.latest_bbox: Dict[str, Any] = {}
+        self.latest_odom: Optional[Odometry] = None
+        self.latest_pose: Optional[PoseWithCovarianceStamped] = None
         self.robot_pose: Optional[Tuple[float, float, float]] = None
         self.blacklist_regions: List[BlacklistRegion] = []
         self.observed_sectors: List[Dict[str, Any]] = []
@@ -162,13 +179,15 @@ class ExploreGoalSelector(Node):
         self._selected: Optional[ExploreCandidate] = None
         self._last_frontiers: List[Any] = []
         self._last_path: List[Tuple[float, float]] = []
-        self._fixed_frame = "map"
+        self._fixed_frame = self._frame_fixed
         self._last_nav_failed_count = 0
+        self._last_candidates: List[ExploreCandidate] = []
+        self._status_message = "initializing"
 
         self.pub_hint = self.create_publisher(String, self.hint_topic, 10)
         self.pub_state = self.create_publisher(String, self.state_topic, 10)
         self.pub_path = self.create_publisher(
-            Path, topics.get("explore_path", "/explore_path"), 10
+            NavPath, topics.get("explore_path", "/explore_path"), 10
         )
         self.pub_qwen = self.create_publisher(String, "/qwen_text_decision", 10)
 
@@ -176,11 +195,20 @@ class ExploreGoalSelector(Node):
         self.pub_selected_markers = self.create_publisher(MarkerArray, "/explore_selected_goal", 10)
         self.pub_frontier_markers = self.create_publisher(MarkerArray, "/explore_frontiers", 10)
 
+        map_qos = QoSProfile(
+            depth=1,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=ReliabilityPolicy.RELIABLE,
+        )
         self.create_subscription(String, "/semantic_map_json", self._on_semantic_map, 10)
-        self.create_subscription(OccupancyGrid, frontier_cfg.get("map_topic", "/map"), self._on_map, 10)
+        self.create_subscription(
+            OccupancyGrid, frontier_cfg.get("map_topic", "/map"), self._on_map, map_qos
+        )
         self.create_subscription(LaserScan, "/scan_filtered", self._on_scan, qos_profile_sensor_data)
         self.create_subscription(String, "/target_bbox_json", self._on_bbox, 10)
         self.create_subscription(String, "/nav_state", self._on_nav_state, 10)
+        self.create_subscription(Odometry, mapping_topics.get("odom", "/odom"), self._on_odom, 10)
+        self.create_subscription(PoseWithCovarianceStamped, "/pose", self._on_pose, 10)
 
         self.tf_buffer = None
         self.tf_listener = None
@@ -195,7 +223,11 @@ class ExploreGoalSelector(Node):
     def _on_semantic_map(self, msg: String) -> None:
         try:
             self.semantic_map = json.loads(msg.data)
-            self._fixed_frame = str(self.semantic_map.get("fixed_frame", "map"))
+            self._fixed_frame = str(
+                self.semantic_map.get("frame_id")
+                or self.semantic_map.get("fixed_frame")
+                or self._frame_fixed
+            )
             vps = self.semantic_map.get("viewpoints") or []
             self.observed_sectors = []
             for vp in vps:
@@ -222,6 +254,12 @@ class ExploreGoalSelector(Node):
         except json.JSONDecodeError:
             self.latest_bbox = {}
 
+    def _on_odom(self, msg: Odometry) -> None:
+        self.latest_odom = msg
+
+    def _on_pose(self, msg: PoseWithCovarianceStamped) -> None:
+        self.latest_pose = msg
+
     def _on_nav_state(self, msg: String) -> None:
         try:
             state = json.loads(msg.data)
@@ -235,10 +273,6 @@ class ExploreGoalSelector(Node):
         goal_pose = None
         if self._selected:
             goal_pose = self._selected.goal_xy
-        elif self.latest_explore_hint:
-            gp = self.latest_explore_hint.get("goal_pose")
-            if isinstance(gp, list) and len(gp) >= 2:
-                goal_pose = (float(gp[0]), float(gp[1]))
         if goal_pose:
             now = time.time()
             self.blacklist_regions.append(
@@ -255,31 +289,66 @@ class ExploreGoalSelector(Node):
             )
 
     def _update_robot_pose(self) -> bool:
-        if self.tf_buffer is None or euler_from_quaternion is None:
-            return False
-        try:
-            tf = self.tf_buffer.lookup_transform(
-                self._fixed_frame,
-                "base_link",
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.2),
+        base = self._base_frame
+        if self.tf_buffer is not None:
+            for frame_id in (self._frame_fixed, self._frame_fallback):
+                try:
+                    tf = self.tf_buffer.lookup_transform(
+                        frame_id,
+                        base,
+                        rclpy.time.Time(),
+                        timeout=rclpy.duration.Duration(seconds=0.2),
+                    )
+                    x = float(tf.transform.translation.x)
+                    y = float(tf.transform.translation.y)
+                    q = tf.transform.rotation
+                    yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
+                    self.robot_pose = (x, y, yaw)
+                    self._pose_frame = frame_id
+                    return True
+                except Exception:
+                    continue
+
+        if self.latest_odom is not None:
+            msg = self.latest_odom
+            q = msg.pose.pose.orientation
+            yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
+            self.robot_pose = (
+                float(msg.pose.pose.position.x),
+                float(msg.pose.pose.position.y),
+                yaw,
             )
-            x = float(tf.transform.translation.x)
-            y = float(tf.transform.translation.y)
-            q = tf.transform.rotation
-            _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
-            self.robot_pose = (x, y, yaw)
+            self._pose_frame = str(msg.header.frame_id or self._frame_fallback)
             return True
-        except Exception:
-            odom = self.semantic_map.get("robot_pose")
-            if isinstance(odom, dict):
-                self.robot_pose = (
-                    float(odom.get("x", 0.0)),
-                    float(odom.get("y", 0.0)),
-                    float(odom.get("yaw", 0.0)),
-                )
-                return True
+
+        if self.latest_pose is not None:
+            msg = self.latest_pose
+            q = msg.pose.pose.orientation
+            yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
+            self.robot_pose = (
+                float(msg.pose.pose.position.x),
+                float(msg.pose.pose.position.y),
+                yaw,
+            )
+            self._pose_frame = str(msg.header.frame_id or self._frame_fixed)
+            return True
+
+        odom = self.semantic_map.get("robot_pose")
+        if isinstance(odom, dict):
+            self.robot_pose = (
+                float(odom.get("x", 0.0)),
+                float(odom.get("y", 0.0)),
+                float(odom.get("yaw", 0.0)),
+            )
+            self._pose_frame = str(odom.get("frame_id", self._frame_fixed))
+            return True
+        return False
+
+    def _pose_matches_map(self) -> bool:
+        if self.latest_map is None:
             return False
+        map_frame = str(self.latest_map.header.frame_id or self._frame_fixed)
+        return self._pose_frame == map_frame
 
     def _scan_arrays(self) -> Tuple[Optional[List[float]], Optional[List[float]]]:
         if self.latest_scan is None:
@@ -374,81 +443,90 @@ class ExploreGoalSelector(Node):
         candidates: List[ExploreCandidate] = []
         ranges, angles = self._scan_arrays()
         target_class = self.parsed.target_category
+        map_aligned = self._pose_matches_map()
+        marker_frame = (
+            str(self.latest_map.header.frame_id)
+            if self.latest_map is not None and map_aligned
+            else self._pose_frame
+        )
+        self._fixed_frame = marker_frame
 
-        for lm in self._confirmed_landmarks():
-            cls = str(lm.get("class_name", ""))
-            if is_target_match(self.parsed.target_aliases, cls) <= 0:
-                continue
-            ox, oy = float(lm.get("x", 0.0)), float(lm.get("y", 0.0))
-            standoff = self._standoff_goal(ox, oy, robot_xy)
-            if standoff is None:
-                continue
-            gx, gy, gyaw = standoff
-            dist = math.hypot(gx - robot_xy[0], gy - robot_xy[1])
-            cand = ExploreCandidate(
-                candidate_id=self._next_cand_id(),
-                mode="target_landmark",
-                goal_xy=(gx, gy),
-                goal_yaw=gyaw,
-                look_at=(ox, oy),
-                semantic_score=1.0,
-                information_gain=0.4,
-                reachability=0.8,
-                novelty=self._novelty_at(gx, gy),
-                safety_margin=min(1.0, self._front_clearance() / 2.0),
-                travel_cost_penalty=min(0.5, dist / 4.0),
-                reason=f"target landmark {cls} standoff",
-                source={"type": "target_landmark", "landmark_id": lm.get("landmark_id"), "class_name": cls},
-                target_class=target_class,
-            )
-            cand.blacklist_penalty = self._blacklist_penalty(gx, gy, target_class) * float(
-                self.scoring_weights.get("blacklist_penalty", 0.3)
-            )
-            candidates.append(cand)
+        if map_aligned:
+            for lm in self._confirmed_landmarks():
+                cls = str(lm.get("class_name", ""))
+                if is_target_match(self.parsed.target_aliases, cls) <= 0:
+                    continue
+                ox, oy = float(lm.get("x", 0.0)), float(lm.get("y", 0.0))
+                standoff = self._standoff_goal(ox, oy, robot_xy)
+                if standoff is None:
+                    continue
+                gx, gy, gyaw = standoff
+                dist = math.hypot(gx - robot_xy[0], gy - robot_xy[1])
+                cand = ExploreCandidate(
+                    candidate_id=self._next_cand_id(),
+                    mode="target_landmark",
+                    goal_xy=(gx, gy),
+                    goal_yaw=gyaw,
+                    look_at=(ox, oy),
+                    semantic_score=1.0,
+                    information_gain=0.4,
+                    reachability=0.8,
+                    novelty=self._novelty_at(gx, gy),
+                    safety_margin=min(1.0, self._front_clearance() / 2.0),
+                    travel_cost_penalty=min(0.5, dist / 4.0),
+                    reason=f"target landmark {cls} standoff",
+                    source={"type": "target_landmark", "landmark_id": lm.get("landmark_id"), "class_name": cls},
+                    target_class=target_class,
+                )
+                cand.blacklist_penalty = self._blacklist_penalty(gx, gy, target_class) * float(
+                    self.scoring_weights.get("blacklist_penalty", 0.3)
+                )
+                candidates.append(cand)
 
-        context_objects = self.parsed.context_objects
-        if not context_objects:
-            for key in ("cup", "bottle", "backpack", "book", "plant"):
-                block = self.priors_cfg.get(key, {})
-                if block.get("context_objects"):
-                    context_objects = block["context_objects"]
-                    break
+        if map_aligned:
+            context_objects = self.parsed.context_objects
+            if not context_objects:
+                for key in ("cup", "bottle", "backpack", "book", "plant"):
+                    block = self.priors_cfg.get(key, {})
+                    if block.get("context_objects"):
+                        context_objects = block["context_objects"]
+                        break
 
-        for lm in self._confirmed_landmarks():
-            cls = str(lm.get("class_name", ""))
-            if is_target_match(self.parsed.target_aliases, cls) > 0:
-                continue
-            sem = context_score(target_class, cls, self.priors_cfg)
-            if sem <= 0.1:
-                continue
-            ox, oy = float(lm.get("x", 0.0)), float(lm.get("y", 0.0))
-            standoff = self._standoff_goal(ox, oy, robot_xy)
-            if standoff is None:
-                continue
-            gx, gy, gyaw = standoff
-            dist = math.hypot(gx - robot_xy[0], gy - robot_xy[1])
-            cand = ExploreCandidate(
-                candidate_id=self._next_cand_id(),
-                mode="context_landmark",
-                goal_xy=(gx, gy),
-                goal_yaw=gyaw,
-                look_at=(ox, oy),
-                semantic_score=sem,
-                information_gain=0.5,
-                reachability=0.75,
-                novelty=self._novelty_at(gx, gy),
-                safety_margin=min(1.0, self._front_clearance() / 2.0),
-                travel_cost_penalty=min(0.5, dist / 4.0),
-                reason=f"near {cls}, partially unexplored",
-                source={"type": "semantic_context", "landmark_id": lm.get("landmark_id"), "class_name": cls},
-                target_class=target_class,
-            )
-            cand.blacklist_penalty = self._blacklist_penalty(gx, gy, target_class) * float(
-                self.scoring_weights.get("blacklist_penalty", 0.3)
-            )
-            candidates.append(cand)
+            for lm in self._confirmed_landmarks():
+                cls = str(lm.get("class_name", ""))
+                if is_target_match(self.parsed.target_aliases, cls) > 0:
+                    continue
+                sem = context_score(target_class, cls, self.priors_cfg)
+                if sem <= 0.1:
+                    continue
+                ox, oy = float(lm.get("x", 0.0)), float(lm.get("y", 0.0))
+                standoff = self._standoff_goal(ox, oy, robot_xy)
+                if standoff is None:
+                    continue
+                gx, gy, gyaw = standoff
+                dist = math.hypot(gx - robot_xy[0], gy - robot_xy[1])
+                cand = ExploreCandidate(
+                    candidate_id=self._next_cand_id(),
+                    mode="context_landmark",
+                    goal_xy=(gx, gy),
+                    goal_yaw=gyaw,
+                    look_at=(ox, oy),
+                    semantic_score=sem,
+                    information_gain=0.5,
+                    reachability=0.75,
+                    novelty=self._novelty_at(gx, gy),
+                    safety_margin=min(1.0, self._front_clearance() / 2.0),
+                    travel_cost_penalty=min(0.5, dist / 4.0),
+                    reason=f"near {cls}, partially unexplored",
+                    source={"type": "semantic_context", "landmark_id": lm.get("landmark_id"), "class_name": cls},
+                    target_class=target_class,
+                )
+                cand.blacklist_penalty = self._blacklist_penalty(gx, gy, target_class) * float(
+                    self.scoring_weights.get("blacklist_penalty", 0.3)
+                )
+                candidates.append(cand)
 
-        if bool(self.frontier_cfg.get("enabled", True)) and self.latest_map is not None:
+        if map_aligned and bool(self.frontier_cfg.get("enabled", True)) and self.latest_map is not None:
             frontiers = extract_frontiers(
                 self.latest_map, (robot_xy[0], robot_xy[1]), self.frontier_cfg, ranges, angles
             )
@@ -599,7 +677,7 @@ class ExploreGoalSelector(Node):
             )
             self._last_path = path
             if path:
-                path_msg = Path()
+                path_msg = NavPath()
                 path_msg.header = Header()
                 path_msg.header.stamp = self.get_clock().now().to_msg()
                 path_msg.header.frame_id = self._fixed_frame
@@ -635,6 +713,19 @@ class ExploreGoalSelector(Node):
             m = self._marker_sphere("candidates", i, c.goal_xy[0], c.goal_xy[1], (1.0, 1.0, 0.0, 0.9), 0.12)
             m.header.stamp = stamp
             cand_arr.markers.append(m)
+            label = Marker()
+            label.header = m.header
+            label.ns = "candidate_labels"
+            label.id = 100 + i
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position.x = c.goal_xy[0]
+            label.pose.position.y = c.goal_xy[1]
+            label.pose.position.z = 0.25
+            label.scale.z = 0.12
+            label.color = ColorRGBA(r=1.0, g=1.0, b=0.2, a=0.95)
+            label.text = f"{c.candidate_id} {c.mode[:8]} {c.total_score:.2f}"
+            cand_arr.markers.append(label)
         self.pub_candidate_markers.publish(cand_arr)
 
         sel_arr = MarkerArray()
@@ -667,36 +758,54 @@ class ExploreGoalSelector(Node):
 
     def _select_tick(self) -> None:
         if not self.explore_enabled:
+            self._status_message = "semantic_explore.disabled"
             return
         if self._target_visible():
+            self._status_message = "target_visible_skip"
             return
         if not self._update_robot_pose() or self.robot_pose is None:
+            self._status_message = "waiting_robot_pose"
+            return
+        if self.latest_map is None:
+            self._status_message = "waiting_map"
             return
         now = time.time()
         if now - self._last_select_time < self.reselect_interval_sec and self._selected is not None:
             self._publish_hint(self._selected, self.robot_pose)
+            self._publish_markers(self._last_candidates, self._selected)
             return
         self._last_select_time = now
         robot_xy = self.robot_pose
         candidates = self._generate_candidates(robot_xy)
+        self._last_candidates = candidates
         selected = self._score_candidates(candidates)
         self._selected = selected
+        self._status_message = "selected" if selected else "no_candidate_above_threshold"
         self._publish_hint(selected, robot_xy)
         self._publish_markers(candidates, selected)
 
     def _publish_state_tick(self) -> None:
         payload = {
             "state": "SEMANTIC_EXPLORE" if self._selected else "SEARCH",
+            "status": self._status_message,
             "instruction": self.instruction,
             "target_aliases": self.parsed.target_aliases,
+            "target_visible": self._target_visible(),
+            "has_map": self.latest_map is not None,
+            "has_scan": self.latest_scan is not None,
+            "has_robot_pose": self.robot_pose is not None,
+            "pose_frame": self._pose_frame,
+            "map_frame": str(self.latest_map.header.frame_id) if self.latest_map else None,
+            "pose_map_aligned": self._pose_matches_map(),
             "num_landmarks": len(self._confirmed_landmarks()),
             "num_frontiers": len(self._last_frontiers),
-            "num_candidates": self._cand_counter,
+            "num_candidates_last": len(self._last_candidates),
             "selected_candidate": self._selected.candidate_id if self._selected else None,
             "selected_reason": self._selected.reason if self._selected else "",
             "qwen_enabled": self.qwen.enabled,
             "fallback": self._selected is None,
             "blacklist_count": len(self.blacklist_regions),
+            "stamp": time.time(),
         }
         self.pub_state.publish(String(data=json.dumps(payload, ensure_ascii=False)))
 

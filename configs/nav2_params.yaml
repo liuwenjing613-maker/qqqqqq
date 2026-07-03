@@ -132,13 +132,13 @@ controller_server:
       max_linear_accel: 0.10
       max_linear_decel: 0.10
       # Longer lookahead: track a farther carrot, fewer micro heading corrections.
-      lookahead_dist: 0.80
-      min_lookahead_dist: 0.55
-      max_lookahead_dist: 1.10
+      lookahead_dist: 1.10
+      min_lookahead_dist: 1.10
+      max_lookahead_dist: 1.16
       lookahead_time: 2.5
       rotate_to_heading_angular_vel: 0.08
       transform_tolerance: 0.25
-      use_velocity_scaled_lookahead_dist: true
+      use_velocity_scaled_lookahead_dist: false
       min_approach_linear_velocity: 0.04
       approach_velocity_scaling_dist: 0.45
       use_regulated_linear_velocity_scaling: true
@@ -148,8 +148,8 @@ controller_server:
       # Prefer arc-forward over stop-and-spin; only large heading error would spin.
       use_rotate_to_heading: false
       rotate_to_heading_min_angle: 1.20
-      allow_reversing: true
-      max_angular_accel: 0.08
+      allow_reversing:false
+      max_angular_accel: 0.04
       max_robot_pose_search_dist: 8.0
       use_interpolation: true
       use_collision_detection: false
