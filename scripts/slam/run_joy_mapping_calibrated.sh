@@ -7,6 +7,8 @@ set -u
 
 cd ~/rdk_x5_vln_robot
 
+# shellcheck source=scripts/lib/cleanup_lidar_slam_nav.sh
+source "${PWD}/scripts/lib/cleanup_lidar_slam_nav.sh"
 # shellcheck source=scripts/lib/slam_calibrated_env.sh
 source "${PWD}/scripts/lib/slam_calibrated_env.sh"
 export SLAM_USE_CALIBRATION=1
@@ -375,7 +377,12 @@ show_status() {
   echo "========== Foxglove (IMPORTANT) =========="
   local ip
   ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  echo "Connect: ws://${ip}:8765"
+  if foxglove_bridge_log_looks_healthy "${PWD}/logs/slam_live/foxglove_bridge.log"; then
+    echo "Bridge: OK (ws://${ip}:8765)"
+  else
+    echo "Bridge: FAILED — ws://${ip}:8765 may be a STALE nav2/semantic bridge (no /scan_filtered)"
+    echo "Check: tail -f logs/slam_live/foxglove_bridge.log"
+  fi
   echo ""
   echo "DO NOT use Image panel (图像面板) for /map or /scan!"
   echo "/map is OccupancyGrid -> need 3D panel."
@@ -415,6 +422,12 @@ main() {
   stop_joystick_nodes
   sleep 1
 
+  log "Ensure Foxglove port 8765 is free (avoid nav2/semantic bridge stealing /scan)..."
+  if ! ensure_foxglove_port_free 8765 12; then
+    log "WARN: port 8765 still busy; mapping scan may not appear in Foxglove"
+    log "WARN: stop other stacks first, then restart this script"
+  fi
+
   log "[1/4] Start calibrated SLAM + Foxglove live stack"
   start_bg live_stack setsid bash scripts/slam/run_slam_calibrated.sh
 
@@ -453,6 +466,14 @@ main() {
     stop_live_stack 2>/dev/null || true
     exit 1
   }
+
+  if foxglove_bridge_log_looks_healthy "${PWD}/logs/slam_live/foxglove_bridge.log"; then
+    log "OK: Foxglove bridge healthy (port 8765; /scan_filtered should display in 3D panel)"
+  else
+    log "ERROR: Foxglove bridge NOT healthy — Foxglove may show /map but NO laser scan"
+    log "ERROR: check logs/slam_live/foxglove_bridge.log for 'Bind Error'"
+    log "HINT: stop nav2/semantic stacks that own port 8765, then restart this script"
+  fi
 
   # live_stack 会先 kill 旧 bridge 再重启；topic 名可能已存在但尚未发数据
   log "Waiting for /odom to publish (chassis bridge starts after lidar in live_stack) ..."

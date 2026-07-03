@@ -6,6 +6,7 @@ set -Eeo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
 source "${PROJECT_DIR}/scripts/lib/nav2_localization_bootstrap.sh"
+source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
 MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
 GOAL_POINT_TOPIC="${GOAL_POINT_TOPIC:-/foxglove_goal_point}"
 GOAL_POSE_TOPIC="${GOAL_POSE_TOPIC:-/foxglove_goal_pose}"
@@ -17,6 +18,7 @@ POSE_STATE_FILE="${POSE_STATE_FILE:-$STATE_DIR/last_pose_map.json}"
 LOG_DIR="${PROJECT_DIR}/logs/nav2_foxglove_click_$(date +%Y%m%d_%H%M%S)"
 
 PIDS=()
+CLEANUP_DONE=0
 
 log() { echo "[CLICK_NAV2] $*"; }
 
@@ -26,6 +28,7 @@ source_ros() {
   [ -f /opt/tros/humble/setup.bash ] && source /opt/tros/humble/setup.bash
   [ -f "$HOME/ydlidar_ws/install/setup.bash" ] && source "$HOME/ydlidar_ws/install/setup.bash"
   set -u
+  export_ros_dds_env
 }
 
 start_bg() {
@@ -43,11 +46,32 @@ zero_cmd() {
 }
 
 cleanup() {
-  log "cleanup: stop robot and processes started by this wrapper"
-  zero_cmd
+  if [ "$CLEANUP_DONE" = "1" ]; then
+    return 0
+  fi
+  CLEANUP_DONE=1
+  trap - INT TERM EXIT
+
+  log "cleanup: stopping click-nav stack (Ctrl+C / exit)..."
+
+  # Stop direct children first (nav2_saved_map, click_goal_bridge, pose_memory).
+  local pid
   for pid in "${PIDS[@]:-}"; do
-    kill "$pid" >/dev/null 2>&1 || true
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -TERM "$pid" 2>/dev/null || true
+    fi
   done
+  sleep 1
+  for pid in "${PIDS[@]:-}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  done
+
+  # Kill any leftover Nav2 / lidar / chassis / bridge nodes and clear DDS shm.
+  cleanup_click_nav_stack_processes "CLICK_NAV2" log
+
+  log "cleanup done — safe to restart run_nav2_foxglove_click_goal.sh"
 }
 trap cleanup INT TERM EXIT
 
@@ -116,6 +140,7 @@ while time.time() - start < timeout:
         pass
 node.destroy_node()
 rclpy.shutdown()
+print("[CLICK_NAV2] ERROR: map -> base_link TF not available (align /initialpose in Foxglove)")
 raise SystemExit(1)
 PY
 }
@@ -130,6 +155,12 @@ wait_nav2_saved_map_ready() {
   log "  backend steps: lidar -> chassis -> map_server -> AMCL -> planner -> bt_navigator"
   log "  tail progress: tail -f ${LOG_DIR}/nav2_saved_map.log"
   while true; do
+    if [ -n "${NAV2_SAVED_MAP_PID:-}" ] && ! kill -0 "$NAV2_SAVED_MAP_PID" 2>/dev/null; then
+      log "ERROR: nav2_saved_map backend exited before ready file appeared"
+      log "HINT: tail -30 ${LOG_DIR}/nav2_saved_map.log"
+      tail -n 8 "${LOG_DIR}/nav2_saved_map.log" 2>/dev/null | sed 's/^/[CLICK_NAV2]   /' || true
+      return 1
+    fi
     local ready_file
     ready_file="$(python3 - "$PROJECT_DIR" "$min_epoch" <<'PY'
 import glob
@@ -160,7 +191,13 @@ PY
     now="$(date +%s)"
     elapsed=$(( now - start ))
     if [ $(( now - last_heartbeat )) -ge 15 ]; then
-      log "still waiting for Nav2 ready... ${elapsed}s elapsed (normal: 60-180s on first boot)"
+      local boot_hint
+      boot_hint="$(tail -n 1 "${LOG_DIR}/nav2_saved_map.log" 2>/dev/null | sed 's/^[[:space:]]*//')"
+      if [ -n "$boot_hint" ]; then
+        log "still waiting for Nav2 ready... ${elapsed}s elapsed | backend: ${boot_hint}"
+      else
+        log "still waiting for Nav2 ready... ${elapsed}s elapsed (normal: 90-210s on first boot)"
+      fi
       last_heartbeat="$now"
     fi
     if [ "$elapsed" -ge "$ready_timeout" ]; then
@@ -196,9 +233,12 @@ print_click_ready_banner() {
   echo "工具: Publish -> 2D point -> ${GOAL_POINT_TOPIC}"
   echo "操作: 在地图白色区域单击一次（导航进行中请勿重复点击）"
   echo "路径显示: /foxglove_click_planned_path"
-  echo "终点标注: /foxglove_click_goal_marker (橙色圆圈+文字)"
-  echo "日志: ${LOG_DIR}"
-  echo "按 Ctrl+C 停止本脚本"
+  echo "终点标注: /foxglove_click_goal_marker + /foxglove_click_goal_label"
+  echo "日志目录:"
+  echo "  点击导航: ${LOG_DIR}/click_goal_bridge.log"
+  echo "  Nav2栈:   ${LOG_DIR}/nav2_saved_map.log  (及 logs/nav2_*/nav2.log)"
+  echo "实时: tail -f ${LOG_DIR}/click_goal_bridge.log"
+  echo "按 Ctrl+C 停止本脚本（将自动清理全部 Nav2 / 雷达 / 底盘 / Foxglove 进程）"
   echo "=============================================================="
 }
 
@@ -242,7 +282,11 @@ main() {
     fi
     export NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-1}"
     export NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-0}"
+    # Click-nav only: uniform motor trims (does not change mapping / other scripts).
+    export CLICK_NAV_CHASSIS_MOTOR_TRIMS="${CLICK_NAV_CHASSIS_MOTOR_TRIMS:-1.0,1.0,1.0,1.0}"
+    log "CLICK_NAV motor trims=${CLICK_NAV_CHASSIS_MOTOR_TRIMS} (override for this script only)"
     start_bg nav2_saved_map bash "$PROJECT_DIR/scripts/slam/run_nav2_saved_map.sh"
+    NAV2_SAVED_MAP_PID="${PIDS[-1]}"
   else
     log "START_NAV2=0: assume Nav2 is already running."
     start_bg pose_memory python3 "$PROJECT_DIR/scripts/slam/pose_memory_node.py" \

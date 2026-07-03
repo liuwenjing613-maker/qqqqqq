@@ -36,15 +36,22 @@ def load_birth_scan_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     birth = _section(cfg, "birth_scan")
     chassis = _section(cfg, "chassis")
     scan_wz = _as_float(birth.get("scan_wz", 0.03), 0.03)
-    scan_deg = _as_float(birth.get("scan_deg", 360.0), 360.0)
+    scan_deg = max(0.0, _as_float(birth.get("scan_deg", 360.0), 360.0))
+    max_rotations = max(0.0, _as_float(birth.get("max_rotations", 2.0), 2.0))
+    max_total_scan_deg = scan_deg * max_rotations
     chassis_max_wz = max(_as_float(chassis.get("max_wz", 0.06), 0.06), 1e-6)
     effective_wz = min(abs(scan_wz), chassis_max_wz) if scan_wz else 0.03
+    max_total_duration_sec = birth_scan_duration_sec(max_total_scan_deg, effective_wz)
     return {
         "enabled": _as_bool(birth.get("enabled", False), False),
         "wait_sec": max(0.0, _as_float(birth.get("wait_sec", 5.0), 5.0)),
         "scan_wz": scan_wz,
         "effective_scan_wz": effective_wz,
-        "scan_deg": max(0.0, scan_deg),
+        "scan_deg": scan_deg,
+        "max_rotations": max_rotations,
+        "max_total_scan_deg": max_total_scan_deg,
         "turn_dir": 1.0 if _as_float(birth.get("turn_dir", 1.0), 1.0) >= 0.0 else -1.0,
         "scan_duration_sec": birth_scan_duration_sec(scan_deg, effective_wz),
+        "max_total_duration_sec": max_total_duration_sec,
+        "max_wall_timeout_sec": max_total_duration_sec * 1.5 + 5.0,
     }

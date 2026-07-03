@@ -32,6 +32,8 @@ run_chassis_bridge() {
     --max-wz "${CHASSIS_MAX_WZ:-0.06}" \
     --watchdog-timeout "${CHASSIS_WATCHDOG_TIMEOUT:-0.5}" \
     --control-rate-hz "${CHASSIS_CONTROL_RATE_HZ:-20}" \
+    --cmd-vx-deadzone "${CHASSIS_CMD_VX_DEADZONE:-0.0}" \
+    --cmd-wz-deadzone "${CHASSIS_CMD_WZ_DEADZONE:-0.0}" \
     --vx-pwm-deadband "${CHASSIS_VX_PWM_DEADBAND:-6.0}" \
     --wz-pwm-deadband "${CHASSIS_WZ_PWM_DEADBAND:-8.0}" \
     --pwm-max "${CHASSIS_PWM_MAX:-30.0}" \
@@ -41,7 +43,7 @@ run_chassis_bridge() {
     --max-pwm-delta "${CHASSIS_MAX_PWM_DELTA:-3.0}" \
     --wheel-layout "${CHASSIS_PWM_WHEEL_LAYOUT:-fl-rl-fr-rr}" \
     --motor-signs "${CHASSIS_MOTOR_SIGNS:-1,1,1,1}" \
-    --motor-trims "${CHASSIS_MOTOR_TRIMS:-1.0,1.0,1.0,1.0}" \
+    --motor-trims "${CLICK_NAV_CHASSIS_MOTOR_TRIMS:-${CHASSIS_MOTOR_TRIMS:-1.0,1.0,1.0,1.0}}" \
     --publish-odom \
     --odom-topic /odom \
     --odom-frame odom \

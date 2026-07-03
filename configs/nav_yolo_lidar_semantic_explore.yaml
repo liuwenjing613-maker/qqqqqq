@@ -92,7 +92,7 @@ fsm:
 birth_scan:
   enabled: true
   wait_sec: 5.0
-  scan_wz: 0.2
+  scan_wz: 0.04
   scan_deg: 360.0
   turn_dir: 1.0
   views: 8
@@ -163,7 +163,7 @@ rates:
   selector_hz: 2
 chassis:
   bridge: pwm
-  port: /dev/ttyUSB1
+  port: /dev/ttyUSB0
   max_vx: 0.06
   max_wz: 0.06
   watchdog_timeout: 0.5

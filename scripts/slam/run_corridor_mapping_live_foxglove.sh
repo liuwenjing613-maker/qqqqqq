@@ -251,10 +251,25 @@ main() {
 
   if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
     log "[5/6] foxglove_bridge port ${FOXGLOVE_PORT}"
-    start_background foxglove_bridge \
-      bash "${PROJECT_DIR}/scripts/lidar/start_foxglove.sh"
-    FOXGLOVE_STARTED=1
-    sleep 3
+    if ! ensure_foxglove_port_free "${FOXGLOVE_PORT}" 12; then
+      log "ERROR: Foxglove port ${FOXGLOVE_PORT} busy; /scan will NOT show in Foxglove"
+      log "HINT: stop nav2/semantic explore, or: bash scripts/slam/stop_click_nav_stack.sh"
+      FOXGLOVE_STARTED=0
+    else
+      start_background foxglove_bridge \
+        bash "${PROJECT_DIR}/scripts/lidar/start_foxglove.sh"
+      sleep 4
+      if foxglove_bridge_log_looks_healthy "${LOG_DIR}/foxglove_bridge.log"; then
+        FOXGLOVE_STARTED=1
+        log "OK: foxglove_bridge listening on ${FOXGLOVE_PORT}"
+      else
+        FOXGLOVE_STARTED=0
+        log "ERROR: foxglove_bridge failed (see ${LOG_DIR}/foxglove_bridge.log)"
+        if grep -q "Bind Error" "${LOG_DIR}/foxglove_bridge.log" 2>/dev/null; then
+          log "ERROR: Bind Error — another process still owns port ${FOXGLOVE_PORT}"
+        fi
+      fi
+    fi
   else
     log "[5/6] foxglove_bridge not installed, skipping"
   fi
@@ -266,6 +281,10 @@ main() {
   if [ "$FOXGLOVE_STARTED" = "1" ]; then
     BOARD_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
     log "Foxglove: ws://${BOARD_IP}:${FOXGLOVE_PORT}"
+    log "Foxglove 3D: Fixed frame=map, enable /scan_filtered + /map + TF"
+  else
+    log "WARN: Foxglove bridge NOT running — lidar/SLAM OK but no ws://${FOXGLOVE_PORT}"
+    log "WARN: tail -f ${LOG_DIR}/foxglove_bridge.log"
   fi
   log "Now open terminal 2: joy_node."
   log "Then terminal 3: teleop_twist_joy."
