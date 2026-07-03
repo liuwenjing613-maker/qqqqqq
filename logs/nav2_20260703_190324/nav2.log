@@ -1,0 +1,60 @@
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-03-19-03-54-540576-ubuntu-206956
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [map_server-1]: process started with pid [207012]
+[INFO] [amcl-2]: process started with pid [207014]
+[INFO] [lifecycle_manager-3]: process started with pid [207016]
+[INFO] [controller_server-4]: process started with pid [207018]
+[INFO] [smoother_server-5]: process started with pid [207020]
+[INFO] [planner_server-6]: process started with pid [207022]
+[INFO] [behavior_server-7]: process started with pid [207024]
+[INFO] [bt_navigator-8]: process started with pid [207026]
+[INFO] [waypoint_follower-9]: process started with pid [207028]
+[INFO] [velocity_smoother-10]: process started with pid [207040]
+[INFO] [lifecycle_manager-11]: process started with pid [207053]
+[lifecycle_manager-3] [INFO] [1783076636.766007357] [rclcpp]: signal_handler(signum=2)
+[velocity_smoother-10] [INFO] [1783076636.768406230] [rclcpp]: signal_handler(signum=2)
+[smoother_server-5] [INFO] [1783076636.771763603] [rclcpp]: signal_handler(signum=2)
+[amcl-2] [INFO] [1783076636.780439430] [rclcpp]: signal_handler(signum=2)
+[controller_server-4] [INFO] [1783076636.780020264] [rclcpp]: signal_handler(signum=2)
+[planner_server-6] [INFO] [1783076636.790713757] [rclcpp]: signal_handler(signum=2)
+[amcl-2] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+[amcl-2]   what():  could not create service: rcl node's context is invalid, at ./src/rcl/node.c:428
+[lifecycle_manager-3] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+[lifecycle_manager-3]   what():  failed to create guard condition: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/guard_condition.c:67
+[ERROR] [lifecycle_manager-3]: process has died [pid 207016, exit code -6, cmd '/opt/ros/humble/lib/nav2_lifecycle_manager/lifecycle_manager --ros-args --log-level info --ros-args -r __node:=lifecycle_manager_localization --params-file /tmp/launch_params__c4bjp6o --params-file /tmp/launch_params_c8gq5n2w --params-file /tmp/launch_params_wzlg72rj'].
+[ERROR] [amcl-2]: process has died [pid 207014, exit code -6, cmd '/opt/ros/humble/lib/nav2_amcl/amcl --ros-args --log-level info --ros-args -r __node:=amcl --params-file /tmp/launch_params_rcdis2v8 -r /tf:=tf -r /tf_static:=tf_static'].
+[controller_server-4] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+[controller_server-4]   what():  failed to initialize rcl node: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/guard_condition.c:67
+[planner_server-6] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+[planner_server-6]   what():  failed to initialize rcl node: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/guard_condition.c:67
+[velocity_smoother-10] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+[velocity_smoother-10]   what():  failed to initialize rcl node: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/guard_condition.c:67
+[ERROR] [controller_server-4]: process has died [pid 207018, exit code -6, cmd '/opt/ros/humble/lib/nav2_controller/controller_server --ros-args --log-level info --ros-args --params-file /tmp/launch_params_3gcul3h_ -r /tf:=tf -r /tf_static:=tf_static -r cmd_vel:=cmd_vel_nav'].
+[ERROR] [planner_server-6]: process has died [pid 207022, exit code -6, cmd '/opt/ros/humble/lib/nav2_planner/planner_server --ros-args --log-level info --ros-args -r __node:=planner_server --params-file /tmp/launch_params_3gcul3h_ -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [velocity_smoother-10]: process has died [pid 207040, exit code -6, cmd '/opt/ros/humble/lib/nav2_velocity_smoother/velocity_smoother --ros-args --log-level info --ros-args -r __node:=velocity_smoother --params-file /tmp/launch_params_3gcul3h_ -r /tf:=tf -r /tf_static:=tf_static -r cmd_vel:=cmd_vel_nav -r cmd_vel_smoothed:=cmd_vel'].
+[smoother_server-5] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+[smoother_server-5]   what():  failed to initialize rcl node: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/guard_condition.c:67
+[ERROR] [smoother_server-5]: process has died [pid 207020, exit code -6, cmd '/opt/ros/humble/lib/nav2_smoother/smoother_server --ros-args --log-level info --ros-args -r __node:=smoother_server --params-file /tmp/launch_params_3gcul3h_ -r /tf:=tf -r /tf_static:=tf_static'].
+[waypoint_follower-9] [INFO] [1783076637.445339189] [waypoint_follower]: 
+[waypoint_follower-9] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-9] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-9] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-9] [INFO] [1783076637.447427104] [waypoint_follower]: Creating
+[lifecycle_manager-11] [INFO] [1783076637.498850611] [lifecycle_manager_navigation]: Creating
+[lifecycle_manager-11] [INFO] [1783076637.539422000] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[map_server-1] [INFO] [1783076637.578901557] [map_server]: 
+[map_server-1] 	map_server lifecycle node launched. 
+[map_server-1] 	Waiting on external lifecycle transitions to activate
+[map_server-1] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-1] [INFO] [1783076637.579912681] [map_server]: Creating
+[bt_navigator-8] [INFO] [1783076637.632890604] [bt_navigator]: 
+[bt_navigator-8] 	bt_navigator lifecycle node launched. 
+[bt_navigator-8] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-8] [INFO] [1783076637.633758728] [bt_navigator]: Creating
+[behavior_server-7] [INFO] [1783076637.665187832] [behavior_server]: 
+[behavior_server-7] 	behavior_server lifecycle node launched. 
+[behavior_server-7] 	Waiting on external lifecycle transitions to activate
+[behavior_server-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-11] [INFO] [1783076639.573870499] [lifecycle_manager_navigation]: Waiting for service controller_server/get_state...
+[lifecycle_manager-11] [INFO] [1783076641.574171188] [lifecycle_manager_navigation]: Waiting for service controller_server/get_state...

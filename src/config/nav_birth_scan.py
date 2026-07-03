@@ -40,7 +40,10 @@ def load_birth_scan_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     max_rotations = max(0.0, _as_float(birth.get("max_rotations", 2.0), 2.0))
     max_total_scan_deg = scan_deg * max_rotations
     chassis_max_wz = max(_as_float(chassis.get("max_wz", 0.06), 0.06), 1e-6)
-    effective_wz = min(abs(scan_wz), chassis_max_wz) if scan_wz else 0.03
+    if birth.get("effective_scan_wz") is not None:
+        effective_wz = max(abs(_as_float(birth.get("effective_scan_wz"), scan_wz)), 1e-6)
+    else:
+        effective_wz = min(abs(scan_wz), chassis_max_wz) if scan_wz else 0.03
     max_total_duration_sec = birth_scan_duration_sec(max_total_scan_deg, effective_wz)
     return {
         "enabled": _as_bool(birth.get("enabled", False), False),

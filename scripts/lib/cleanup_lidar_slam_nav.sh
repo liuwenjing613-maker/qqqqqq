@@ -73,6 +73,7 @@ cleanup_lidar_slam_nav_processes() {
 cleanup_stale_nav2_processes() {
   for pattern in \
     "nav2_bringup bringup_launch.py" \
+    "nav2_click_nav_bringup_launch.py" \
     "planner_server" \
     "controller_server" \
     "bt_navigator" \
@@ -138,6 +139,7 @@ cleanup_click_nav_stack_processes() {
     "foxglove_click_goal_bridge.py" \
     "run_nav2_saved_map.sh" \
     "nav2_bringup bringup_launch.py" \
+    "nav2_click_nav_bringup_launch.py" \
     "pose_memory_node.py" \
     "simple_scan_filter.py" \
     "foxglove_bridge" \
@@ -173,7 +175,7 @@ cleanup_click_nav_stack_processes() {
   sleep 1
 
   local remaining
-  remaining="$(pgrep -af 'nav2_bringup|foxglove_click|pose_memory|run_nav2_saved_map|m1_pwm|ydlidar|simple_scan_filter|controller_server|planner_server|bt_navigator|amcl|map_server|lifecycle_manager' 2>/dev/null \
+  remaining="$(pgrep -af 'nav2_bringup|nav2_click_nav_bringup|foxglove_click|pose_memory|run_nav2_saved_map|m1_pwm|ydlidar|simple_scan_filter|controller_server|planner_server|bt_navigator|amcl|map_server|lifecycle_manager' 2>/dev/null \
     | grep -v "pgrep -af" \
     | grep -v " $$ " || true)"
   if [ -n "$remaining" ]; then

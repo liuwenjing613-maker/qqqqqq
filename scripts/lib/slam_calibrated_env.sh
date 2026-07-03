@@ -6,8 +6,9 @@ export PROJECT_DIR="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
 export CHASSIS_DEV="${CHASSIS_DEV:-/dev/rosmaster}"
 
 # ===== 底盘控制参数（影响真实小车运动）=====
-export CHASSIS_MAX_VX=0.04
-export CHASSIS_MAX_WZ=0.18
+# mvp_tune 实测：vx>=0.055 才能稳定克服静摩擦；建图手柄对齐 run_joy_mapping_all
+export CHASSIS_MAX_VX=0.06
+export CHASSIS_MAX_WZ=0.24
 
 export CHASSIS_VX_PWM_DEADBAND=10.0
 export CHASSIS_VX_PWM_GAIN=200.0
@@ -43,6 +44,9 @@ export CHASSIS_ODOM_XY_YAW_OFFSET=3.141592653589793
 #export CHASSIS_BASE_YAW_OFFSET=3.141592653589793
 export CHASSIS_BASE_YAW_OFFSET=0
 
-# 手柄遥操作限速，与 CHASSIS_MAX_VX/WZ 对齐
-export JOY_SCALE_LINEAR_X="${JOY_SCALE_LINEAR_X:-0.04}"
-export JOY_SCALE_ANGULAR_YAW="${JOY_SCALE_ANGULAR_YAW:-0.10}"
+# 手柄遥操作限速，与 CHASSIS_MAX_VX/WZ 对齐（旧值 linear=0.04 angular=0.10 过小）
+export JOY_SCALE_LINEAR_X="${JOY_SCALE_LINEAR_X:-0.06}"
+export JOY_SCALE_ANGULAR_YAW="${JOY_SCALE_ANGULAR_YAW:-0.20}"
+export JOY_AXIS_LINEAR="${JOY_AXIS_LINEAR:-1}"
+export JOY_AXIS_ANGULAR="${JOY_AXIS_ANGULAR:-0}"
+export JOY_DEADZONE="${JOY_DEADZONE:-0.08}"

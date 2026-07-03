@@ -12,6 +12,7 @@ import yaml
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, LaserScan
@@ -141,12 +142,15 @@ class SharedNavSemanticExplore(Node):
                 birth_scan_deg=float(birth_scan_cfg["scan_deg"]),
                 birth_scan_max_rotations=float(birth_scan_cfg["max_rotations"]),
                 birth_scan_max_wall_timeout_sec=float(birth_scan_cfg["max_wall_timeout_sec"]),
+                birth_scan_use_odom_yaw=True,
                 birth_scan_turn_dir=float(birth_scan_cfg["turn_dir"]),
             )
         )
 
         self.birth_scan_wz = float(birth_scan_cfg["scan_wz"])
+        self.birth_scan_effective_wz = float(birth_scan_cfg["effective_scan_wz"])
         self.birth_scan_turn_dir = float(birth_scan_cfg["turn_dir"])
+        self.birth_scan_target_rad = math.radians(float(birth_scan_cfg["max_total_scan_deg"]))
         self.chassis_max_wz = float(chassis_cfg.get("max_wz", 0.06))
 
         servo_cfg = section(cfg, "servo")
@@ -227,6 +231,7 @@ class SharedNavSemanticExplore(Node):
         self.bridge = CvBridge()
         self.last_frame = None
         self.last_image_time = 0.0
+        self.last_bbox_time = 0.0
         self.last_scan_time = 0.0
         self.last_target = NavTarget(False, None, None, reason="init")
         self.last_good_target = self.last_target
@@ -273,10 +278,18 @@ class SharedNavSemanticExplore(Node):
         self.observe_scan_accum_rad = 0.0
         self.birth_sectors: list = []
         self._birth_last_wz = 0.0
+        self.latest_odom_yaw: Optional[float] = None
+        self.latest_odom_time: Optional[float] = None
+        self._birth_odom_start_yaw: Optional[float] = None
+        self._birth_odom_last_yaw: Optional[float] = None
+        self._birth_odom_accum_rad = 0.0
+        self._fsm_prev_state = NavState.BOOT
         self.last_explore_candidate_id: Optional[str] = None
 
         self.image_topic = topic(cfg, "image_raw", "image_topic", "/image_raw")
-        self.scan_topic = topic(cfg, "scan", "scan_topic", "/scan")
+        _topics = section(cfg, "topics")
+        self.scan_topic = str(_topics.get("scan_filtered", _topics.get("scan", "/scan_filtered")))
+        self.odom_topic = topic(cfg, "odom", "odom_topic", "/odom")
         self.cmd_topic = topic(cfg, "cmd_vel", "cmd_topic", "/cmd_vel")
         self.bbox_topic = topic(cfg, "target_bbox_json", "target_bbox_topic", "/target_bbox_json")
         self.words_topic = topic(cfg, "target_words", "target_words_topic", "/target_words")
@@ -289,6 +302,7 @@ class SharedNavSemanticExplore(Node):
         self.words_pub = self.create_publisher(String, self.words_topic, 10)
 
         self.create_subscription(Image, self.image_topic, self.image_cb, qos_profile_sensor_data)
+        self.create_subscription(Odometry, self.odom_topic, self.odom_cb, qos_profile_sensor_data)
         if self.require_lidar:
             self.create_subscription(LaserScan, self.scan_topic, self.scan_cb, qos_profile_sensor_data)
         if self.target_source == "yolo_bbox":
@@ -350,7 +364,47 @@ class SharedNavSemanticExplore(Node):
         self.last_scan_time = time.time()
         self.free_space.update_scan(msg)
 
+    @staticmethod
+    def _yaw_from_odom(msg: Odometry) -> float:
+        q = msg.pose.pose.orientation
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
+    @staticmethod
+    def _normalize_yaw_delta(prev_yaw: float, current_yaw: float) -> float:
+        return math.atan2(math.sin(current_yaw - prev_yaw), math.cos(current_yaw - prev_yaw))
+
+    def odom_cb(self, msg: Odometry) -> None:
+        self.latest_odom_yaw = self._yaw_from_odom(msg)
+        self.latest_odom_time = time.time()
+
+    def _sync_birth_scan_odom_yaw(self, prev_state: NavState) -> None:
+        if self.fsm.state != NavState.SCANNING:
+            if prev_state == NavState.SCANNING:
+                self._birth_odom_last_yaw = None
+            return
+        if self.latest_odom_yaw is None:
+            return
+
+        just_entered = prev_state != NavState.SCANNING
+        if just_entered or self._birth_odom_last_yaw is None:
+            if self.fsm.birth_scan_yaw_accumulated_rad > 1e-6:
+                self._birth_odom_accum_rad = float(self.fsm.birth_scan_yaw_accumulated_rad)
+            else:
+                self._birth_odom_start_yaw = self.latest_odom_yaw
+                self._birth_odom_accum_rad = 0.0
+            self._birth_odom_last_yaw = self.latest_odom_yaw
+            self.fsm.birth_scan_yaw_accumulated_rad = self._birth_odom_accum_rad
+            return
+
+        delta = abs(self._normalize_yaw_delta(self._birth_odom_last_yaw, self.latest_odom_yaw))
+        self._birth_odom_accum_rad += delta
+        self._birth_odom_last_yaw = self.latest_odom_yaw
+        self.fsm.birth_scan_yaw_accumulated_rad = self._birth_odom_accum_rad
+
     def bbox_cb(self, msg: String) -> None:
+        self.last_bbox_time = time.time()
         self.target_adapter.ingest_yolo_bbox_json(msg.data)
 
     def on_explore_goal_hint(self, msg: String) -> None:
@@ -404,16 +458,12 @@ class SharedNavSemanticExplore(Node):
         if not self.valid_explore_hint(now):
             return None
         hint = self.latest_explore_hint or {}
-        if self.active_explore_goal is None:
+        if not self.observe_update_active:
+            prev_id = (self.active_explore_goal or {}).get("candidate_id")
             self.active_explore_goal = dict(hint)
-            self.explore_goal_start_time = now
-            self.observe_update_active = False
-
+            if prev_id != hint.get("candidate_id") or self.explore_goal_start_time is None:
+                self.explore_goal_start_time = now
         active = self.active_explore_goal or hint
-        if self.valid_explore_hint(now) and self.latest_explore_hint:
-            hint = self.latest_explore_hint
-            if self.active_explore_goal and self.active_explore_goal.get("candidate_id") == hint.get("candidate_id"):
-                active = {**self.active_explore_goal, **hint}
         distance = float(active.get("goal_distance_m", 999.0))
         bearing = float(active.get("goal_bearing_rad", 0.0))
 
@@ -502,7 +552,10 @@ class SharedNavSemanticExplore(Node):
         front_min = self.front_min_distance()
         lidar_dist = self.effective_lidar_distance(target)
         obs = self.make_observation(now, target, lidar_dist, front_min=front_min)
+        prev_state = self.fsm.state
         result = self.fsm.update(obs)
+        self._sync_birth_scan_odom_yaw(prev_state)
+        self._fsm_prev_state = result.state
         self.last_fsm_result = result
         self.last_target = target
 
@@ -552,6 +605,14 @@ class SharedNavSemanticExplore(Node):
             return self.target_adapter.from_color(self.last_frame, self.target_color)
         return self.target_adapter.current_yolo_target(now)
 
+    def _vision_pipeline_fresh(self, now: float) -> bool:
+        """Treat YOLO bbox stream as vision-alive when raw image gaps are brief."""
+        stamps = [t for t in (self.last_image_time, self.last_bbox_time) if t > 0.0]
+        if not stamps:
+            return False
+        last_seen = max(stamps)
+        return now - last_seen <= self.image_stale_sec
+
     def make_observation(
         self,
         now: float,
@@ -559,7 +620,7 @@ class SharedNavSemanticExplore(Node):
         lidar_distance: Optional[float],
         front_min: Optional[float] = None,
     ) -> NavObservation:
-        image_fresh = self.last_image_time > 0 and now - self.last_image_time <= self.image_stale_sec
+        image_fresh = self._vision_pipeline_fresh(now)
         scan_fresh = (not self.require_lidar) or (
             self.last_scan_time > 0 and now - self.last_scan_time <= self.scan_stale_sec
         )
@@ -721,8 +782,7 @@ class SharedNavSemanticExplore(Node):
             return ServoCommand(), "birth_wait_stop"
         if state == NavState.SCANNING:
             wz = self.birth_scan_turn_dir * abs(self.birth_scan_wz)
-            vx = self._search_arc_vx()
-            return ServoCommand(vx=vx, wz=wz), "birth_scanning"
+            return ServoCommand(vx=0.0, wz=wz), "birth_scanning"
         if state == NavState.SEARCH:
             if self.semantic_explore_enabled:
                 explore_cmd = self.command_from_explore_hint(now)
@@ -794,10 +854,14 @@ class SharedNavSemanticExplore(Node):
             "safety_limited": False,
         }
         safe = Twist()
-        if self.require_lidar and (scan_age is None or scan_age > self.scan_stale_sec):
+        birth_scanning = self.desired_reason == "birth_scanning"
+        if (
+            self.require_lidar
+            and (scan_age is None or scan_age > self.scan_stale_sec)
+            and not birth_scanning
+        ):
             info.update({"safe_cmd_vx": 0.0, "safe_cmd_wz": 0.0, "safety_reason": "stale_scan"})
             return safe, info
-        birth_scanning = self.desired_reason == "birth_scanning"
         if (
             not birth_scanning
             and safety_dist is not None
@@ -817,10 +881,10 @@ class SharedNavSemanticExplore(Node):
         wz = float(raw_cmd.angular.z)
         reason = "pass_through"
 
-        if birth_scanning and safety_dist is not None and safety_dist <= self.emergency_stop_distance:
+        if birth_scanning:
             vx = 0.0
             info["safety_limited"] = True
-            reason = "birth_scan_emergency_vx_only"
+            reason = "birth_scan_vx_zero"
         elif safety_dist is not None and safety_dist <= self.hard_stop_distance:
             vx = 0.0
             info["safety_limited"] = True
@@ -953,6 +1017,8 @@ class SharedNavSemanticExplore(Node):
             "birth_phase_completed": self.fsm.birth_phase_completed,
             "birth_scan_yaw_deg": math.degrees(self.fsm.birth_scan_yaw_accumulated_rad),
             "birth_scan_budget_deg": math.degrees(self.fsm._birth_scan_budget_rad()),
+            "birth_scan_odom_yaw_deg": math.degrees(self._birth_odom_accum_rad),
+            "birth_scan_target_deg": math.degrees(self.birth_scan_target_rad),
             "time": time.time(),
         }
         if self.active_explore_goal:

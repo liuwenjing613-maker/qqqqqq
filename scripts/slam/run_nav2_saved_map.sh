@@ -22,13 +22,17 @@ fi
 # Nav-only PWM smoothing: gentler motor steps, no change to odom signs/offsets.
 export CHASSIS_PWM_SMOOTH_ALPHA="${CHASSIS_NAV_PWM_SMOOTH_ALPHA:-0.50}"
 export CHASSIS_MAX_PWM_DELTA="${CHASSIS_NAV_MAX_PWM_DELTA:-2.0}"
-export CHASSIS_NAV_VX_PWM_DEADBAND="${CHASSIS_NAV_VX_PWM_DEADBAND:-3.0}"
-export CHASSIS_NAV_WZ_PWM_DEADBAND="${CHASSIS_NAV_WZ_PWM_DEADBAND:-7.0}"
+# Use calibrated PWM (mvp_tune breakaway ~0.055 m/s at vx_db=10 gain=200).
+export CHASSIS_NAV_VX_PWM_DEADBAND="${CHASSIS_NAV_VX_PWM_DEADBAND:-${CHASSIS_VX_PWM_DEADBAND:-10.0}}"
+export CHASSIS_NAV_WZ_PWM_DEADBAND="${CHASSIS_NAV_WZ_PWM_DEADBAND:-${CHASSIS_WZ_PWM_DEADBAND:-10.0}}"
+export CHASSIS_NAV_VX_PWM_GAIN="${CHASSIS_NAV_VX_PWM_GAIN:-${CHASSIS_VX_PWM_GAIN:-200.0}}"
+export CHASSIS_NAV_PWM_MAX="${CHASSIS_NAV_PWM_MAX:-${CHASSIS_PWM_MAX:-40.0}}"
 export CHASSIS_NAV_CMD_WZ_DEADZONE="${CHASSIS_NAV_CMD_WZ_DEADZONE:-0.015}"
 export CHASSIS_NAV_CONTROL_RATE_HZ="${CHASSIS_NAV_CONTROL_RATE_HZ:-10.0}"
 # Nav2 velocity limits must match chassis; keep calibrated caps after mvp_tune load.
-_NAV_CHASSIS_MAX_VX="${CHASSIS_MAX_VX:-0.04}"
-_NAV_CHASSIS_MAX_WZ="${CHASSIS_MAX_WZ:-0.10}"
+_NAV_CHASSIS_MAX_VX="${CHASSIS_MAX_VX:-0.06}"
+_NAV_CHASSIS_MAX_WZ="${CHASSIS_MAX_WZ:-0.24}"
+_NAV_CHASSIS_MOTOR_TRIMS="${CHASSIS_MOTOR_TRIMS:-1.15,1.15,1.0,1.0}"
 
 MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
 NAV2_PARAMS="${NAV2_PARAMS:-$PROJECT_DIR/configs/nav2_params.yaml}"
@@ -205,9 +209,13 @@ fi
 source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
 export CHASSIS_MAX_VX="${_NAV_CHASSIS_MAX_VX}"
 export CHASSIS_MAX_WZ="${_NAV_CHASSIS_MAX_WZ}"
+export CHASSIS_MOTOR_TRIMS="${_NAV_CHASSIS_MOTOR_TRIMS}"
 export CHASSIS_VX_PWM_DEADBAND="${CHASSIS_NAV_VX_PWM_DEADBAND}"
 export CHASSIS_WZ_PWM_DEADBAND="${CHASSIS_NAV_WZ_PWM_DEADBAND}"
+export CHASSIS_VX_PWM_GAIN="${CHASSIS_NAV_VX_PWM_GAIN}"
+export CHASSIS_PWM_MAX="${CHASSIS_NAV_PWM_MAX}"
 export CHASSIS_CMD_WZ_DEADZONE="${CHASSIS_NAV_CMD_WZ_DEADZONE}"
+export CHASSIS_CMD_VX_DEADZONE="${CHASSIS_NAV_CMD_VX_DEADZONE:-0.0}"
 export CHASSIS_CONTROL_RATE_HZ="${CHASSIS_NAV_CONTROL_RATE_HZ}"
 source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
 export CHASSIS_PORT="$CHASSIS_DEV"
@@ -222,6 +230,9 @@ else
 fi
 run_chassis_bridge "$LOG_DIR/chassis_bridge.log"
 sleep 3
+if grep -q "motor_trims=\[1.0, 1.0, 1.0, 1.0\]" "$LOG_DIR/chassis_bridge.log" 2>/dev/null; then
+  log "WARN: chassis using default motor_trims 1.0; expected ${CHASSIS_MOTOR_TRIMS}"
+fi
 
 # 5. Foxglove 可视化
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && foxglove_bridge_running; then
@@ -245,8 +256,10 @@ fi
 log "TF OK: odom -> base_link"
 
 # 7. 启动 Nav2（后台），完成 AMCL 定位后再启动 pose_memory
-log "launch Nav2..."
-start_bg nav2 ros2 launch nav2_bringup bringup_launch.py \
+# Custom bringup: behavior_server cmd_vel -> cmd_vel_nav (avoids 5-way /cmd_vel conflict).
+NAV2_BRINGUP_LAUNCH="${NAV2_BRINGUP_LAUNCH:-$PROJECT_DIR/configs/nav2_click_nav_bringup_launch.py}"
+log "launch Nav2 (bringup=$NAV2_BRINGUP_LAUNCH)..."
+start_bg nav2 ros2 launch "$NAV2_BRINGUP_LAUNCH" \
   use_sim_time:=False \
   autostart:=True \
   map:="$MAP_YAML" \

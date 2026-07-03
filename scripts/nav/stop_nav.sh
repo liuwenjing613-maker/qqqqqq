@@ -2,6 +2,8 @@
 set -euo pipefail
 
 pkill -f run_shared_nav.py || true
+pkill -f run_shared_nav_semantic_explore.py || true
+pkill -f explore_goal_selector || true
 pkill -f yolov5s_bpu_web_node.py || true
 pkill -f yolo_world_to_bbox_json.py || true
 pkill -f hobot_yolo_world || true

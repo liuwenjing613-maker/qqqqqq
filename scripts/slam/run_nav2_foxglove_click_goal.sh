@@ -282,9 +282,12 @@ main() {
     fi
     export NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-1}"
     export NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-0}"
-    # Click-nav only: uniform motor trims (does not change mapping / other scripts).
-    export CLICK_NAV_CHASSIS_MOTOR_TRIMS="${CLICK_NAV_CHASSIS_MOTOR_TRIMS:-1.0,1.0,1.0,1.0}"
-    log "CLICK_NAV motor trims=${CLICK_NAV_CHASSIS_MOTOR_TRIMS} (override for this script only)"
+    # Use calibrated left-motor trims from slam_calibrated_env (same as joy mapping).
+    if [ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]; then
+      # shellcheck source=scripts/lib/slam_calibrated_env.sh
+      source "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh"
+    fi
+    log "CLICK_NAV motor trims=${CHASSIS_MOTOR_TRIMS:-1.15,1.15,1.0,1.0}"
     start_bg nav2_saved_map bash "$PROJECT_DIR/scripts/slam/run_nav2_saved_map.sh"
     NAV2_SAVED_MAP_PID="${PIDS[-1]}"
   else
