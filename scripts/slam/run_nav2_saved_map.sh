@@ -12,6 +12,18 @@ source "${PROJECT_DIR}/scripts/lib/project_dir.sh"
 source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
 source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
 source "${PROJECT_DIR}/scripts/lib/nav2_stack_reuse.sh"
+source "${PROJECT_DIR}/scripts/lib/nav2_localization_bootstrap.sh"
+# 与 calibrated 建图一致：底盘口 /dev/rosmaster + odom 校准参数
+if [ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]; then
+  # shellcheck source=scripts/lib/slam_calibrated_env.sh
+  source "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh"
+fi
+# Nav-only PWM smoothing: gentler motor steps, no change to odom signs/offsets.
+export CHASSIS_PWM_SMOOTH_ALPHA="${CHASSIS_NAV_PWM_SMOOTH_ALPHA:-0.42}"
+export CHASSIS_MAX_PWM_DELTA="${CHASSIS_NAV_MAX_PWM_DELTA:-2.5}"
+# Nav2 velocity limits must match chassis; keep calibrated caps after mvp_tune load.
+_NAV_CHASSIS_MAX_VX="${CHASSIS_MAX_VX:-0.04}"
+_NAV_CHASSIS_MAX_WZ="${CHASSIS_MAX_WZ:-0.10}"
 
 MAP_YAML="${MAP_YAML:-$PROJECT_DIR/maps/joy_calibrated_corridor_map.yaml}"
 NAV2_PARAMS="${NAV2_PARAMS:-$PROJECT_DIR/configs/nav2_params.yaml}"
@@ -19,9 +31,11 @@ MVP_TUNE="${MVP_TUNE:-$PROJECT_DIR/configs/mvp_tune.yaml}"
 NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-0}"
 NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-1}"
 
-# 自动判断底盘串口
-if [ -n "${CHASSIS_DEV:-}" ]; then
+# 自动判断底盘串口（slam_calibrated_env 已设 CHASSIS_DEV 时优先沿用）
+if [ -n "${CHASSIS_DEV:-}" ] && [ -e "${CHASSIS_DEV}" ]; then
   :
+elif [ -e /dev/rosmaster ]; then
+  CHASSIS_DEV="/dev/rosmaster"
 elif [ -e /dev/ttyACM0 ]; then
   CHASSIS_DEV="/dev/ttyACM0"
 elif [ -e /dev/ttyUSB0 ]; then
@@ -128,8 +142,9 @@ log "NAV2_STOP_CONFLICTS=$NAV2_STOP_CONFLICTS NAV2_REUSE_EXISTING=$NAV2_REUSE_EX
 log "logs=$LOG_DIR"
 
 if slam_toolbox_running; then
-  log "WARN: slam_toolbox is still running. Saved-map Nav2 conflicts with live SLAM."
-  log "WARN: Stop mapping (Ctrl+C on mapping terminal) before navigation, or set NAV2_STOP_CONFLICTS=1."
+  log "WARN: slam_toolbox still running; stopping SLAM before saved-map Nav2."
+  pkill -f "async_slam_toolbox_node|sync_slam_toolbox_node|slam_toolbox online_async_launch.py" 2>/dev/null || true
+  sleep 2
 fi
 
 if [ "$NAV2_STOP_CONFLICTS" = "1" ]; then
@@ -179,14 +194,23 @@ else
     --child-frame-id "${LASER_FRAME}"
 fi
 
-# 4. 启动 PWM 底盘桥：订阅 /cmd_vel + /odom
+# 4. 启动 PWM 底盘桥：必须能发布 odom->base_link TF
 source "$PROJECT_DIR/scripts/lib/load_mvp_tune.sh"
+export CHASSIS_MAX_VX="${_NAV_CHASSIS_MAX_VX}"
+export CHASSIS_MAX_WZ="${_NAV_CHASSIS_MAX_WZ}"
 source "$PROJECT_DIR/scripts/lib/run_chassis_bridge.sh"
 export CHASSIS_PORT="$CHASSIS_DEV"
-if [ "$NAV2_REUSE_EXISTING" = "1" ]; then
+export CHASSIS_REUSE_IF_RUNNING=0
+if [ "$NAV2_REUSE_EXISTING" = "1" ] && odom_base_link_tf_ready; then
   export CHASSIS_REUSE_IF_RUNNING=1
+  log "reuse existing chassis bridge (odom->base_link TF OK)"
+else
+  log "start fresh chassis bridge (need odom->base_link TF)"
+  pkill -f "m1_pwm_cmd_vel_bridge.py|cmd_vel_to_rosmaster.py" 2>/dev/null || true
+  sleep 1
 fi
 run_chassis_bridge "$LOG_DIR/chassis_bridge.log"
+sleep 3
 
 # 5. Foxglove 可视化
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && foxglove_bridge_running; then
@@ -203,7 +227,13 @@ wait_topic_exists /scan_filtered 90 || exit 1
 wait_topic_exists /odom 90 || exit 1
 wait_topic_exists /tf 40 || exit 1
 
-# 7. 启动 Nav2（后台），再发布记忆位姿并持续更新
+if ! wait_odom_base_link_tf 60; then
+  log "ERROR: odom->base_link TF not ready; check chassis bridge on ${CHASSIS_DEV}"
+  exit 1
+fi
+log "TF OK: odom -> base_link"
+
+# 7. 启动 Nav2（后台），完成 AMCL 定位后再启动 pose_memory
 log "launch Nav2..."
 start_bg nav2 ros2 launch nav2_bringup bringup_launch.py \
   use_sim_time:=False \
@@ -212,8 +242,33 @@ start_bg nav2 ros2 launch nav2_bringup bringup_launch.py \
   params_file:="$NAV2_PARAMS" \
   use_composition:=False
 
-sleep 8
-wait_initialpose_subscriber 60 || true
+sleep 5
+wait_lifecycle_active /map_server 120 || exit 1
+wait_lifecycle_active /amcl 120 || exit 1
+wait_map_topic_data 60 || exit 1
+sleep 2
+
+print_pose_state_summary "$POSE_STATE_FILE" || true
+
+if ! bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 90; then
+  log "WARN: AMCL bootstrap from $POSE_STATE_FILE failed."
+  log "Set initial pose in Foxglove: Publish -> Pose estimate -> /initialpose"
+  if ! wait_map_base_link_tf 30; then
+    log "ERROR: map->base_link still missing after bootstrap"
+    exit 1
+  fi
+else
+  log "TF OK: map -> base_link (AMCL localized)"
+  wait_amcl_localization_settle 25 || log "WARN: AMCL settle check incomplete; verify scan/map alignment in Foxglove"
+fi
+
+wait_lifecycle_active /controller_server 120 || exit 1
+wait_lifecycle_active /planner_server 120 || exit 1
+wait_lifecycle_active /bt_navigator 120 || exit 1
+log "Nav2 navigation stack active"
+
+touch "$LOG_DIR/ready"
+log "READY file: $LOG_DIR/ready"
 
 start_bg pose_memory python3 "$PROJECT_DIR/scripts/slam/pose_memory_node.py" \
   --state-file "$POSE_STATE_FILE" \
@@ -221,8 +276,7 @@ start_bg pose_memory python3 "$PROJECT_DIR/scripts/slam/pose_memory_node.py" \
   --base-frame base_link \
   --fallback-base-frame base_footprint \
   --save-period 1.0 \
-  --publish-initial \
-  --initial-repeat 5 \
-  --initial-interval 0.3
+  --initial-delay 5.0 \
+  --initial-interval 0.5
 
 wait

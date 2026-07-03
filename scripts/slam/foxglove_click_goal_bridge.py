@@ -4,11 +4,14 @@
 Foxglove click goal -> Nav2 NavigateToPose bridge.
 
 Subscribe:
-  /foxglove_goal_pose  geometry_msgs/msg/PoseStamped
+  /foxglove_goal_point  geometry_msgs/msg/PointStamped   (recommended: single click)
+  /foxglove_goal_pose   geometry_msgs/msg/PoseStamped    (legacy: click + drag)
 
 Publish for visualization:
   /foxglove_click_planned_path  nav_msgs/msg/Path
   /foxglove_click_path_marker   visualization_msgs/msg/Marker
+  /foxglove_click_goal_marker   visualization_msgs/msg/Marker  (goal circle ring)
+  /foxglove_click_goal_label    visualization_msgs/msg/Marker  (goal text label)
   /foxglove_click_accepted_goal geometry_msgs/msg/PoseStamped
 
 Action clients:
@@ -16,20 +19,55 @@ Action clients:
   /navigate_to_pose      nav2_msgs/action/NavigateToPose
 """
 
+from __future__ import annotations
+
 import argparse
 import math
 from typing import Optional
 
 import rclpy
 from rclpy.action import ActionClient
+from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 
+import tf2_geometry_msgs
+import tf2_ros
+from tf2_ros import TransformException
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import Point, PoseStamped
-from nav_msgs.msg import Path
+from geometry_msgs.msg import Point, PointStamped, PoseStamped, Quaternion
+from nav_msgs.msg import OccupancyGrid, Path
 from nav2_msgs.action import ComputePathToPose, NavigateToPose
 from visualization_msgs.msg import Marker
+
+_SCRIPT_DIR = __import__('pathlib').Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in __import__('sys').path:
+    __import__('sys').path.insert(0, str(_SCRIPT_DIR))
+from map_goal_validate import is_known_free, path_stays_in_known_free
+
+GOAL_MARKER_NS = 'foxglove_click_goal_endpoint'
+GOAL_CIRCLE_RADIUS = 0.13
+GOAL_CIRCLE_LINE_WIDTH = 0.028
+GOAL_FILL_HEIGHT = 0.018
+GOAL_TEXT_HEIGHT = 0.09
+GOAL_COLOR_OK = (1.0, 0.42, 0.08, 0.92)
+GOAL_COLOR_PENDING = (1.0, 0.82, 0.12, 0.75)
+GOAL_COLOR_REJECT = (0.95, 0.18, 0.18, 0.88)
+
+
+def yaw_to_quaternion(yaw: float) -> Quaternion:
+    q = Quaternion()
+    q.x = 0.0
+    q.y = 0.0
+    q.z = math.sin(yaw * 0.5)
+    q.w = math.cos(yaw * 0.5)
+    return q
+
+
+def quaternion_to_yaw(x: float, y: float, z: float, w: float) -> float:
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
 
 
 def _norm_quaternion_in_place(pose: PoseStamped) -> None:
@@ -59,11 +97,30 @@ def _copy_goal_pose(msg: PoseStamped, frame_id: str) -> PoseStamped:
 class FoxgloveClickGoalBridge(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__('foxglove_click_goal_bridge')
-        self.goal_topic = args.goal_topic
+        self.goal_point_topic = args.goal_point_topic
+        self.goal_pose_topic = args.goal_pose_topic
         self.goal_frame = args.goal_frame
+        self.map_frame = args.map_frame
+        self.base_frame = args.base_frame
+        self.fallback_base_frame = args.fallback_base_frame
+        self.prefer_current_yaw = args.prefer_current_yaw
+        self.default_goal_yaw = args.default_goal_yaw
         self.accept_any_frame = args.accept_any_frame
         self.auto_navigate = args.auto_navigate
         self.compute_path_timeout_sec = args.compute_path_timeout_sec
+        self.reject_unknown_goals = args.reject_unknown_goals
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self._map_grid: Optional[OccupancyGrid] = None
+
+        map_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.create_subscription(OccupancyGrid, '/map', self._on_map, map_qos)
 
         latched_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -71,45 +128,340 @@ class FoxgloveClickGoalBridge(Node):
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
+        # foxglove_bridge publishes clicks with TRANSIENT_LOCAL; VOLATILE subs won't receive them.
+        goal_sub_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
 
         self.goal_pub = self.create_publisher(PoseStamped, '/foxglove_click_accepted_goal', latched_qos)
         self.path_pub = self.create_publisher(Path, '/foxglove_click_planned_path', latched_qos)
         self.marker_pub = self.create_publisher(Marker, '/foxglove_click_path_marker', latched_qos)
+        self.goal_marker_pub = self.create_publisher(Marker, '/foxglove_click_goal_marker', latched_qos)
+        self.goal_label_pub = self.create_publisher(Marker, '/foxglove_click_goal_label', latched_qos)
 
-        self.goal_sub = self.create_subscription(PoseStamped, self.goal_topic, self._on_goal_pose, 10)
+        self._pending_goal_marker_seq = 0
+        self._last_goal_marker: Optional[tuple[float, float, int, str]] = None
+        self.create_timer(1.0, self._republish_goal_marker)
+
+        self.goal_point_sub = self.create_subscription(
+            PointStamped,
+            self.goal_point_topic,
+            self._on_goal_point,
+            goal_sub_qos,
+        )
+        self.goal_pose_sub = self.create_subscription(
+            PoseStamped,
+            self.goal_pose_topic,
+            self._on_goal_pose,
+            goal_sub_qos,
+        )
 
         self.path_client = ActionClient(self, ComputePathToPose, '/compute_path_to_pose')
         self.nav_client = ActionClient(self, NavigateToPose, '/navigate_to_pose')
 
         self._nav_goal_handle = None
+        self._is_navigating = False
         self._goal_seq = 0
         self._last_feedback_log_sec = 0.0
+        self._click_ready_announced = False
+
+        self.create_timer(1.0, self._check_click_ready)
 
         self.get_logger().info('Foxglove click goal bridge started.')
-        self.get_logger().info(f'Subscribe goal topic: {self.goal_topic}')
-        self.get_logger().info('Foxglove should publish a geometry_msgs/msg/PoseStamped in frame "map".')
+        self.get_logger().info('Listening point click topic:')
+        self.get_logger().info(f'  {self.goal_point_topic}')
+        self.get_logger().info('  geometry_msgs/msg/PointStamped')
+        self.get_logger().info('Listening pose click topic:')
+        self.get_logger().info(f'  {self.goal_pose_topic}')
+        self.get_logger().info('  geometry_msgs/msg/PoseStamped')
+        self.get_logger().info('Recommended Foxglove tool:')
+        self.get_logger().info(f'  Publish -> 2D point -> {self.goal_point_topic}')
         self.get_logger().info('Visual path topic: /foxglove_click_planned_path')
+        self.get_logger().info('Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label')
+
+    def _republish_goal_marker(self) -> None:
+        if self._last_goal_marker is None:
+            return
+        x, y, seq, status = self._last_goal_marker
+        self._publish_goal_endpoint_marker(x, y, seq, status=status, log=False)
+
+    def _circle_points(self, cx: float, cy: float, radius: float, z: float = 0.05, segments: int = 36) -> list[Point]:
+        points: list[Point] = []
+        for i in range(segments + 1):
+            angle = 2.0 * math.pi * i / segments
+            p = Point()
+            p.x = cx + radius * math.cos(angle)
+            p.y = cy + radius * math.sin(angle)
+            p.z = z
+            points.append(p)
+        return points
+
+    def _publish_goal_endpoint_marker(
+        self,
+        x: float,
+        y: float,
+        seq: int,
+        *,
+        status: str = 'ok',
+        log: bool = True,
+    ) -> None:
+        """Publish circle + text at clicked goal immediately (map frame)."""
+        self._last_goal_marker = (x, y, seq, status)
+        if status == 'reject':
+            color = GOAL_COLOR_REJECT
+            label = '无效'
+        elif status == 'pending':
+            color = GOAL_COLOR_PENDING
+            label = '终点'
+        else:
+            color = GOAL_COLOR_OK
+            label = f'终点#{seq}'
+
+        stamp = self.get_clock().now().to_msg()
+
+        ring = Marker()
+        ring.header.frame_id = self.map_frame
+        ring.header.stamp = stamp
+        ring.ns = GOAL_MARKER_NS
+        ring.id = 0
+        ring.type = Marker.LINE_STRIP
+        ring.action = Marker.ADD
+        ring.scale.x = GOAL_CIRCLE_LINE_WIDTH
+        ring.color.r, ring.color.g, ring.color.b, ring.color.a = color
+        ring.lifetime.sec = 0
+        ring.points = self._circle_points(x, y, GOAL_CIRCLE_RADIUS, z=0.05)
+
+        fill = Marker()
+        fill.header.frame_id = self.map_frame
+        fill.header.stamp = stamp
+        fill.ns = GOAL_MARKER_NS
+        fill.id = 1
+        fill.type = Marker.CYLINDER
+        fill.action = Marker.ADD
+        fill.pose.position.x = x
+        fill.pose.position.y = y
+        fill.pose.position.z = GOAL_FILL_HEIGHT * 0.5
+        fill.pose.orientation.w = 1.0
+        fill.scale.x = GOAL_CIRCLE_RADIUS * 1.55
+        fill.scale.y = GOAL_CIRCLE_RADIUS * 1.55
+        fill.scale.z = GOAL_FILL_HEIGHT
+        fill.color.r, fill.color.g, fill.color.b, fill.color.a = color[0], color[1], color[2], color[3] * 0.35
+        fill.lifetime.sec = 0
+
+        text = Marker()
+        text.header.frame_id = self.map_frame
+        text.header.stamp = stamp
+        text.ns = GOAL_MARKER_NS
+        text.id = 0
+        text.type = Marker.TEXT_VIEW_FACING
+        text.action = Marker.ADD
+        text.pose.position.x = x
+        text.pose.position.y = y
+        text.pose.position.z = GOAL_CIRCLE_RADIUS + 0.06
+        text.pose.orientation.w = 1.0
+        text.scale.z = GOAL_TEXT_HEIGHT
+        text.color.r = 1.0
+        text.color.g = 1.0
+        text.color.b = 1.0
+        text.color.a = 0.95
+        text.text = f'{label}\n({x:.1f},{y:.1f})'
+        text.lifetime.sec = 0
+
+        self.goal_marker_pub.publish(ring)
+        self.goal_marker_pub.publish(fill)
+        self.goal_label_pub.publish(text)
+        if log:
+            self.get_logger().info(
+                f'Goal marker published at ({x:.3f}, {y:.3f}) -> '
+                '/foxglove_click_goal_marker /foxglove_click_goal_label'
+            )
+
+    @property
+    def is_navigating(self) -> bool:
+        return self._is_navigating
+
+    def _check_click_ready(self) -> None:
+        if self._click_ready_announced:
+            return
+        if not self.nav_client.server_is_ready():
+            return
+        if self._map_grid is None:
+            return
+        try:
+            self.tf_buffer.lookup_transform(
+                self.map_frame,
+                self.base_frame,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=0.2),
+            )
+        except Exception:
+            return
+        self._click_ready_announced = True
+        self.get_logger().info(
+            '>>> CLICK READY: Foxglove 可以单击地图白色区域发送导航目标。'
+            f' Topic={self.goal_point_topic}, frame=map。'
+            ' 若 scan 与地图错位，请先用 /initialpose 校正。导航进行中会忽略新点击。'
+        )
+
+    def try_get_current_yaw(self, default: float = 0.0) -> float:
+        for base_frame in (self.base_frame, self.fallback_base_frame):
+            try:
+                tf = self.tf_buffer.lookup_transform(
+                    self.map_frame,
+                    base_frame,
+                    rclpy.time.Time(),
+                    timeout=Duration(seconds=0.2),
+                )
+                q = tf.transform.rotation
+                return quaternion_to_yaw(q.x, q.y, q.z, q.w)
+            except Exception:
+                continue
+        return default
+
+    def _on_map(self, msg: OccupancyGrid) -> None:
+        self._map_grid = msg
+
+    def _validate_goal_on_map(self, x: float, y: float) -> bool:
+        if not self.reject_unknown_goals:
+            return True
+        if self._map_grid is None:
+            self.get_logger().warn('Map not received yet; cannot validate goal cell. Rejecting goal.')
+            return False
+        ok, reason = is_known_free(self._map_grid, x, y)
+        if not ok:
+            self.get_logger().error(
+                f'Reject goal ({x:.3f}, {y:.3f}): {reason}. '
+                'Click only on scanned white (free) area, not gray unknown.'
+            )
+            return False
+        self.get_logger().info(f'Goal map cell OK: ({x:.3f}, {y:.3f}) -> {reason}')
+        return True
+
+    def _validate_frame(self, frame_id: str) -> bool:
+        if self.accept_any_frame or frame_id == self.goal_frame:
+            return True
+        # base_link / odom clicks are accepted and transformed to map below.
+        if frame_id in (self.base_frame, self.fallback_base_frame, 'odom'):
+            return True
+        self.get_logger().error(
+            f'Reject goal in frame "{frame_id}". Expected "{self.goal_frame}" '
+            f'(or {self.base_frame} which will be auto-transformed).'
+        )
+        return False
+
+    def _point_to_map(self, msg: PointStamped) -> Optional[PointStamped]:
+        frame_id = msg.header.frame_id or self.goal_frame
+        if frame_id == self.map_frame:
+            out = PointStamped()
+            out.header.frame_id = self.map_frame
+            out.header.stamp = self.get_clock().now().to_msg()
+            out.point = msg.point
+            return out
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                self.map_frame,
+                frame_id,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=0.5),
+            )
+            transformed = tf2_geometry_msgs.do_transform_point(msg, tf)
+            transformed.header.frame_id = self.map_frame
+            transformed.header.stamp = self.get_clock().now().to_msg()
+            self.get_logger().info(
+                f'Transformed click from {frame_id} ({msg.point.x:.3f}, {msg.point.y:.3f}) '
+                f'-> map ({transformed.point.x:.3f}, {transformed.point.y:.3f})'
+            )
+            return transformed
+        except TransformException as exc:
+            self.get_logger().error(
+                f'Cannot transform click from "{frame_id}" to "{self.map_frame}": {exc}. '
+                'Set Foxglove display frame to map, or wait for TF.'
+            )
+            return None
+
+    def _on_goal_point(self, msg: PointStamped) -> None:
+        if self.is_navigating:
+            self.get_logger().warn('Navigation is running; ignore new clicked point.')
+            return
+
+        frame_id = msg.header.frame_id or self.goal_frame
+        if not self._validate_frame(frame_id):
+            return
+
+        map_pt = self._point_to_map(msg)
+        if map_pt is None:
+            return
+
+        x = map_pt.point.x
+        y = map_pt.point.y
+        z = map_pt.point.z
+
+        self._pending_goal_marker_seq += 1
+        self._publish_goal_endpoint_marker(x, y, self._pending_goal_marker_seq, status='pending')
+
+        yaw = self.default_goal_yaw
+        if self.prefer_current_yaw:
+            yaw = self.try_get_current_yaw(default=self.default_goal_yaw)
+
+        pose = PoseStamped()
+        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.header.frame_id = self.map_frame
+        pose.pose.position.x = x
+        pose.pose.position.y = y
+        pose.pose.position.z = z
+        pose.pose.orientation = yaw_to_quaternion(yaw)
+
+        self.get_logger().info(
+            f'Received Foxglove clicked point: frame_id={frame_id}, '
+            f'x={x:.3f}, y={y:.3f}, goal_yaw={yaw:.3f}'
+        )
+        self.handle_goal_pose(pose)
 
     def _on_goal_pose(self, msg: PoseStamped) -> None:
+        if self.is_navigating:
+            self.get_logger().warn('Navigation is running; ignore new clicked pose.')
+            return
+
         incoming_frame = msg.header.frame_id or self.goal_frame
-        if (not self.accept_any_frame) and incoming_frame != self.goal_frame:
-            self.get_logger().error(
-                f'Reject goal in frame "{incoming_frame}". Expected "{self.goal_frame}". '
-                f'Set Foxglove 3D fixed frame to {self.goal_frame}, or run with --accept-any-frame only if you know why.'
-            )
+        if not self._validate_frame(incoming_frame):
             return
 
         goal = _copy_goal_pose(msg, self.goal_frame)
         if goal.header.stamp.sec == 0 and goal.header.stamp.nanosec == 0:
             goal.header.stamp = self.get_clock().now().to_msg()
 
+        self._pending_goal_marker_seq += 1
+        self._publish_goal_endpoint_marker(
+            goal.pose.position.x,
+            goal.pose.position.y,
+            self._pending_goal_marker_seq,
+            status='pending',
+        )
+
+        self.get_logger().info(
+            f'Received Foxglove clicked pose: frame_id={goal.header.frame_id}, '
+            f'x={goal.pose.position.x:.3f}, y={goal.pose.position.y:.3f}'
+        )
+        self.handle_goal_pose(goal)
+
+    def handle_goal_pose(self, goal: PoseStamped) -> None:
+        x = goal.pose.position.x
+        y = goal.pose.position.y
+        if not self._validate_goal_on_map(x, y):
+            self._publish_goal_endpoint_marker(x, y, self._pending_goal_marker_seq, status='reject')
+            return
+
         self._goal_seq += 1
         seq = self._goal_seq
+        self._publish_goal_endpoint_marker(x, y, seq, status='ok')
         self.goal_pub.publish(goal)
 
         x = goal.pose.position.x
         y = goal.pose.position.y
-        self.get_logger().info(f'[{seq}] Accepted clicked goal: frame={goal.header.frame_id}, x={x:.3f}, y={y:.3f}')
+        self.get_logger().info(f'[{seq}] Accepted goal: frame={goal.header.frame_id}, x={x:.3f}, y={y:.3f}')
 
         self._request_path(goal, seq)
         if self.auto_navigate:
@@ -158,8 +510,19 @@ class FoxgloveClickGoalBridge(Node):
             return
 
         if len(path.poses) == 0:
-            self.get_logger().warn(f'[{seq}] Planner returned an empty path. Goal may be unreachable or costmap/localization is not ready.')
+            self.get_logger().warn(
+                f'[{seq}] Planner returned an empty path. Goal may be unreachable or localization is not ready.'
+            )
             return
+
+        if self._map_grid is not None and self.reject_unknown_goals:
+            ok, reason = path_stays_in_known_free(self._map_grid, path.poses)
+            if not ok:
+                self.get_logger().error(
+                    f'[{seq}] Reject planned path: crosses non-free area ({reason}). '
+                    'Nav2 allow_unknown=false should prevent this; check costmap.'
+                )
+                return
 
         self.path_pub.publish(path)
         self.marker_pub.publish(self._make_path_marker(path, seq))
@@ -204,7 +567,10 @@ class FoxgloveClickGoalBridge(Node):
         if hasattr(nav_goal, 'behavior_tree'):
             nav_goal.behavior_tree = ''
 
-        future = self.nav_client.send_goal_async(nav_goal, feedback_callback=lambda fb: self._on_nav_feedback(fb, seq))
+        future = self.nav_client.send_goal_async(
+            nav_goal,
+            feedback_callback=lambda fb: self._on_nav_feedback(fb, seq),
+        )
         future.add_done_callback(lambda f: self._on_nav_goal_response(f, seq))
 
     def _on_nav_goal_response(self, future, seq: int) -> None:
@@ -215,10 +581,13 @@ class FoxgloveClickGoalBridge(Node):
             return
 
         if not goal_handle.accepted:
-            self.get_logger().error(f'[{seq}] NavigateToPose goal rejected. Check localization, costmap, and clicked goal position.')
+            self.get_logger().error(
+                f'[{seq}] NavigateToPose goal rejected. Check localization, costmap, and clicked goal position.'
+            )
             return
 
         self._nav_goal_handle = goal_handle
+        self._is_navigating = True
         self.get_logger().info(f'[{seq}] NavigateToPose goal accepted. Robot should start planning/following.')
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(lambda f: self._on_nav_result(f, seq))
@@ -235,6 +604,8 @@ class FoxgloveClickGoalBridge(Node):
             self.get_logger().info(f'[{seq}] navigating: distance_remaining={distance:.3f} m, recoveries={recoveries}')
 
     def _on_nav_result(self, future, seq: int) -> None:
+        self._is_navigating = False
+        self._nav_goal_handle = None
         try:
             wrapped = future.result()
             status = wrapped.status
@@ -251,18 +622,41 @@ class FoxgloveClickGoalBridge(Node):
                 'Navigation succeeded. Current pose will be updated by pose_memory_node.'
             )
         else:
-            self.get_logger().error(f'[{seq}] Navigation ended. status={status}, error_code={err_code}, error_msg={err_msg}')
+            self.get_logger().error(
+                f'[{seq}] Navigation ended. status={status}, error_code={err_code}, error_msg={err_msg}'
+            )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Bridge Foxglove clicked PoseStamped goals to Nav2 NavigateToPose.')
-    parser.add_argument('--goal-topic', default='/foxglove_goal_pose', help='PoseStamped topic published by Foxglove 3D click-to-publish.')
+    parser = argparse.ArgumentParser(
+        description='Bridge Foxglove clicked point/pose goals to Nav2 NavigateToPose.'
+    )
+    parser.add_argument('--goal-point-topic', default='/foxglove_goal_point')
+    parser.add_argument('--goal-pose-topic', default='/foxglove_goal_pose')
+    parser.add_argument(
+        '--goal-topic',
+        default=None,
+        help='Deprecated alias for --goal-pose-topic.',
+    )
     parser.add_argument('--goal-frame', default='map', help='Expected goal frame. Usually map.')
-    parser.add_argument('--accept-any-frame', action='store_true', help='Accept non-map goal frames. Not recommended for normal use.')
-    parser.add_argument('--no-auto-navigate', dest='auto_navigate', action='store_false', help='Only compute/publish path; do not send NavigateToPose.')
+    parser.add_argument('--map-frame', default='map')
+    parser.add_argument('--base-frame', default='base_link')
+    parser.add_argument('--fallback-base-frame', default='base_footprint')
+    parser.add_argument('--prefer-current-yaw', dest='prefer_current_yaw', action='store_true')
+    parser.add_argument('--no-prefer-current-yaw', dest='prefer_current_yaw', action='store_false')
+    parser.set_defaults(prefer_current_yaw=True)
+    parser.add_argument('--default-goal-yaw', type=float, default=0.0)
+    parser.add_argument('--accept-any-frame', action='store_true')
+    parser.add_argument('--no-auto-navigate', dest='auto_navigate', action='store_false')
     parser.set_defaults(auto_navigate=True)
-    parser.add_argument('--compute-path-timeout-sec', type=float, default=2.0, help='Wait time for /compute_path_to_pose server.')
-    return parser.parse_args()
+    parser.add_argument('--compute-path-timeout-sec', type=float, default=2.0)
+    parser.add_argument('--reject-unknown-goals', dest='reject_unknown_goals', action='store_true')
+    parser.add_argument('--allow-unknown-goals', dest='reject_unknown_goals', action='store_false')
+    parser.set_defaults(reject_unknown_goals=True)
+    args = parser.parse_args()
+    if args.goal_topic:
+        args.goal_pose_topic = args.goal_topic
+    return args
 
 
 def main() -> None:

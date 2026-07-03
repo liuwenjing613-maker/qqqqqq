@@ -106,9 +106,11 @@ class PoseMemoryNode(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
             reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.VOLATILE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
         self.initial_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', qos)
+        self.initial_delay_sec = args.initial_delay
+        self._odom_tf_ready = False
 
         self._loaded_pose_msg: Optional[PoseWithCovarianceStamped] = None
         self._initial_remaining = 0
@@ -125,9 +127,48 @@ class PoseMemoryNode(Node):
                 self.get_logger().info(f'Loaded last pose from {self.state_file}')
                 self._loaded_pose_msg = pose_msg_from_json(pose_data)
                 self._initial_remaining = self.initial_repeat
-                self._initial_timer = self.create_timer(self.initial_interval, self._publish_initial_tick)
+                delay = max(self.initial_delay_sec, 0.1)
+                self._initial_timer = self.create_timer(delay, self._start_initial_publish)
+
+        self.create_timer(0.5, self._check_odom_tf)
 
         self.create_timer(args.save_period, self._save_tick)
+
+    def _check_odom_tf(self) -> None:
+        if self._odom_tf_ready:
+            return
+        try:
+            self.tf_buffer.lookup_transform(
+                'odom',
+                self.base_frame,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=0.2),
+            )
+            self._odom_tf_ready = True
+            self.get_logger().info('odom -> base_link TF is ready for /initialpose')
+        except TransformException:
+            try:
+                self.tf_buffer.lookup_transform(
+                    'odom',
+                    self.fallback_base_frame,
+                    rclpy.time.Time(),
+                    timeout=Duration(seconds=0.2),
+                )
+                self._odom_tf_ready = True
+                self.get_logger().info(
+                    f'odom -> {self.fallback_base_frame} TF is ready for /initialpose'
+                )
+            except TransformException:
+                pass
+
+    def _start_initial_publish(self) -> None:
+        if self._initial_timer is not None:
+            self._initial_timer.cancel()
+        if not self._odom_tf_ready:
+            self.get_logger().info('Waiting for odom TF before publishing /initialpose...')
+            self._initial_timer = self.create_timer(self.initial_interval, self._start_initial_publish)
+            return
+        self._initial_timer = self.create_timer(self.initial_interval, self._publish_initial_tick)
 
     def _lookup_transform(self) -> Optional[Tuple[str, TransformStamped]]:
         for child_frame in (self.base_frame, self.fallback_base_frame):
@@ -152,6 +193,10 @@ class PoseMemoryNode(Node):
         data = pose_dict_from_transform(self.map_frame, child_frame, tf)
         try:
             save_pose_json(self.state_file, data)
+            yaw_deg = math.degrees(data.get('yaw', 0.0))
+            self.get_logger().debug(
+                f'Saved pose x={data["x"]:.3f} y={data["y"]:.3f} yaw={data["yaw"]:.3f} rad ({yaw_deg:.1f} deg)'
+            )
         except OSError as exc:
             self.get_logger().warn(f'Failed to save pose to {self.state_file}: {exc}')
 
@@ -189,7 +234,8 @@ def parse_args() -> argparse.Namespace:
         help='Publish saved pose to /initialpose once at startup.',
     )
     parser.add_argument('--initial-repeat', type=int, default=5, help='Number of /initialpose publishes at startup.')
-    parser.add_argument('--initial-interval', type=float, default=0.3, help='Seconds between startup /initialpose publishes.')
+    parser.add_argument('--initial-interval', type=float, default=0.5, help='Seconds between startup /initialpose publishes.')
+    parser.add_argument('--initial-delay', type=float, default=2.0, help='Seconds to wait before first /initialpose publish.')
     return parser.parse_args()
 
 
