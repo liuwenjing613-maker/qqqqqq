@@ -93,8 +93,8 @@ fsm:
 birth_scan:
   enabled: true
   wait_sec: 5.0
-  scan_wz: 0.08
-  effective_scan_wz: 0.08
+  scan_wz: 0.03
+  effective_scan_wz: 0.03
   scan_deg: 360.0
   max_rotations: 1.0
   turn_dir: 1.0
@@ -168,7 +168,7 @@ chassis:
   bridge: pwm
   port: /dev/ttyUSB0
   max_vx: 0.06
-  max_wz: 0.10
+  max_wz: 0.06
   watchdog_timeout: 0.5
   control_rate_hz: 20.0
   wheel_layout: fl-rl-fr-rr
