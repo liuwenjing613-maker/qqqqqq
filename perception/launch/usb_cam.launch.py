@@ -1,6 +1,6 @@
 # Launch wrapper for Microdia USB 2.0 Camera on RDK X5.
-# The stock hobot_usb_cam defaults (960x480 @ 30fps) are unsupported by this
-# device and cause "Select timeout". Use 1280x720 @ 60fps (MJPEG) instead.
+# Stock hobot_usb_cam defaults (960x480) cause "Select timeout" on this device.
+# Verified stable profile: 1280x720 MJPEG @ 20fps.
 
 import os
 
@@ -23,6 +23,10 @@ def generate_launch_description():
             default_value="/dev/video0",
             description="USB camera device path",
         ),
+        DeclareLaunchArgument("usb_image_width", default_value="1280"),
+        DeclareLaunchArgument("usb_image_height", default_value="720"),
+        DeclareLaunchArgument("usb_framerate", default_value="20"),
+        DeclareLaunchArgument("usb_pixel_format", default_value="mjpeg"),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(
@@ -33,10 +37,10 @@ def generate_launch_description():
             launch_arguments={
                 "usb_video_device": LaunchConfiguration("usb_video_device"),
                 "usb_camera_calibration_file_path": calibration_file,
-                "usb_image_width": "1280",
-                "usb_image_height": "720",
-                "usb_framerate": "20",
-                "usb_pixel_format": "mjpeg",
+                "usb_image_width": LaunchConfiguration("usb_image_width"),
+                "usb_image_height": LaunchConfiguration("usb_image_height"),
+                "usb_framerate": LaunchConfiguration("usb_framerate"),
+                "usb_pixel_format": LaunchConfiguration("usb_pixel_format"),
             }.items(),
         ),
     ])

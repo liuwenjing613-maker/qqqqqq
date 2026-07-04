@@ -70,6 +70,9 @@ if [ "$NAV_ONLY" = "1" ]; then
 fi
 
 echo "[1/6] start camera + image bridge..."
+pkill -f hobot_usb_cam 2>/dev/null || true
+pkill -f compressed_to_raw_image.py 2>/dev/null || true
+sleep 1
 ros2 launch "$PROJECT_DIR/perception/launch/usb_cam.launch.py" \
   usb_video_device:="$CAMERA_DEV" \
   > logs/yolo_lidar_camera.log 2>&1 &

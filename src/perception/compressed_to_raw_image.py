@@ -8,7 +8,7 @@ import numpy as np
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import CompressedImage, Image
 from cv_bridge import CvBridge
 
@@ -17,9 +17,9 @@ class CompressedToRawImage(Node):
     """
     /image(sensor_msgs/msg/CompressedImage) -> /image_raw(sensor_msgs/msg/Image)
 
-    约定：
-    - /image：hobot_usb_cam 默认 MJPEG/压缩图像，给 websocket 网页看
-    - /image_raw：算法真正使用的 BGR8 原图
+    QoS split (required on RDK + hobot_usb_cam):
+    - subscribe /image with sensor_data: camera publishes BEST_EFFORT
+    - publish /image_raw with RELIABLE: YOLO / legacy nodes use default reliable subs
     """
 
     def __init__(self, in_topic="/image", out_topic="/image_raw", frame_id="usb_camera", max_fps=10.0):
@@ -32,25 +32,25 @@ class CompressedToRawImage(Node):
         self.max_fps = float(max_fps)
         self._last_pub_time = 0.0
 
-        self.sensor_qos = QoSProfile(
+        raw_pub_qos = QoSProfile(
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1,
             reliability=QoSReliabilityPolicy.RELIABLE,
         )
 
-        self.pub = self.create_publisher(Image, self.out_topic, self.sensor_qos)
+        self.pub = self.create_publisher(Image, self.out_topic, raw_pub_qos)
         self.sub = self.create_subscription(
             CompressedImage,
             self.in_topic,
             self.callback,
-            self.sensor_qos,
+            qos_profile_sensor_data,
         )
 
         self.count = 0
         self.last_time = time.time()
-        self.get_logger().info(f"compressed_to_raw_image started")
-        self.get_logger().info(f"subscribe: {self.in_topic}  type=sensor_msgs/msg/CompressedImage")
-        self.get_logger().info(f"publish  : {self.out_topic} type=sensor_msgs/msg/Image")
+        self.get_logger().info("compressed_to_raw_image started")
+        self.get_logger().info(f"subscribe: {self.in_topic}  type=sensor_msgs/msg/CompressedImage (sensor_data)")
+        self.get_logger().info(f"publish  : {self.out_topic} type=sensor_msgs/msg/Image (reliable)")
 
     def callback(self, msg: CompressedImage):
         try:

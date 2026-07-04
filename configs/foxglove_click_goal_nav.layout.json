@@ -3,8 +3,8 @@
     "3D!foxglove_click_goal_nav": {
       "cameraState": {
         "perspective": false,
-        "distance": 10,
-        "phi": 0,
+        "distance": 12,
+        "phi": 0.6,
         "thetaOffset": 0,
         "targetOffset": [0, 0, 0],
         "target": [0, 0, 0],
@@ -30,6 +30,13 @@
           "colorMode": "costmap",
           "minColor": "#000000",
           "maxColor": "#ffffff"
+        },
+        "/scan_filtered": {
+          "visible": true,
+          "pointSize": 4,
+          "decayTime": 0,
+          "colorField": "intensity",
+          "gradient": ["#ff4444", "#ff4444"]
         },
         "/foxglove_click_planned_path": {
           "visible": true,
@@ -65,7 +72,7 @@
     },
     "Text!click_nav_help": {
       "fontSize": 14,
-      "text": "Foxglove 点选导航（精简显示）\n\n显示内容：\n  - 地图 /map\n  - 绿色规划路径 /foxglove_click_planned_path\n  - 红色移动轨迹点 /foxglove_click_trajectory_dots\n  - 绿色起点 /foxglove_click_start_marker\n  - 橙色终点 /foxglove_click_goal_marker\n\n操作：\n1. Fixed frame = map\n2. Publish -> 2D 点 -> /foxglove_goal_point\n3. 在白色可通行区域单击一次\n4. 到达后再次单击新终点；上一次路径和轨迹会自动清除\n\n初始位姿：Publish -> 2D 位姿估计 -> /initialpose"
+      "text": "Foxglove 点选导航\n\n必须设置：\n  Fixed frame = map\n  Display frame = map\n\n显示内容：\n  - 地图 /map（白=可通行）\n  - 激光 /scan_filtered（红点）\n  - 绿线规划路径 /foxglove_click_planned_path\n  - 红色移动轨迹 /foxglove_click_trajectory_dots\n  - 绿色起点 / 橙色终点\n\n操作：\n1. Layout -> Import layout -> foxglove_click_goal_nav.layout.json\n2. Publish -> 2D 点 -> /foxglove_goal_point\n3. 激光与地图墙对齐后再点击；不对齐先用 /initialpose\n\n注意：不要用 Image 面板看 /scan；必须在 3D 面板。"
     }
   },
   "globalVariables": {},
