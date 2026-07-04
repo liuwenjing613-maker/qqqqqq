@@ -30,6 +30,11 @@ if str(ROOT) not in sys.path:
 
 from src.planning.frontier_extractor import extract_frontiers
 from src.planning.grid_astar import plan_path
+from src.planning.map_goal_validity import (
+    collect_scanned_free_goals,
+    goal_on_scanned_map,
+    snap_to_known_free,
+)
 from src.planning.path_follower import follow_path
 from src.planning.semantic_priors import (
     context_score,
@@ -86,6 +91,8 @@ class ExploreCandidate:
     blacklist_penalty: float = 0.0
     repeated_observation_penalty: float = 0.0
     travel_cost_penalty: float = 0.0
+    known_map_bonus: float = 0.0
+    unknown_goal_penalty: float = 0.0
     reason: str = ""
     source: Dict[str, Any] = field(default_factory=dict)
     target_class: str = ""
@@ -100,9 +107,11 @@ class ExploreCandidate:
             + self.novelty
             + self.safety_margin
             + self.qwen_text_score
+            + self.known_map_bonus
             - self.blacklist_penalty
             - self.repeated_observation_penalty
-            - self.travel_cost_penalty,
+            - self.travel_cost_penalty
+            - self.unknown_goal_penalty,
         )
 
 
@@ -168,6 +177,13 @@ class ExploreGoalSelector(Node):
         self.switch_score_margin = float(explore.get("switch_score_margin", 0.20))
         self.switch_confirm_count = max(1, int(explore.get("switch_confirm_count", 2)))
         self.standoff_m = float(frontier_cfg.get("observation_standoff_m", 0.65))
+        self.require_goal_on_known_free = bool(frontier_cfg.get("require_goal_on_known_free", True))
+        self.scanned_free_candidates = bool(frontier_cfg.get("scanned_free_candidates", True))
+        self.scanned_free_max_candidates = max(
+            0, int(frontier_cfg.get("scanned_free_max_candidates", 10))
+        )
+        self.known_map_bonus_weight = float(scoring.get("known_map_bonus", 0.12))
+        self.unknown_goal_penalty_weight = float(scoring.get("unknown_goal_penalty", 1.0))
         self.scoring_weights = scoring
         self.frontier_cfg = frontier_cfg
         self.planner_cfg = planner_cfg
@@ -467,6 +483,7 @@ class ExploreGoalSelector(Node):
                 int(self.frontier_cfg.get("free_threshold", 20)),
                 int(self.frontier_cfg.get("occupied_threshold", 65)),
                 int(self.frontier_cfg.get("unknown_value", -1)),
+                allow_unknown_neighbors=False,
             )
             if goal:
                 yaw = math.atan2(obj_y - goal[1], obj_x - goal[0])
@@ -508,6 +525,87 @@ class ExploreGoalSelector(Node):
             return False
         cls = str(bbox.get("class_name", bbox.get("class", "")))
         return is_target_match(self.parsed.target_aliases, cls) > 0
+
+    def _map_grid_cfg(self) -> Dict[str, Any]:
+        return dict(self.frontier_cfg)
+
+    def _goal_on_scanned_map(self, goal_xy: Tuple[float, float]) -> bool:
+        if not self.require_goal_on_known_free:
+            return True
+        if self.latest_map is None or not self._pose_matches_map():
+            return True
+        on_known, _, _ = goal_on_scanned_map(
+            self.latest_map, goal_xy[0], goal_xy[1], self._map_grid_cfg()
+        )
+        return on_known
+
+    def _apply_known_map_scoring(self, candidates: List[ExploreCandidate]) -> None:
+        if self.latest_map is None or not self._pose_matches_map():
+            return
+        cfg = self._map_grid_cfg()
+        for cand in candidates:
+            on_known, is_edge, is_interior = goal_on_scanned_map(
+                self.latest_map, cand.goal_xy[0], cand.goal_xy[1], cfg
+            )
+            if not on_known:
+                cand.unknown_goal_penalty = self.unknown_goal_penalty_weight
+                continue
+            if cand.mode == "frontier" and is_edge:
+                cand.known_map_bonus = self.known_map_bonus_weight * 0.95
+                cand.reason = f"{cand.reason}; scanned frontier edge"
+            elif is_edge:
+                cand.known_map_bonus = self.known_map_bonus_weight * 0.85
+            elif is_interior:
+                cand.known_map_bonus = self.known_map_bonus_weight
+                if cand.mode == "scanned_free":
+                    cand.reason = "scanned known-free interior"
+            cand.source = dict(cand.source)
+            cand.source["on_known_free"] = True
+            cand.source["is_frontier_edge"] = is_edge
+            cand.source["is_interior_scanned"] = is_interior
+
+    def _append_scanned_free_candidates(
+        self,
+        candidates: List[ExploreCandidate],
+        robot_xy: Tuple[float, float],
+        target_class: str,
+    ) -> None:
+        if (
+            not self.scanned_free_candidates
+            or self.latest_map is None
+            or not self._pose_matches_map()
+        ):
+            return
+        goals = collect_scanned_free_goals(
+            self.latest_map,
+            robot_xy,
+            self._map_grid_cfg(),
+            self.min_goal_select_distance_m,
+            self.max_goal_select_distance_m,
+            self.scanned_free_max_candidates,
+        )
+        for fx, fy, yaw, is_edge in goals:
+            dist = math.hypot(fx - robot_xy[0], fy - robot_xy[1])
+            cand = ExploreCandidate(
+                candidate_id=make_candidate_id("scanned_free", fx, fy),
+                mode="scanned_free",
+                goal_xy=(fx, fy),
+                goal_yaw=yaw,
+                look_at=(fx, fy),
+                semantic_score=0.12,
+                information_gain=0.45 if is_edge else 0.25,
+                reachability=0.85,
+                novelty=0.35 if is_edge else 0.2,
+                safety_margin=min(1.0, self._front_clearance() / 2.0),
+                travel_cost_penalty=min(0.5, dist / 4.0),
+                reason="scanned frontier edge" if is_edge else "scanned known-free cell",
+                source={"type": "scanned_free", "is_frontier_edge": is_edge},
+                target_class=target_class,
+            )
+            cand.blacklist_penalty = self._blacklist_penalty(fx, fy, target_class) * float(
+                self.scoring_weights.get("blacklist_penalty", 0.3)
+            )
+            candidates.append(cand)
 
     def _generate_candidates(self, robot_xy: Tuple[float, float]) -> List[ExploreCandidate]:
         candidates: List[ExploreCandidate] = []
@@ -626,29 +724,48 @@ class ExploreGoalSelector(Node):
                 )
                 candidates.append(cand)
 
+        if map_aligned:
+            self._append_scanned_free_candidates(candidates, robot_xy, target_class)
+
         if not candidates and ranges and angles:
             best_i = max(range(len(ranges)), key=lambda i: ranges[i] if 0.1 < ranges[i] < 4.0 else 0.0)
             r = ranges[best_i]
             a = angles[best_i]
             gx = robot_xy[0] + r * 0.5 * math.cos(robot_xy[2] + a)
             gy = robot_xy[1] + r * 0.5 * math.sin(robot_xy[2] + a)
-            candidates.append(
-                ExploreCandidate(
-                    candidate_id=make_candidate_id("free_space", gx, gy),
-                    mode="free_space",
-                    goal_xy=(gx, gy),
-                    goal_yaw=robot_xy[2] + a,
-                    look_at=(gx, gy),
-                    semantic_score=0.15,
-                    information_gain=0.55,
-                    reachability=0.75,
-                    novelty=0.55,
-                    safety_margin=min(1.0, r / 2.0),
-                    reason="free_space fallback",
-                    source={"type": "free_space"},
-                    target_class=target_class,
+            use_goal = True
+            if map_aligned and self.latest_map is not None and self.require_goal_on_known_free:
+                snapped = snap_to_known_free(
+                    self.latest_map,
+                    gx,
+                    gy,
+                    robot_xy,
+                    self._map_grid_cfg(),
+                    self.min_goal_select_distance_m,
+                    self.max_goal_select_distance_m,
                 )
-            )
+                if snapped is None:
+                    use_goal = False
+                else:
+                    gx, gy = snapped
+            if use_goal:
+                candidates.append(
+                    ExploreCandidate(
+                        candidate_id=make_candidate_id("free_space", gx, gy),
+                        mode="free_space",
+                        goal_xy=(gx, gy),
+                        goal_yaw=robot_xy[2] + a,
+                        look_at=(gx, gy),
+                        semantic_score=0.15,
+                        information_gain=0.55,
+                        reachability=0.75,
+                        novelty=0.55,
+                        safety_margin=min(1.0, r / 2.0),
+                        reason="free_space fallback on scanned cell",
+                        source={"type": "free_space"},
+                        target_class=target_class,
+                    )
+                )
 
         w = self.scoring_weights
         for c in candidates:
@@ -658,6 +775,7 @@ class ExploreGoalSelector(Node):
             c.novelty *= float(w.get("novelty", 0.15))
             c.safety_margin *= float(w.get("safety_margin", 0.10))
 
+        self._apply_known_map_scoring(candidates)
         return candidates
 
     def _astar_cfg(self) -> Dict[str, Any]:
@@ -760,6 +878,7 @@ class ExploreGoalSelector(Node):
                 "safety": round(candidate.safety_margin, 3),
                 "blacklist": round(candidate.blacklist_penalty, 3),
                 "travel_cost": round(candidate.travel_cost_penalty, 3),
+                "known_map": round(candidate.known_map_bonus, 3),
             },
             "source": candidate.source,
         }
@@ -773,6 +892,10 @@ class ExploreGoalSelector(Node):
         self._last_best_candidate_id = best.candidate_id if best else None
 
     def _candidate_safe(self, candidate: ExploreCandidate) -> bool:
+        if candidate.unknown_goal_penalty > 0.5:
+            return False
+        if not self._goal_on_scanned_map(candidate.goal_xy):
+            return False
         return (
             candidate.blacklist_penalty <= 0.0
             and candidate.reachability > 0.05
@@ -1047,6 +1170,7 @@ class ExploreGoalSelector(Node):
             "target_landmark": (1.0, 0.85, 0.1, 0.95),
             "context_landmark": (1.0, 0.55, 0.1, 0.9),
             "frontier": (0.25, 0.55, 1.0, 0.9),
+            "scanned_free": (0.2, 0.85, 0.55, 0.9),
             "free_space": (0.7, 0.7, 0.7, 0.85),
         }
         return palette.get(mode, (1.0, 1.0, 0.2, 0.9))
@@ -1339,6 +1463,7 @@ class ExploreGoalSelector(Node):
             "max_goal_select_distance_m": self.max_goal_select_distance_m,
             "require_astar_path": self.require_astar_path,
             "astar_fallback_bearing": self.astar_fallback_bearing,
+            "require_goal_on_known_free": self.require_goal_on_known_free,
             "nav_abort_reselect": self._nav_abort_reselect,
             "last_nav_reject_reason": self._last_nav_reject_reason,
             "distance_to_selected_goal_m": (
