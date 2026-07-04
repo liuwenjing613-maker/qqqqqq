@@ -232,6 +232,15 @@ def test_birth_wait_timer_survives_wait_sensors_bounce():
     assert result.reason == "birth_wait_timeout_scan"
 
 
+def test_birth_wait_ignores_emergency_and_blocked():
+    fsm = NavStateMachine(birth_cfg())
+    fsm.update(obs(0.0))
+    fsm.update(obs(0.1))
+    assert fsm.state == NavState.BIRTH_WAIT
+    assert fsm.update(obs(1.0, emergency=True, blocked=True, front_distance=0.08)).state == NavState.BIRTH_WAIT
+    assert fsm.update(obs(5.1)).state == NavState.SCANNING
+
+
 if __name__ == "__main__":
     test_birth_wait_then_scanning()
     test_birth_wait_target_goes_candidate_lock()
@@ -247,4 +256,5 @@ if __name__ == "__main__":
     test_birth_wait_holds_through_image_stale()
     test_wait_sensors_recovers_birth_with_scan_only()
     test_birth_wait_timer_survives_wait_sensors_bounce()
+    test_birth_wait_ignores_emergency_and_blocked()
     print("PASS test_nav_birth_scan")

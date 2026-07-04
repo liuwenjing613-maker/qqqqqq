@@ -170,9 +170,9 @@ class NavStateMachine:
             reason = "scan_stale" if obs.require_lidar and not obs.scan_fresh else "image_stale"
         elif (
             obs.emergency
-            and self.state not in (NavState.ARRIVE_VERIFY, NavState.SCANNING)
+            and self.state not in (NavState.ARRIVE_VERIFY, NavState.BIRTH_WAIT, NavState.SCANNING)
         ):
-            # In-place birth scan: rotating LiDAR briefly sees close returns; do not abort spin.
+            # Birth wait/scan are in-place: brief close LiDAR returns must not abort startup survey.
             self._enter(NavState.BLOCKED, obs.now)
             reason = "emergency"
         elif self.state == NavState.BOOT:
@@ -207,10 +207,7 @@ class NavStateMachine:
             else:
                 reason = "waiting_sensors"
         elif self.state == NavState.BIRTH_WAIT:
-            if obs.blocked:
-                self._enter(NavState.BLOCKED, obs.now)
-                reason = "blocked"
-            elif target_ok:
+            if target_ok:
                 self._finish_birth_phase()
                 self._enter(NavState.CANDIDATE_LOCK, obs.now)
                 self.stable_frames = 1
@@ -445,7 +442,10 @@ class NavStateMachine:
 
     def _birth_sensor_hold_active(self) -> bool:
         """Do not bounce birth wait/scan back to WAIT_SENSORS on brief sensor gaps."""
-        return self._in_birth_flow() and self.state in (NavState.BIRTH_WAIT, NavState.SCANNING)
+        return self._in_birth_flow() and self.state in (
+            NavState.BIRTH_WAIT,
+            NavState.SCANNING,
+        )
 
     def _sensor_stale_forces_wait(self, obs: NavObservation) -> bool:
         if obs.require_lidar and not obs.scan_fresh:

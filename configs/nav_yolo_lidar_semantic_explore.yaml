@@ -28,6 +28,8 @@ topics:
   explore_selected_goal: /explore_selected_goal
   explore_frontiers: /explore_frontiers
   explore_path: /explore_path
+  explore_selection_process: /explore_selection_process
+  explore_astar_markers: /explore_astar_markers
   scan_filtered: /scan_filtered
 foxglove:
   port: 8765
@@ -93,8 +95,8 @@ fsm:
 birth_scan:
   enabled: true
   wait_sec: 5.0
-  scan_wz: 0.03
-  effective_scan_wz: 0.03
+  scan_wz: 0.05
+  effective_scan_wz: 0.05
   scan_deg: 360.0
   max_rotations: 1.0
   turn_dir: 1.0
@@ -109,7 +111,7 @@ success:
   stop_distance: 0.5
   lidar_success_distance: 0.5
   verify_distance_max: 0.5
-  min_area_ratio: 0.7
+  min_area_ratio: 0.5
   min_height_ratio: 0.55
   center_only_enabled: false
   arrive_frames: 1
@@ -121,7 +123,7 @@ success:
   qwen_verify_required: false
 servo:
   max_vx: 0.06
-  steer_vx: 0.03
+  steer_vx: 0.05
   max_wz: 0.03
   kp_turn: 0.1
   center_deadband: 0.06
@@ -130,24 +132,34 @@ servo:
   cmd_wz_deadband: 0.006
 safety:
   require_lidar: true
-  emergency_stop_distance: 0.25
-  hard_stop_distance: 0.35
-  slow_distance: 0.9
-  max_cmd_vx: 0.06
-  max_cmd_wz: 0.08
+  emergency_stop_distance: 0.28
+  stop_distance: 0.42
+  slow_distance: 0.65
+  max_cmd_vx_explore: 0.04
+  max_cmd_wz_explore: 0.06
+  slow_vx: 0.020
+  safe_turn_wz: 0.04
+  max_cmd_vx: 0.04
+  max_cmd_wz: 0.06
   turn_zero_vx_wz: 0.05
-  turn_slow_vx_wz: 0.035
+  turn_slow_vx_wz: 0.02
   turn_slow_vx_scale: 0.5
+  blocked_retreat:
+    enabled: true
+    clearance_margin_m: 0.10
+    reverse_vx: 0.03
+    max_duration_sec: 5.0
+    fsm_unblock_buffer_m: 0.02
 search:
-  scan_wz: 0.05
-  search_arc_vx: 0.03
+  scan_wz: 0.03
+  search_arc_vx: 0.04
   pulse_sec: 0.35
   observe_sec: 0.1
   loss_memory_sec: 4.0
   free_space_after_loss_sec: 4.0
-  free_space_enabled: true
+  free_space_enabled: false
   free_space_enable_after_sec: 4.0
-  free_space_vx: 0.025
+  free_space_vx: 0.035
   free_space_min_clearance: 0.38
   turn_lock_sec: 6.0
   lidar_turn_min_delta: 0.15
@@ -168,7 +180,7 @@ chassis:
   bridge: pwm
   port: /dev/ttyUSB0
   max_vx: 0.06
-  max_wz: 0.06
+  max_wz: 0.05
   watchdog_timeout: 0.5
   control_rate_hz: 20.0
   wheel_layout: fl-rl-fr-rr
@@ -307,16 +319,28 @@ semantic_explore:
   hint_topic: /explore_goal_hint
   state_topic: /explore_state_json
   use_in_search_only: true
-  max_hint_age_sec: 1.5
-  min_hint_score: 0.42
+  max_hint_age_sec: 3.0
+  min_hint_score: 0.32
+  goal_hold_sec: 12.0
+  max_goal_select_distance_m: 1.5
+  min_goal_select_distance_m: 0.35
+  goal_switch_max_distance_m: 0.6
+  goal_switch_min_dist_m: 0.45
+  blocked_reject_reasons:
+  - blocked
+  - unsafe_front_clearance
+  - emergency_stop
   target_visible_interrupt: true
   observe_after_reach_sec: 1.2
   observe_scan_deg: 90.0
   observe_scan_wz: 0.05
-  max_goal_age_sec: 8.0
-  reselect_interval_sec: 2.0
-  step_goal_distance_m: 0.7
-  goal_reached_radius_m: 0.35
+  max_goal_age_sec: 6.0
+  reselect_interval_sec: 6.0
+  keep_goal_min_sec: 0.0
+  switch_score_margin: 0.35
+  switch_confirm_count: 3
+  step_goal_distance_m: 0.6
+  goal_reached_radius_m: 0.32
   goal_timeout_sec: 12.0
   blacklist_radius_m: 0.6
   blacklist_ttl_sec: 180.0
@@ -373,30 +397,36 @@ semantic_priors:
 frontier:
   enabled: true
   map_topic: /map
-  min_cluster_cells: 4
+  min_cluster_cells: 8
   max_frontiers: 12
   unknown_value: -1
   free_threshold: 20
   occupied_threshold: 65
   inflation_radius_m: 0.25
   min_distance_m: 0.45
-  max_distance_m: 3.0
+  max_distance_m: 1.5
   observation_standoff_m: 0.65
   unknown_gain_radius_m: 0.6
 planner:
-  mode: bearing_first
-  astar_enabled: false
+  mode: astar
+  astar_enabled: true
+  require_astar_path: true
+  astar_fallback_bearing: true
   allow_unknown: false
   grid_resolution_override: null
   path_publish_topic: /explore_path
   path_follow_lookahead_m: 0.35
   bearing_first:
-    max_vx: 0.035
+    max_vx: 0.05
     max_wz: 0.05
-    turn_in_place_threshold_rad: 0.35
+    turn_in_place_threshold_rad: 0.22
     forward_bearing_threshold_rad: 0.22
+    align_max_sec: 3.0
+    step_mode: distance
+    step_distance_m: 0.45
     pulse_sec: 0.35
-    observe_sec: 0.15
+    inter_burst_pause_sec: 0.12
+    observe_sec: 0.12
 candidate_scoring:
   semantic_score: 0.25
   information_gain: 0.25

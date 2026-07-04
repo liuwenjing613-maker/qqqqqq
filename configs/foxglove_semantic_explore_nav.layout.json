@@ -40,7 +40,8 @@
         "/explore_frontiers": {
           "visible": true,
           "namespaces": {
-            "frontiers": { "visible": true }
+            "frontiers": { "visible": true },
+            "frontier_labels": { "visible": true }
           }
         },
         "/explore_candidate_goals": {
@@ -54,11 +55,31 @@
           "visible": true,
           "namespaces": {
             "selected": { "visible": true },
-            "selected_arrow": { "visible": true }
+            "selected_arrow": { "visible": true },
+            "selected_label": { "visible": true }
+          }
+        },
+        "/explore_selection_process": {
+          "visible": true,
+          "namespaces": {
+            "robot": { "visible": true },
+            "links": { "visible": true },
+            "pending": { "visible": true },
+            "status": { "visible": true }
+          }
+        },
+        "/explore_astar_markers": {
+          "visible": true,
+          "namespaces": {
+            "astar_path": { "visible": true },
+            "astar_waypoints": { "visible": true },
+            "astar_endpoints": { "visible": true }
           }
         },
         "/explore_path": {
-          "visible": true
+          "visible": true,
+          "lineWidth": 0.08,
+          "gradient": ["#00c8ff", "#00ff66"]
         },
         "/semantic_landmarks": {
           "visible": true,
@@ -119,6 +140,20 @@
       "xAxisVal": "timestamp",
       "sidebarDimension": 240
     },
+    "Plot!explore_phase": {
+      "title": "explore_phase (nav)",
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/nav_state.explore_phase",
+          "enabled": true,
+          "color": "#7ad64b"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
     "RawMessages!explore_hint": {
       "topicPath": "/explore_goal_hint",
       "diffEnabled": false,
@@ -174,10 +209,10 @@
         "direction": "column",
         "first": {
           "direction": "column",
-          "first": "RawMessages!explore_hint",
+          "first": "RawMessages!explore_state",
           "second": {
             "direction": "column",
-            "first": "RawMessages!explore_state",
+            "first": "RawMessages!explore_hint",
             "second": "RawMessages!nav_state",
             "splitPercentage": 50
           },
@@ -185,19 +220,24 @@
         },
         "second": {
           "direction": "column",
-          "first": "Plot!cmd_vx",
+          "first": {
+            "direction": "row",
+            "first": "Plot!cmd_vx",
+            "second": "Plot!explore_phase",
+            "splitPercentage": 55
+          },
           "second": {
             "direction": "column",
             "first": "RawMessages!semantic_map_json",
             "second": "RawMessages!qwen_decision",
             "splitPercentage": 50
           },
-          "splitPercentage": 45
+          "splitPercentage": 42
         },
-        "splitPercentage": 55
+        "splitPercentage": 58
       },
-      "splitPercentage": 55
+      "splitPercentage": 52
     },
-    "splitPercentage": 62
+    "splitPercentage": 64
   }
 }
