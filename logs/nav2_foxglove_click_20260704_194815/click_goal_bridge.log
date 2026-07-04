@@ -1,0 +1,38 @@
+[INFO] [1783165878.354409532] [foxglove_click_goal_bridge]: Foxglove click goal bridge started.
+[INFO] [1783165878.358971861] [foxglove_click_goal_bridge]: Listening point click topic:
+[INFO] [1783165878.362833900] [foxglove_click_goal_bridge]:   /foxglove_goal_point
+[INFO] [1783165878.366414230] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PointStamped
+[INFO] [1783165878.370260726] [foxglove_click_goal_bridge]: Listening pose click topic:
+[INFO] [1783165878.374991764] [foxglove_click_goal_bridge]:   /foxglove_goal_pose
+[INFO] [1783165878.378791886] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PoseStamped
+[INFO] [1783165878.382492007] [foxglove_click_goal_bridge]: Recommended Foxglove tool:
+[INFO] [1783165878.386266546] [foxglove_click_goal_bridge]:   Publish -> 2D point -> /foxglove_goal_point
+[INFO] [1783165878.390123792] [foxglove_click_goal_bridge]: Visual path topic: /foxglove_click_planned_path
+[INFO] [1783165878.393789789] [foxglove_click_goal_bridge]: Visual trajectory: /foxglove_click_trajectory_dots (red dots)
+[INFO] [1783165878.397238036] [foxglove_click_goal_bridge]: Visual start marker: /foxglove_click_start_marker
+[INFO] [1783165878.400724866] [foxglove_click_goal_bridge]: Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label
+[INFO] [1783165878.404245530] [foxglove_click_goal_bridge]: Foxglove map viz topic: /foxglove_map_viz (use this in 3D panel, not raw /map)
+[INFO] [1783165881.045439226] [foxglove_click_goal_bridge]: >>> CLICK READY: Foxglove 可以单击地图白色区域发送导航目标。 Topic=/foxglove_goal_point, frame=map。 若 scan 与地图错位，请先用 /initialpose 校正。导航进行中会忽略新点击。
+[INFO] [1783165970.644760967] [foxglove_click_goal_bridge]: Goal marker published at (1.748, -1.420) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783165970.650314629] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=1.748, y=-1.420, goal_yaw=-1.534
+[INFO] [1783165970.654717125] [foxglove_click_goal_bridge]: Goal footprint OK: (1.748, -1.420) -> ok (radius=0.11m)
+[INFO] [1783165970.682245350] [foxglove_click_goal_bridge]: [1] Start marker at (-1.397, -0.180) -> /foxglove_click_start_marker
+[INFO] [1783165970.697684669] [foxglove_click_goal_bridge]: Goal marker published at (1.748, -1.420) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783165970.703531622] [foxglove_click_goal_bridge]: [1] Accepted goal: frame=map, x=1.748, y=-1.420
+[INFO] [1783165970.867782931] [foxglove_click_goal_bridge]: [1] Planned path published: 139 poses -> /foxglove_click_planned_path
+[INFO] [1783165970.901722192] [foxglove_click_goal_bridge]: [1] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783165970.999464145] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.000 m, recoveries=0
+[INFO] [1783165972.996861542] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.486 m, recoveries=0
+[INFO] [1783165975.000765433] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.399 m, recoveries=0
+[INFO] [1783165977.003965823] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.274 m, recoveries=0
+[INFO] [1783165979.014239997] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.124 m, recoveries=0
+[INFO] [1783165981.027434002] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=2.999 m, recoveries=0
+[INFO] [1783165983.025955311] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=2.824 m, recoveries=0
+[INFO] [1783165985.043440893] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=2.674 m, recoveries=0
+[ERROR] [1783165986.060915218] [foxglove_click_goal_bridge]: Robot left known-free map (footprint_occupied(val=100) at cell (92,68)); canceling navigation.
+[ERROR] [1783165986.148007472] [foxglove_click_goal_bridge]: [1] Navigation ended. status=5, error_code=None, error_msg=
+[INFO] [1783166023.426984515] [foxglove_click_goal_bridge]: Goal marker published at (0.668, -0.733) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783166023.436586215] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=0.668, y=-0.733, goal_yaw=-0.267
+[INFO] [1783166023.442879542] [foxglove_click_goal_bridge]: Goal footprint OK: (0.668, -0.733) -> ok (radius=0.11m)
+[ERROR] [1783166023.472177599] [foxglove_click_goal_bridge]: Reject navigation: robot at (-0.354, -0.410) is not on known-free map (footprint_occupied(val=100) at cell (91,66)). Use /initialpose in Foxglove to align on white area first.
+[INFO] [1783166023.495303953] [foxglove_click_goal_bridge]: Goal marker published at (0.668, -0.733) -> /foxglove_click_goal_marker /foxglove_click_goal_label
