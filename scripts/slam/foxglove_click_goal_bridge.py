@@ -8,11 +8,13 @@ Subscribe:
   /foxglove_goal_pose   geometry_msgs/msg/PoseStamped    (legacy: click + drag)
 
 Publish for visualization:
-  /foxglove_click_planned_path  nav_msgs/msg/Path
-  /foxglove_click_path_marker   visualization_msgs/msg/Marker
-  /foxglove_click_goal_marker   visualization_msgs/msg/Marker  (goal circle ring)
-  /foxglove_click_goal_label    visualization_msgs/msg/Marker  (goal text label)
-  /foxglove_click_accepted_goal geometry_msgs/msg/PoseStamped
+  /foxglove_click_planned_path    nav_msgs/msg/Path
+  /foxglove_click_path_marker     visualization_msgs/msg/Marker
+  /foxglove_click_trajectory_dots visualization_msgs/msg/Marker  (red dots: actual motion)
+  /foxglove_click_start_marker    visualization_msgs/msg/Marker  (start point)
+  /foxglove_click_goal_marker     visualization_msgs/msg/Marker  (goal circle ring)
+  /foxglove_click_goal_label      visualization_msgs/msg/Marker  (goal text label)
+  /foxglove_click_accepted_goal   geometry_msgs/msg/PoseStamped
 
 Action clients:
   /compute_path_to_pose  nav2_msgs/action/ComputePathToPose
@@ -46,6 +48,13 @@ if str(_SCRIPT_DIR) not in __import__('sys').path:
 from map_goal_validate import is_known_free, path_stays_in_known_free
 
 GOAL_MARKER_NS = 'foxglove_click_goal_endpoint'
+PATH_MARKER_NS = 'foxglove_click_goal'
+TRAJECTORY_MARKER_NS = 'foxglove_click_trajectory'
+START_MARKER_NS = 'foxglove_click_start'
+TRAJECTORY_SAMPLE_SEC = 0.35
+TRAJECTORY_MIN_STEP_M = 0.06
+TRAJECTORY_DOT_RADIUS = 0.045
+START_MARKER_RADIUS = 0.11
 GOAL_CIRCLE_RADIUS = 0.13
 GOAL_CIRCLE_LINE_WIDTH = 0.028
 GOAL_FILL_HEIGHT = 0.018
@@ -139,12 +148,17 @@ class FoxgloveClickGoalBridge(Node):
         self.goal_pub = self.create_publisher(PoseStamped, '/foxglove_click_accepted_goal', latched_qos)
         self.path_pub = self.create_publisher(Path, '/foxglove_click_planned_path', latched_qos)
         self.marker_pub = self.create_publisher(Marker, '/foxglove_click_path_marker', latched_qos)
+        self.trajectory_pub = self.create_publisher(Marker, '/foxglove_click_trajectory_dots', latched_qos)
+        self.start_marker_pub = self.create_publisher(Marker, '/foxglove_click_start_marker', latched_qos)
         self.goal_marker_pub = self.create_publisher(Marker, '/foxglove_click_goal_marker', latched_qos)
         self.goal_label_pub = self.create_publisher(Marker, '/foxglove_click_goal_label', latched_qos)
 
         self._pending_goal_marker_seq = 0
         self._last_goal_marker: Optional[tuple[float, float, int, str]] = None
+        self._trajectory_points: list[tuple[float, float]] = []
+        self._active_viz_seq = 0
         self.create_timer(1.0, self._republish_goal_marker)
+        self.create_timer(TRAJECTORY_SAMPLE_SEC, self._sample_trajectory_pose)
 
         self.goal_point_sub = self.create_subscription(
             PointStamped,
@@ -180,7 +194,139 @@ class FoxgloveClickGoalBridge(Node):
         self.get_logger().info('Recommended Foxglove tool:')
         self.get_logger().info(f'  Publish -> 2D point -> {self.goal_point_topic}')
         self.get_logger().info('Visual path topic: /foxglove_click_planned_path')
+        self.get_logger().info('Visual trajectory: /foxglove_click_trajectory_dots (red dots)')
+        self.get_logger().info('Visual start marker: /foxglove_click_start_marker')
         self.get_logger().info('Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label')
+
+    def _delete_marker(self, ns: str, marker_id: int = 0) -> Marker:
+        marker = Marker()
+        marker.header.frame_id = self.map_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = ns
+        marker.id = marker_id
+        marker.action = Marker.DELETE
+        return marker
+
+    def _deleteall_marker(self, ns: str) -> Marker:
+        marker = Marker()
+        marker.header.frame_id = self.map_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = ns
+        marker.action = Marker.DELETEALL
+        return marker
+
+    def _clear_previous_viz(self) -> None:
+        """Remove last navigation path, trajectory dots, and endpoint markers."""
+        self.marker_pub.publish(self._deleteall_marker(PATH_MARKER_NS))
+        self.trajectory_pub.publish(self._deleteall_marker(TRAJECTORY_MARKER_NS))
+        self.start_marker_pub.publish(self._deleteall_marker(START_MARKER_NS))
+        self.goal_marker_pub.publish(self._deleteall_marker(GOAL_MARKER_NS))
+        self.goal_label_pub.publish(self._delete_marker(GOAL_MARKER_NS, 0))
+
+        empty_path = Path()
+        empty_path.header.frame_id = self.map_frame
+        empty_path.header.stamp = self.get_clock().now().to_msg()
+        self.path_pub.publish(empty_path)
+
+        self._trajectory_points.clear()
+        self._last_goal_marker = None
+
+    def try_get_current_pose_xy(self) -> Optional[tuple[float, float]]:
+        for base_frame in (self.base_frame, self.fallback_base_frame):
+            try:
+                tf = self.tf_buffer.lookup_transform(
+                    self.map_frame,
+                    base_frame,
+                    rclpy.time.Time(),
+                    timeout=Duration(seconds=0.2),
+                )
+                t = tf.transform.translation
+                return (t.x, t.y)
+            except Exception:
+                continue
+        return None
+
+    def _publish_start_marker(self, x: float, y: float, seq: int) -> None:
+        stamp = self.get_clock().now().to_msg()
+
+        ring = Marker()
+        ring.header.frame_id = self.map_frame
+        ring.header.stamp = stamp
+        ring.ns = START_MARKER_NS
+        ring.id = 0
+        ring.type = Marker.LINE_STRIP
+        ring.action = Marker.ADD
+        ring.scale.x = 0.025
+        ring.color.r = 0.15
+        ring.color.g = 0.85
+        ring.color.b = 0.35
+        ring.color.a = 0.95
+        ring.lifetime.sec = 0
+        ring.points = self._circle_points(x, y, START_MARKER_RADIUS, z=0.05)
+
+        text = Marker()
+        text.header.frame_id = self.map_frame
+        text.header.stamp = stamp
+        text.ns = START_MARKER_NS
+        text.id = 1
+        text.type = Marker.TEXT_VIEW_FACING
+        text.action = Marker.ADD
+        text.pose.position.x = x
+        text.pose.position.y = y
+        text.pose.position.z = START_MARKER_RADIUS + 0.06
+        text.pose.orientation.w = 1.0
+        text.scale.z = 0.08
+        text.color.r = 0.15
+        text.color.g = 0.95
+        text.color.b = 0.45
+        text.color.a = 0.95
+        text.text = f'起点#{seq}'
+        text.lifetime.sec = 0
+
+        self.start_marker_pub.publish(ring)
+        self.start_marker_pub.publish(text)
+        self.get_logger().info(f'[{seq}] Start marker at ({x:.3f}, {y:.3f}) -> /foxglove_click_start_marker')
+
+    def _append_trajectory_point(self, x: float, y: float) -> None:
+        if self._trajectory_points:
+            lx, ly = self._trajectory_points[-1]
+            if math.hypot(x - lx, y - ly) < TRAJECTORY_MIN_STEP_M:
+                return
+        self._trajectory_points.append((x, y))
+        self._publish_trajectory_marker()
+
+    def _publish_trajectory_marker(self) -> None:
+        marker = Marker()
+        marker.header.frame_id = self.map_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = TRAJECTORY_MARKER_NS
+        marker.id = self._active_viz_seq
+        marker.type = Marker.SPHERE_LIST
+        marker.action = Marker.ADD
+        marker.scale.x = TRAJECTORY_DOT_RADIUS * 2.0
+        marker.scale.y = TRAJECTORY_DOT_RADIUS * 2.0
+        marker.scale.z = TRAJECTORY_DOT_RADIUS * 2.0
+        marker.color.r = 0.95
+        marker.color.g = 0.12
+        marker.color.b = 0.12
+        marker.color.a = 0.92
+        marker.lifetime.sec = 0
+        marker.points = []
+        for x, y in self._trajectory_points:
+            p = Point()
+            p.x = x
+            p.y = y
+            p.z = 0.05
+            marker.points.append(p)
+        self.trajectory_pub.publish(marker)
+
+    def _sample_trajectory_pose(self) -> None:
+        if not self._is_navigating:
+            return
+        pose_xy = self.try_get_current_pose_xy()
+        if pose_xy is None:
+            return
+        self._append_trajectory_point(pose_xy[0], pose_xy[1])
 
     def _republish_goal_marker(self) -> None:
         if self._last_goal_marker is None:
@@ -454,8 +600,17 @@ class FoxgloveClickGoalBridge(Node):
             self._publish_goal_endpoint_marker(x, y, self._pending_goal_marker_seq, status='reject')
             return
 
+        self._clear_previous_viz()
+
         self._goal_seq += 1
         seq = self._goal_seq
+        self._active_viz_seq = seq
+
+        start_xy = self.try_get_current_pose_xy()
+        if start_xy is not None:
+            self._publish_start_marker(start_xy[0], start_xy[1], seq)
+            self._append_trajectory_point(start_xy[0], start_xy[1])
+
         self._publish_goal_endpoint_marker(x, y, seq, status='ok')
         self.goal_pub.publish(goal)
 
@@ -531,7 +686,7 @@ class FoxgloveClickGoalBridge(Node):
     def _make_path_marker(self, path: Path, marker_id: int) -> Marker:
         marker = Marker()
         marker.header = path.header
-        marker.ns = 'foxglove_click_goal'
+        marker.ns = PATH_MARKER_NS
         marker.id = marker_id
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
@@ -617,6 +772,9 @@ class FoxgloveClickGoalBridge(Node):
             return
 
         if status == GoalStatus.STATUS_SUCCEEDED or err_code == 0:
+            pose_xy = self.try_get_current_pose_xy()
+            if pose_xy is not None:
+                self._append_trajectory_point(pose_xy[0], pose_xy[1])
             self.get_logger().info(f'[{seq}] Navigation succeeded. status={status}')
             self.get_logger().info(
                 'Navigation succeeded. Current pose will be updated by pose_memory_node.'

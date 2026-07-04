@@ -220,9 +220,9 @@ print_click_ready_banner() {
   echo
   echo "前提检查（Foxglove 3D 面板）："
   echo "  1. Fixed frame = map"
-  echo "  2. 显示 /map 与 /scan_filtered（或 /scan）"
-  echo "  3. 激光 scan 应与地图白色墙壁对齐；若明显错位，请先用"
-  echo "     Publish -> 2D 位姿估计 -> /initialpose 手动校正朝向"
+  echo "  2. 重新导入布局: ${PROJECT_DIR}/configs/foxglove_click_goal_nav.layout.json"
+  echo "  3. 显示: 地图 + 绿线规划路径 + 红点轨迹 + 起点/终点标记"
+  echo "  4. 激光 scan 与地图错位时，请先用 Publish -> 2D 位姿估计 -> /initialpose"
   echo
   if [ -f "$POSE_STATE_FILE" ]; then
     print_pose_state_summary "$POSE_STATE_FILE" || true
@@ -232,8 +232,9 @@ print_click_ready_banner() {
   echo "布局: ${PROJECT_DIR}/configs/foxglove_click_goal_nav.layout.json"
   echo "工具: Publish -> 2D point -> ${GOAL_POINT_TOPIC}"
   echo "操作: 在地图白色区域单击一次（导航进行中请勿重复点击）"
-  echo "路径显示: /foxglove_click_planned_path"
-  echo "终点标注: /foxglove_click_goal_marker + /foxglove_click_goal_label"
+  echo "路径显示: /foxglove_click_planned_path (绿线)"
+  echo "轨迹显示: /foxglove_click_trajectory_dots (红点，每次新点击会清除上一次)"
+  echo "起点/终点: /foxglove_click_start_marker /foxglove_click_goal_marker"
   echo "日志目录:"
   echo "  点击导航: ${LOG_DIR}/click_goal_bridge.log"
   echo "  Nav2栈:   ${LOG_DIR}/nav2_saved_map.log  (及 logs/nav2_*/nav2.log)"

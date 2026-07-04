@@ -319,12 +319,12 @@ semantic_explore:
   hint_topic: /explore_goal_hint
   state_topic: /explore_state_json
   use_in_search_only: true
-  max_hint_age_sec: 3.0
-  min_hint_score: 0.32
-  goal_hold_sec: 12.0
+  max_hint_age_sec: 4.0
+  min_hint_score: 0.25
+  goal_hold_sec: 15.0
   max_goal_select_distance_m: 1.5
   min_goal_select_distance_m: 0.35
-  goal_switch_max_distance_m: 0.6
+  goal_switch_max_distance_m: 0.45
   goal_switch_min_dist_m: 0.45
   blocked_reject_reasons:
   - blocked
@@ -334,9 +334,9 @@ semantic_explore:
   observe_after_reach_sec: 1.2
   observe_scan_deg: 90.0
   observe_scan_wz: 0.05
-  max_goal_age_sec: 6.0
-  reselect_interval_sec: 6.0
-  keep_goal_min_sec: 0.0
+  max_goal_age_sec: 20.0
+  reselect_interval_sec: 4.0
+  keep_goal_min_sec: 8.0
   switch_score_margin: 0.35
   switch_confirm_count: 3
   step_goal_distance_m: 0.6
@@ -407,6 +407,9 @@ frontier:
   max_distance_m: 1.5
   observation_standoff_m: 0.65
   unknown_gain_radius_m: 0.6
+  require_goal_on_known_free: true
+  scanned_free_candidates: true
+  scanned_free_max_candidates: 10
 planner:
   mode: astar
   astar_enabled: true
@@ -433,6 +436,8 @@ candidate_scoring:
   reachability: 0.2
   novelty: 0.15
   safety_margin: 0.1
+  known_map_bonus: 0.12
+  unknown_goal_penalty: 1.0
   qwen_text_score: 0.05
   blacklist_penalty: 0.3
   repeated_observation_penalty: 0.2

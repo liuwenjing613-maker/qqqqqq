@@ -214,6 +214,7 @@ def _find_standoff_goal(
     free_threshold: int,
     occupied_threshold: int,
     unknown_value: int,
+    allow_unknown_neighbors: bool = True,
 ) -> Optional[Tuple[float, float]]:
     dx = robot_xy[0] - obj_x
     dy = robot_xy[1] - obj_y
@@ -237,6 +238,8 @@ def _find_standoff_goal(
             continue
         if _inflated_occupied(grid, mx, my, inflation_cells, occupied_threshold, unknown_value):
             continue
+        if not allow_unknown_neighbors and _has_unknown_neighbor(grid, mx, my, unknown_value):
+            continue
         return gx, gy
 
     mx, my = _world_to_map(grid, obj_x, obj_y)
@@ -245,6 +248,17 @@ def _find_standoff_goal(
         if _is_free(val, free_threshold, occupied_threshold, unknown_value):
             return _map_to_world(grid, mx, my)
     return None
+
+
+def _has_unknown_neighbor(grid: Any, mx: int, my: int, unknown_value: int) -> bool:
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            nv = _cell_value(grid, mx + dx, my + dy, unknown_value)
+            if _is_unknown(nv, unknown_value):
+                return True
+    return False
 
 
 def _inflated_occupied(
