@@ -33,7 +33,10 @@ from src.planning.grid_astar import plan_path
 from src.planning.map_goal_validity import (
     collect_scanned_free_goals,
     goal_on_scanned_map,
+    is_known_free,
+    is_unknown_cell,
     snap_to_known_free,
+    world_to_map,
 )
 from src.planning.path_follower import follow_path
 from src.planning.semantic_priors import (
@@ -96,6 +99,11 @@ class ExploreCandidate:
     reason: str = ""
     source: Dict[str, Any] = field(default_factory=dict)
     target_class: str = ""
+    raw_goal_xy: Optional[Tuple[float, float]] = None
+    projection_status: str = ""
+    reject_reason: str = ""
+    validation: Dict[str, Any] = field(default_factory=dict)
+    sector_id: str = ""
 
     @property
     def total_score(self) -> float:
@@ -136,6 +144,8 @@ class ExploreGoalSelector(Node):
         explore = _section(cfg, "semantic_explore")
         frontier_cfg = _section(cfg, "frontier")
         planner_cfg = _section(cfg, "planner")
+        goal_val_cfg = _section(cfg, "goal_validation")
+        projection_cfg = _section(cfg, "safe_goal_projection")
         scoring = _section(cfg, "candidate_scoring")
         rates = _section(cfg, "rates")
         topics = _section(cfg, "topics")
@@ -176,7 +186,9 @@ class ExploreGoalSelector(Node):
         self.blocked_reject_reasons = {str(r) for r in blocked_reasons}
         self.switch_score_margin = float(explore.get("switch_score_margin", 0.20))
         self.switch_confirm_count = max(1, int(explore.get("switch_confirm_count", 2)))
-        self.standoff_m = float(frontier_cfg.get("observation_standoff_m", 0.65))
+        self.standoff_m = float(
+            projection_cfg.get("frontier_standoff_m", frontier_cfg.get("observation_standoff_m", 0.65))
+        )
         self.require_goal_on_known_free = bool(frontier_cfg.get("require_goal_on_known_free", True))
         self.scanned_free_candidates = bool(frontier_cfg.get("scanned_free_candidates", True))
         self.scanned_free_max_candidates = max(
@@ -187,6 +199,29 @@ class ExploreGoalSelector(Node):
         self.scoring_weights = scoring
         self.frontier_cfg = frontier_cfg
         self.planner_cfg = planner_cfg
+        self.goal_validation_cfg = goal_val_cfg
+        self.projection_cfg = projection_cfg
+        self.goal_validation_enabled = bool(goal_val_cfg.get("enabled", True))
+        self.goal_validation_strict = bool(goal_val_cfg.get("strict", True))
+        self.require_inside_map = bool(goal_val_cfg.get("require_inside_map", True))
+        self.require_known_free = bool(goal_val_cfg.get("require_known_free", True))
+        self.unknown_as_obstacle = bool(goal_val_cfg.get("unknown_as_obstacle", True))
+        self.validation_occupied_threshold = int(goal_val_cfg.get("occupied_threshold", 50))
+        self.robot_radius_m = float(goal_val_cfg.get("robot_radius_m", 0.18))
+        self.safety_margin_m = float(goal_val_cfg.get("safety_margin_m", 0.12))
+        self.min_goal_clearance_m = float(goal_val_cfg.get("min_clearance_m", 0.30))
+        self.min_astar_path_points = int(goal_val_cfg.get("min_astar_path_points", 2))
+        self.projection_enabled = bool(projection_cfg.get("enabled", True))
+        self.projection_max_radius_m = float(projection_cfg.get("max_projection_radius_m", 0.9))
+        self.projection_step_m = float(projection_cfg.get("projection_step_m", 0.1))
+        self.projection_prefer_nearest = bool(projection_cfg.get("prefer_nearest", True))
+        self.require_unknown_gain = bool(projection_cfg.get("require_unknown_gain", True))
+        self.min_unknown_gain_cells = int(projection_cfg.get("min_unknown_gain_cells", 6))
+        self.landmark_view_min_radius_m = float(projection_cfg.get("landmark_view_min_radius_m", 0.6))
+        self.landmark_view_max_radius_m = float(projection_cfg.get("landmark_view_max_radius_m", 1.2))
+        self.min_unknown_gain = float(
+            explore.get("min_unknown_gain", frontier_cfg.get("min_unknown_gain", 0.08))
+        )
         self.selector_hz = float(rates.get("selector_hz", 2.0))
         self.state_hz = float(rates.get("state_pub_hz", 5.0))
 
@@ -234,6 +269,9 @@ class ExploreGoalSelector(Node):
         self._nav_abort_reselect = False
         self._last_nav_reject_reason = ""
         self._last_pick_stats: Dict[str, Any] = {}
+        self.spawn_pose: Optional[Tuple[float, float, float]] = None
+        self.active_area_id: Optional[str] = None
+        self._last_valid_candidates: List[ExploreCandidate] = []
 
         self.pub_hint = self.create_publisher(String, self.hint_topic, 10)
         self.pub_state = self.create_publisher(String, self.state_topic, 10)
@@ -375,6 +413,11 @@ class ExploreGoalSelector(Node):
                 goal_xy = (float(gp[0]), float(gp[1]))
         self._blacklist_nav_failure(cand_id, goal_xy, reject_reason or "nav_observe_failed", now)
 
+    def _note_robot_pose(self, pose: Tuple[float, float, float]) -> None:
+        self.robot_pose = pose
+        if self.spawn_pose is None:
+            self.spawn_pose = pose
+
     def _update_robot_pose(self) -> bool:
         base = self._base_frame
         if self.tf_buffer is not None:
@@ -390,7 +433,7 @@ class ExploreGoalSelector(Node):
                     y = float(tf.transform.translation.y)
                     q = tf.transform.rotation
                     yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
-                    self.robot_pose = (x, y, yaw)
+                    self._note_robot_pose((x, y, yaw))
                     self._pose_frame = frame_id
                     return True
                 except Exception:
@@ -400,11 +443,11 @@ class ExploreGoalSelector(Node):
             msg = self.latest_odom
             q = msg.pose.pose.orientation
             yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
-            self.robot_pose = (
+            self._note_robot_pose((
                 float(msg.pose.pose.position.x),
                 float(msg.pose.pose.position.y),
                 yaw,
-            )
+            ))
             self._pose_frame = str(msg.header.frame_id or self._frame_fallback)
             return True
 
@@ -412,24 +455,52 @@ class ExploreGoalSelector(Node):
             msg = self.latest_pose
             q = msg.pose.pose.orientation
             yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
-            self.robot_pose = (
+            self._note_robot_pose((
                 float(msg.pose.pose.position.x),
                 float(msg.pose.pose.position.y),
                 yaw,
-            )
+            ))
             self._pose_frame = str(msg.header.frame_id or self._frame_fixed)
             return True
 
         odom = self.semantic_map.get("robot_pose")
         if isinstance(odom, dict):
-            self.robot_pose = (
+            self._note_robot_pose((
                 float(odom.get("x", 0.0)),
                 float(odom.get("y", 0.0)),
                 float(odom.get("yaw", 0.0)),
-            )
+            ))
             self._pose_frame = str(odom.get("frame_id", self._frame_fixed))
             return True
         return False
+
+    @staticmethod
+    def _normalize_angle(angle: float) -> float:
+        return (angle + math.pi) % (2 * math.pi) - math.pi
+
+    def _sector_id_for_goal(self, goal_xy: Tuple[float, float]) -> str:
+        if self.spawn_pose is None:
+            return "sector_unknown"
+        sx, sy, syaw = self.spawn_pose
+        dx = goal_xy[0] - sx
+        dy = goal_xy[1] - sy
+        ang = self._normalize_angle(math.atan2(dy, dx) - syaw)
+        sector_count = 8
+        idx = int(((ang + math.pi) / (2.0 * math.pi)) * sector_count) % sector_count
+        return f"sector_{idx:02d}"
+
+    def _filter_by_active_area(
+        self, valid_candidates: List[ExploreCandidate]
+    ) -> List[ExploreCandidate]:
+        if not valid_candidates:
+            return []
+        if self.active_area_id is None:
+            self.active_area_id = valid_candidates[0].sector_id
+        in_area = [c for c in valid_candidates if c.sector_id == self.active_area_id]
+        if in_area:
+            return in_area
+        self.active_area_id = valid_candidates[0].sector_id
+        return [c for c in valid_candidates if c.sector_id == self.active_area_id]
 
     def _pose_matches_map(self) -> bool:
         if self.latest_map is None:
@@ -477,24 +548,31 @@ class ExploreGoalSelector(Node):
         return self._to_map_xy(ox, oy, source_frame=frame)
 
     def _standoff_goal(
-        self, obj_x: float, obj_y: float, robot_xy: Tuple[float, float]
+        self,
+        obj_x: float,
+        obj_y: float,
+        robot_xy: Tuple[float, float],
+        for_landmark: bool = False,
     ) -> Optional[Tuple[float, float, float]]:
+        standoff = self._effective_standoff_m(for_landmark=for_landmark)
         if self.latest_map is not None:
             from src.planning.frontier_extractor import _find_standoff_goal
 
             res = float(self.latest_map.info.resolution)
-            inflation = max(1, int(math.ceil(self.frontier_cfg.get("inflation_radius_m", 0.25) / res)))
+            inflation = max(
+                1, int(math.ceil(self._goal_inflation_radius_m() / res))
+            )
             goal = _find_standoff_goal(
                 self.latest_map,
                 obj_x,
                 obj_y,
                 robot_xy,
-                self.standoff_m,
+                standoff,
                 inflation,
                 int(self.frontier_cfg.get("free_threshold", 20)),
-                int(self.frontier_cfg.get("occupied_threshold", 65)),
+                int(self.validation_occupied_threshold if self.goal_validation_enabled else self.frontier_cfg.get("occupied_threshold", 65)),
                 int(self.frontier_cfg.get("unknown_value", -1)),
-                allow_unknown_neighbors=False,
+                allow_unknown_neighbors=not self.unknown_as_obstacle,
             )
             if goal:
                 yaw = math.atan2(obj_y - goal[1], obj_x - goal[0])
@@ -503,8 +581,8 @@ class ExploreGoalSelector(Node):
         dx = robot_xy[0] - obj_x
         dy = robot_xy[1] - obj_y
         norm = math.hypot(dx, dy) or 1.0
-        gx = obj_x + (dx / norm) * self.standoff_m
-        gy = obj_y + (dy / norm) * self.standoff_m
+        gx = obj_x + (dx / norm) * standoff
+        gy = obj_y + (dy / norm) * standoff
         yaw = math.atan2(obj_y - gy, obj_x - gx)
         return gx, gy, yaw
 
@@ -540,16 +618,372 @@ class ExploreGoalSelector(Node):
     def _map_grid_cfg(self) -> Dict[str, Any]:
         return dict(self.frontier_cfg)
 
+    def _validation_grid_cfg(self) -> Dict[str, Any]:
+        cfg = self._map_grid_cfg()
+        if self.goal_validation_enabled:
+            cfg = dict(cfg)
+            cfg["occupied_threshold"] = self.validation_occupied_threshold
+        return cfg
+
+    def _goal_inflation_radius_m(self) -> float:
+        return max(
+            float(self.frontier_cfg.get("inflation_radius_m", 0.35)),
+            self.robot_radius_m + self.safety_margin_m,
+        )
+
+    def _effective_standoff_m(self, for_landmark: bool = False) -> float:
+        standoff = self.standoff_m
+        if for_landmark:
+            standoff = max(
+                self.landmark_view_min_radius_m,
+                min(self.landmark_view_max_radius_m, standoff),
+            )
+        return standoff
+
     def _goal_on_scanned_map(self, goal_xy: Tuple[float, float]) -> bool:
         if not self.require_goal_on_known_free:
             return True
         if self.latest_map is None or not self._map_coords_trusted():
-            return True
+            return False
         gx, gy = self._goal_map_xy(goal_xy)
         on_known, _, _ = goal_on_scanned_map(
             self.latest_map, gx, gy, self._map_grid_cfg()
         )
         return on_known
+
+    def _cell_value_at_map_xy(self, wx: float, wy: float) -> Tuple[bool, int]:
+        if self.latest_map is None:
+            return False, 100
+        cfg = self._map_grid_cfg()
+        mx, my = world_to_map(self.latest_map, wx, wy)
+        w = int(self.latest_map.info.width)
+        h = int(self.latest_map.info.height)
+        if mx < 0 or my < 0 or mx >= w or my >= h:
+            return False, 100
+        idx = my * w + mx
+        if idx < 0 or idx >= len(self.latest_map.data):
+            return False, 100
+        return True, int(self.latest_map.data[idx])
+
+    def _is_inflated_obstacle_at(self, wx: float, wy: float) -> bool:
+        if self.latest_map is None:
+            return True
+        cfg = self._validation_grid_cfg()
+        mx, my = world_to_map(self.latest_map, wx, wy)
+        res = float(self.latest_map.info.resolution)
+        inflation_cells = max(1, int(math.ceil(self._goal_inflation_radius_m() / res)))
+        occupied_threshold = int(cfg.get("occupied_threshold", 65))
+        unknown_value = int(cfg.get("unknown_value", -1))
+        w = int(self.latest_map.info.width)
+        h = int(self.latest_map.info.height)
+        for dy in range(-inflation_cells, inflation_cells + 1):
+            for dx in range(-inflation_cells, inflation_cells + 1):
+                nx, ny = mx + dx, my + dy
+                if nx < 0 or ny < 0 or nx >= w or ny >= h:
+                    if self.unknown_as_obstacle:
+                        return True
+                    continue
+                val = int(self.latest_map.data[ny * w + nx])
+                if val == unknown_value or val < 0:
+                    if self.unknown_as_obstacle:
+                        return True
+                    continue
+                if val >= occupied_threshold:
+                    return True
+        return False
+
+    def _clearance_at_map_xy(self, wx: float, wy: float) -> float:
+        if self.latest_map is None:
+            return 0.0
+        cfg = self._validation_grid_cfg()
+        res = float(self.latest_map.info.resolution)
+        mx, my = world_to_map(self.latest_map, wx, wy)
+        occupied_threshold = int(cfg.get("occupied_threshold", 65))
+        unknown_value = int(cfg.get("unknown_value", -1))
+        w = int(self.latest_map.info.width)
+        h = int(self.latest_map.info.height)
+        max_cells = max(1, int(math.ceil(1.0 / res)))
+        for radius in range(0, max_cells + 1):
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
+                    if max(abs(dx), abs(dy)) != radius:
+                        continue
+                    nx, ny = mx + dx, my + dy
+                    if nx < 0 or ny < 0 or nx >= w or ny >= h:
+                        if self.unknown_as_obstacle:
+                            return float(radius) * res
+                        continue
+                    val = int(self.latest_map.data[ny * w + nx])
+                    if val == unknown_value or val < 0:
+                        if self.unknown_as_obstacle:
+                            return float(radius) * res
+                        continue
+                    if val >= occupied_threshold:
+                        return float(radius) * res
+        return 1.0
+
+    def _unknown_gain_cells_at_map_xy(self, wx: float, wy: float) -> int:
+        if self.latest_map is None:
+            return 0
+        cfg = self._validation_grid_cfg()
+        mx, my = world_to_map(self.latest_map, wx, wy)
+        res = float(self.latest_map.info.resolution)
+        gain_radius_m = float(cfg.get("unknown_gain_radius_m", 0.6))
+        radius_cells = max(1, int(math.ceil(gain_radius_m / res)))
+        w = int(self.latest_map.info.width)
+        h = int(self.latest_map.info.height)
+        unknown_count = 0
+        for dy in range(-radius_cells, radius_cells + 1):
+            for dx in range(-radius_cells, radius_cells + 1):
+                nx, ny = mx + dx, my + dy
+                if nx < 0 or ny < 0 or nx >= w or ny >= h:
+                    continue
+                if is_unknown_cell(self.latest_map, nx, ny, cfg):
+                    unknown_count += 1
+        return unknown_count
+
+    def _unknown_gain_at_map_xy(self, wx: float, wy: float) -> float:
+        if self.latest_map is None:
+            return 0.0
+        cfg = self._validation_grid_cfg()
+        cells = self._unknown_gain_cells_at_map_xy(wx, wy)
+        gain_radius_m = float(cfg.get("unknown_gain_radius_m", 0.6))
+        res = float(self.latest_map.info.resolution)
+        radius_cells = max(1, int(math.ceil(gain_radius_m / res)))
+        total = (2 * radius_cells + 1) ** 2
+        return cells / max(total, 1)
+
+    def _raw_goal_is_safe_free(self, goal_xy: Tuple[float, float]) -> bool:
+        if not self.goal_validation_enabled:
+            return self._goal_on_scanned_map(goal_xy)
+        if self.latest_map is None or not self._map_coords_trusted():
+            return False
+        gx, gy = self._goal_map_xy(goal_xy)
+        inside, val = self._cell_value_at_map_xy(gx, gy)
+        if not inside:
+            return False
+        cfg = self._validation_grid_cfg()
+        mx, my = world_to_map(self.latest_map, gx, gy)
+        if self.require_known_free and not is_known_free(self.latest_map, mx, my, cfg):
+            return False
+        if self._is_inflated_obstacle_at(gx, gy):
+            return False
+        if self._clearance_at_map_xy(gx, gy) < self.min_goal_clearance_m:
+            return False
+        return True
+
+    def project_to_safe_free_goal(
+        self,
+        raw_goal_xy: Tuple[float, float],
+        robot_xy: Tuple[float, float],
+    ) -> Optional[Tuple[float, float]]:
+        if not self.projection_enabled:
+            return raw_goal_xy if self._raw_goal_is_safe_free(raw_goal_xy) else None
+        if self.latest_map is None or not self._map_coords_trusted():
+            return None
+        plan_robot = self._planning_robot_xy()
+        if plan_robot is None:
+            return None
+        gx, gy = self._goal_map_xy(raw_goal_xy)
+        snapped = snap_to_known_free(
+            self.latest_map,
+            gx,
+            gy,
+            plan_robot,
+            self._validation_grid_cfg(),
+            self.min_goal_select_distance_m,
+            self.max_goal_select_distance_m,
+            max_search_m=self.projection_max_radius_m,
+        )
+        if snapped is None:
+            return None
+        return self._to_pose_frame_xy(snapped[0], snapped[1])
+
+    def validate_nav_goal(
+        self,
+        goal_xy: Tuple[float, float],
+        robot_xy: Tuple[float, float],
+        planned_path: Optional[List[Tuple[float, float]]] = None,
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "inside_map": False,
+            "cell_value": None,
+            "is_known_free": False,
+            "clearance_m": 0.0,
+            "astar_ok": False,
+            "unknown_gain": 0.0,
+            "unknown_gain_cells": 0,
+            "ok": False,
+            "reject_reason": "",
+        }
+        if not self.goal_validation_enabled:
+            if self.latest_map is None or not self._map_coords_trusted():
+                result["reject_reason"] = "map_untrusted"
+                return result
+            if self._goal_on_scanned_map(goal_xy):
+                result["ok"] = True
+                result["inside_map"] = True
+                result["is_known_free"] = True
+            else:
+                result["reject_reason"] = "unknown_cell"
+            return result
+
+        if self.latest_map is None or not self._map_coords_trusted():
+            result["reject_reason"] = "map_untrusted"
+            return result
+
+        cfg = self._validation_grid_cfg()
+        gx, gy = self._goal_map_xy(goal_xy)
+        inside, cell_val = self._cell_value_at_map_xy(gx, gy)
+        result["cell_value"] = cell_val
+        if self.require_inside_map and not inside:
+            result["reject_reason"] = "outside_map"
+            return result
+        result["inside_map"] = inside
+
+        mx, my = world_to_map(self.latest_map, gx, gy)
+        if is_unknown_cell(self.latest_map, mx, my, cfg):
+            result["reject_reason"] = "unknown_cell"
+            return result
+
+        occupied_threshold = int(cfg.get("occupied_threshold", 65))
+        if cell_val >= occupied_threshold:
+            result["reject_reason"] = "occupied_cell"
+            return result
+
+        if self.require_known_free and not is_known_free(self.latest_map, mx, my, cfg):
+            result["reject_reason"] = "unknown_cell"
+            return result
+
+        if self._is_inflated_obstacle_at(gx, gy):
+            result["reject_reason"] = "inflated_obstacle"
+            return result
+
+        result["is_known_free"] = True
+        result["clearance_m"] = round(self._clearance_at_map_xy(gx, gy), 3)
+        if result["clearance_m"] < self.min_goal_clearance_m:
+            result["reject_reason"] = "low_clearance"
+            return result
+
+        gain_cells = self._unknown_gain_cells_at_map_xy(gx, gy)
+        result["unknown_gain_cells"] = gain_cells
+        result["unknown_gain"] = round(self._unknown_gain_at_map_xy(gx, gy), 4)
+        if self.require_unknown_gain and gain_cells < self.min_unknown_gain_cells:
+            result["reject_reason"] = "low_unknown_gain"
+            return result
+        if not self.require_unknown_gain and result["unknown_gain"] < self.min_unknown_gain:
+            result["reject_reason"] = "low_unknown_gain"
+            return result
+
+        path = (
+            planned_path
+            if planned_path is not None
+            else self._plan_candidate_path(robot_xy, goal_xy)
+        )
+        result["astar_ok"] = bool(path) and len(path) >= self.min_astar_path_points
+        if self.require_astar_path and not result["astar_ok"]:
+            result["reject_reason"] = "no_astar_path"
+            return result
+
+        result["ok"] = True
+        return result
+
+    def _process_raw_candidate(
+        self,
+        candidate: ExploreCandidate,
+        robot_xy: Tuple[float, float],
+    ) -> bool:
+        raw_xy = candidate.goal_xy
+        candidate.raw_goal_xy = raw_xy
+
+        gx, gy = self._goal_map_xy(raw_xy)
+        inside, _ = self._cell_value_at_map_xy(gx, gy)
+        if not inside:
+            candidate.reject_reason = "outside_map"
+            candidate.validation = self.validate_nav_goal(raw_xy, robot_xy)
+            return False
+
+        if self._raw_goal_is_safe_free(raw_xy):
+            candidate.goal_xy = raw_xy
+            candidate.projection_status = "raw_already_safe"
+        else:
+            projected = self.project_to_safe_free_goal(raw_xy, robot_xy)
+            if projected is None:
+                candidate.reject_reason = "outside_map"
+                candidate.validation = self.validate_nav_goal(raw_xy, robot_xy)
+                return False
+            candidate.goal_xy = projected
+            candidate.projection_status = "projected_to_safe_free"
+
+        if not self._within_select_range(robot_xy, candidate):
+            candidate.reject_reason = "out_of_select_range"
+            return False
+
+        path = self._plan_candidate_path(robot_xy, candidate.goal_xy)
+        validation = self.validate_nav_goal(
+            candidate.goal_xy, robot_xy, planned_path=path
+        )
+        candidate.validation = validation
+        if not validation.get("ok"):
+            candidate.reject_reason = str(validation.get("reject_reason", "invalid"))
+            return False
+
+        candidate.reject_reason = ""
+        candidate.sector_id = self._sector_id_for_goal(candidate.goal_xy)
+        candidate.source = dict(candidate.source)
+        candidate.source["planned_path"] = path
+        candidate.source["raw_goal_xy"] = [raw_xy[0], raw_xy[1]]
+        candidate.source["projection_status"] = candidate.projection_status
+        return True
+
+    def _build_valid_candidates(
+        self,
+        robot_xy: Tuple[float, float],
+        raw_candidates: List[ExploreCandidate],
+    ) -> List[ExploreCandidate]:
+        valid: List[ExploreCandidate] = []
+        reject_stats: Dict[str, int] = {}
+        for candidate in raw_candidates:
+            if not self._process_raw_candidate(candidate, robot_xy):
+                reason = candidate.reject_reason or "invalid"
+                reject_stats[reason] = reject_stats.get(reason, 0) + 1
+                continue
+            if candidate.total_score < self.min_hint_score:
+                candidate.reject_reason = "score_below_min_hint"
+                reject_stats[candidate.reject_reason] = (
+                    reject_stats.get(candidate.reject_reason, 0) + 1
+                )
+                continue
+            valid.append(candidate)
+        self._last_pick_stats = {
+            **self._last_pick_stats,
+            "valid_count": len(valid),
+            "reject_stats": reject_stats,
+            "active_area_id": self.active_area_id,
+        }
+        return valid
+
+    def _pick_best_valid_candidate(
+        self,
+        robot_xy: Tuple[float, float],
+        valid_candidates: List[ExploreCandidate],
+    ) -> Tuple[Optional[ExploreCandidate], List[Tuple[float, float]]]:
+        if not valid_candidates:
+            return None, []
+        area_filtered = self._filter_by_active_area(valid_candidates)
+        ranked = sorted(area_filtered, key=lambda c: c.total_score, reverse=True)
+        if not ranked:
+            return None, []
+        best = ranked[0]
+        path = best.source.get("planned_path")
+        if not isinstance(path, list) or len(path) < 2:
+            path = self._plan_candidate_path(robot_xy, best.goal_xy)
+        self._last_pick_stats = {
+            **self._last_pick_stats,
+            "selected": best.candidate_id,
+            "active_area_id": self.active_area_id,
+        }
+        return best, list(path) if path else []
 
     def _apply_known_map_scoring(self, candidates: List[ExploreCandidate]) -> None:
         if self.latest_map is None or not self._map_coords_trusted():
@@ -604,7 +1038,7 @@ class ExploreGoalSelector(Node):
             dist = math.hypot(px - robot_xy[0], py - robot_xy[1])
             cand = ExploreCandidate(
                 candidate_id=make_candidate_id("scanned_free", px, py),
-                mode="scanned_free",
+                mode="scanned_free_raw",
                 goal_xy=(px, py),
                 goal_yaw=yaw,
                 look_at=(px, py),
@@ -692,49 +1126,13 @@ class ExploreGoalSelector(Node):
             )
             return
 
-    def _generate_candidates(self, robot_xy: Tuple[float, float]) -> List[ExploreCandidate]:
+    def _generate_raw_candidates(self, robot_xy: Tuple[float, float]) -> List[ExploreCandidate]:
         candidates: List[ExploreCandidate] = []
         ranges, angles = self._scan_arrays()
         target_class = self.parsed.target_category
         map_ok = self._can_use_map_planning()
         plan_robot = self._planning_robot_xy() if map_ok else None
         self._prepare_viz_frame()
-
-        if map_ok and plan_robot is not None:
-            plan_xy = (plan_robot[0], plan_robot[1])
-            for lm in self._confirmed_landmarks():
-                cls = str(lm.get("class_name", ""))
-                if is_target_match(self.parsed.target_aliases, cls) <= 0:
-                    continue
-                ox, oy = self._landmark_map_xy(lm)
-                standoff = self._standoff_goal(ox, oy, plan_xy)
-                if standoff is None:
-                    continue
-                gx, gy, gyaw = standoff
-                px, py = self._to_pose_frame_xy(gx, gy)
-                look_px, look_py = self._to_pose_frame_xy(ox, oy)
-                dist = math.hypot(px - robot_xy[0], py - robot_xy[1])
-                landmark_id = str(lm.get("landmark_id") or "").strip()
-                cand = ExploreCandidate(
-                    candidate_id=f"landmark:{landmark_id}" if landmark_id else make_candidate_id("landmark", ox, oy),
-                    mode="target_landmark",
-                    goal_xy=(px, py),
-                    goal_yaw=gyaw,
-                    look_at=(look_px, look_py),
-                    semantic_score=1.0,
-                    information_gain=0.4,
-                    reachability=0.8,
-                    novelty=self._novelty_at(gx, gy),
-                    safety_margin=min(1.0, self._front_clearance() / 2.0),
-                    travel_cost_penalty=min(0.5, dist / 4.0),
-                    reason=f"target landmark {cls} standoff",
-                    source={"type": "target_landmark", "landmark_id": lm.get("landmark_id"), "class_name": cls},
-                    target_class=target_class,
-                )
-                cand.blacklist_penalty = self._blacklist_penalty(px, py, target_class) * float(
-                    self.scoring_weights.get("blacklist_penalty", 0.3)
-                )
-                candidates.append(cand)
 
         if map_ok and plan_robot is not None:
             plan_xy = (plan_robot[0], plan_robot[1])
@@ -754,7 +1152,7 @@ class ExploreGoalSelector(Node):
                 if sem <= 0.1:
                     continue
                 ox, oy = self._landmark_map_xy(lm)
-                standoff = self._standoff_goal(ox, oy, plan_xy)
+                standoff = self._standoff_goal(ox, oy, plan_xy, for_landmark=True)
                 if standoff is None:
                     continue
                 gx, gy, gyaw = standoff
@@ -764,7 +1162,7 @@ class ExploreGoalSelector(Node):
                 landmark_id = str(lm.get("landmark_id") or "").strip()
                 cand = ExploreCandidate(
                     candidate_id=f"landmark:{landmark_id}" if landmark_id else make_candidate_id("landmark", ox, oy),
-                    mode="context_landmark",
+                    mode="context_landmark_raw",
                     goal_xy=(px, py),
                     goal_yaw=gyaw,
                     look_at=(look_px, look_py),
@@ -784,6 +1182,7 @@ class ExploreGoalSelector(Node):
                 candidates.append(cand)
 
         if map_ok and plan_robot is not None and bool(self.frontier_cfg.get("enabled", True)):
+            plan_xy = (plan_robot[0], plan_robot[1])
             frontiers = extract_frontiers(
                 self.latest_map, plan_xy, self.frontier_cfg, ranges, angles, plan_robot[2]
             )
@@ -793,7 +1192,7 @@ class ExploreGoalSelector(Node):
                 lx, ly = self._to_pose_frame_xy(fg.cluster_center[0], fg.cluster_center[1])
                 cand = ExploreCandidate(
                     candidate_id=make_candidate_id("frontier", px, py),
-                    mode="frontier",
+                    mode="frontier_raw",
                     goal_xy=(px, py),
                     goal_yaw=fg.goal_yaw,
                     look_at=(lx, ly),
@@ -824,24 +1223,10 @@ class ExploreGoalSelector(Node):
             c.safety_margin *= float(w.get("safety_margin", 0.10))
 
         self._apply_known_map_scoring(candidates)
-
-        in_range_safe = [
-            c
-            for c in candidates
-            if self._within_select_range(robot_xy, c) and self._candidate_safe(c)
-        ]
-        if not in_range_safe and ranges and angles:
-            before = len(candidates)
-            self._append_free_space_fallback(candidates, robot_xy, ranges, angles, map_ok)
-            for c in candidates[before:]:
-                c.semantic_score *= float(w.get("semantic_score", 0.25))
-                c.information_gain *= float(w.get("information_gain", 0.25))
-                c.reachability *= float(w.get("reachability", 0.20))
-                c.novelty *= float(w.get("novelty", 0.15))
-                c.safety_margin *= float(w.get("safety_margin", 0.10))
-            self._apply_known_map_scoring(candidates[before:])
-
         return candidates
+
+    def _generate_candidates(self, robot_xy: Tuple[float, float]) -> List[ExploreCandidate]:
+        return self._generate_raw_candidates(robot_xy)
 
     def _astar_cfg(self) -> Dict[str, Any]:
         cfg = dict(self.frontier_cfg)
@@ -907,24 +1292,9 @@ class ExploreGoalSelector(Node):
     def _pick_navigable_candidate(
         self, robot_xy: Tuple[float, float], candidates: List[ExploreCandidate]
     ) -> Tuple[Optional[ExploreCandidate], List[Tuple[float, float]]]:
-        in_range = [c for c in candidates if self._within_select_range(robot_xy, c)]
-        ranked = self._rank_candidates(in_range)
-        best_without_path: Optional[ExploreCandidate] = None
-        for candidate in ranked:
-            if candidate.total_score < self.min_hint_score:
-                break
-            path = self._plan_candidate_path(robot_xy, candidate.goal_xy)
-            if path:
-                return candidate, path
-            if best_without_path is None:
-                best_without_path = candidate
-            if self.require_astar_path and not self.astar_fallback_bearing:
-                continue
-        if best_without_path is not None and (
-            not self.require_astar_path or self.astar_fallback_bearing
-        ):
-            return best_without_path, []
-        return None, []
+        valid = self._build_valid_candidates(robot_xy, candidates)
+        self._last_valid_candidates = valid
+        return self._pick_best_valid_candidate(robot_xy, valid)
 
     def _score_candidates(self, candidates: List[ExploreCandidate]) -> Optional[ExploreCandidate]:
         ranked = self._rank_candidates(candidates)
@@ -965,6 +1335,15 @@ class ExploreGoalSelector(Node):
                 "known_map": round(candidate.known_map_bonus, 3),
             },
             "source": candidate.source,
+            "reject_reason": candidate.reject_reason,
+            "validation": candidate.validation,
+            "raw_goal_xy": (
+                [round(candidate.raw_goal_xy[0], 3), round(candidate.raw_goal_xy[1], 3)]
+                if candidate.raw_goal_xy is not None
+                else None
+            ),
+            "projection_status": candidate.projection_status,
+            "sector_id": candidate.sector_id,
         }
 
     def _update_candidate_debug(self, candidates: List[ExploreCandidate]) -> None:
@@ -976,6 +1355,8 @@ class ExploreGoalSelector(Node):
         self._last_best_candidate_id = best.candidate_id if best else None
 
     def _candidate_safe(self, candidate: ExploreCandidate) -> bool:
+        if candidate.validation:
+            return bool(candidate.validation.get("ok"))
         if candidate.unknown_goal_penalty > 0.5:
             return False
         if not self._goal_on_scanned_map(candidate.goal_xy):
@@ -1131,19 +1512,27 @@ class ExploreGoalSelector(Node):
     def _publish_hint(self, selected: Optional[ExploreCandidate], robot_xy: Tuple[float, float]) -> None:
         now = time.time()
         if selected is None:
+            reason = self._status_message
+            if reason == "no_valid_safe_candidates":
+                msg = "no valid safe candidates; wait for map update / slow scan"
+            else:
+                msg = "no semantic/frontier candidate"
             payload = {
                 "stamp": now,
                 "valid_sec": 1.0,
                 "mode": "none",
                 "score": 0.0,
-                "reason": "no semantic/frontier candidate; fallback to free-space search",
+                "reason": msg,
+                "selection_status": reason,
             }
             self.pub_hint.publish(String(data=json.dumps(payload, ensure_ascii=False)))
             return
 
         bearing, dist = self._bearing_distance(robot_xy, selected.goal_xy)
-        path: List[Tuple[float, float]] = []
-        if bool(self.planner_cfg.get("astar_enabled", False)) and self.latest_map is not None:
+        path: List[Tuple[float, float]] = list(
+            selected.source.get("planned_path") or self._last_path or []
+        )
+        if not path and bool(self.planner_cfg.get("astar_enabled", False)) and self.latest_map is not None:
             path = self._plan_candidate_path(robot_xy, selected.goal_xy)
         self._last_path = path
         use_astar = bool(path)
@@ -1211,6 +1600,14 @@ class ExploreGoalSelector(Node):
             "planned_path": [[px, py] for px, py in path],
             "nav_planner": nav_planner,
             "astar_fallback": not use_astar,
+            "sector_id": selected.sector_id,
+            "raw_goal_xy": (
+                [selected.raw_goal_xy[0], selected.raw_goal_xy[1]]
+                if selected.raw_goal_xy is not None
+                else None
+            ),
+            "projection_status": selected.projection_status,
+            "validation": selected.validation,
         }
         self.pub_hint.publish(String(data=json.dumps(payload, ensure_ascii=False)))
         stamp = self.get_clock().now().to_msg()
@@ -1607,36 +2004,39 @@ class ExploreGoalSelector(Node):
             return
         self._last_select_time = now
         robot_xy = self.robot_pose
-        candidates = self._generate_candidates(robot_xy)
-        self._last_candidates = candidates
-        in_range = [c for c in candidates if self._within_select_range(robot_xy, c)]
+        raw_candidates = self._generate_raw_candidates(robot_xy)
+        self._last_candidates = raw_candidates
         self._last_pick_stats = {
-            "candidates_total": len(candidates),
-            "candidates_in_range": len(in_range),
-            "candidates_safe": sum(1 for c in candidates if self._candidate_safe(c)),
-            "candidates_in_range_safe": sum(1 for c in in_range if self._candidate_safe(c)),
-            "candidates_above_threshold": sum(
-                1 for c in in_range if self._candidate_safe(c) and c.total_score >= self.min_hint_score
-            ),
+            "candidates_total": len(raw_candidates),
             "map_coords_trusted": self._map_coords_trusted(),
             "can_use_map_planning": self._can_use_map_planning(),
+            "min_goal_clearance_m": self.min_goal_clearance_m,
+            "min_unknown_gain_cells": self.min_unknown_gain_cells,
+            "goal_validation_enabled": self.goal_validation_enabled,
+            "projection_enabled": self.projection_enabled,
+            "active_area_id": self.active_area_id,
         }
-        self._update_candidate_debug(candidates)
-        best, _path = self._pick_navigable_candidate(robot_xy, candidates)
-        selected = self._choose_sticky_candidate(best, candidates, now)
+        self._update_candidate_debug(raw_candidates)
+        best, path = self._pick_navigable_candidate(robot_xy, raw_candidates)
+        if path:
+            self._last_path = path
+        selected = self._choose_sticky_candidate(best, self._last_valid_candidates or raw_candidates, now)
         self._selected = selected
         if selected is None:
-            stats = self._last_pick_stats
-            if stats.get("candidates_total", 0) == 0:
-                self._status_message = "no_candidates_generated"
-            elif stats.get("candidates_in_range", 0) == 0:
-                self._status_message = "no_candidate_in_select_range"
-            elif stats.get("candidates_in_range_safe", 0) == 0:
-                self._status_message = "no_candidate_passes_safety"
-            elif stats.get("candidates_above_threshold", 0) == 0:
-                self._status_message = "no_candidate_above_threshold"
+            if not self._last_valid_candidates:
+                self._status_message = "no_valid_safe_candidates"
+                self._last_selection_explanation = (
+                    "no valid safe candidates after projection/validation; "
+                    f"reject_stats={self._last_pick_stats.get('reject_stats', {})}"
+                )
             else:
-                self._status_message = "no_navigable_candidate"
+                stats = self._last_pick_stats
+                if stats.get("candidates_total", 0) == 0:
+                    self._status_message = "no_candidates_generated"
+                elif stats.get("valid_count", 0) == 0:
+                    self._status_message = "no_valid_safe_candidates"
+                else:
+                    self._status_message = "no_navigable_candidate"
         elif self._status_message not in (
             "keep_current_min_time",
             "keep_current_score_margin",
@@ -1646,7 +2046,7 @@ class ExploreGoalSelector(Node):
         ):
             self._status_message = "selected"
         self._publish_hint(selected, robot_xy)
-        self._publish_markers(robot_xy, candidates, selected)
+        self._publish_markers(robot_xy, raw_candidates, selected)
 
     def _publish_state_tick(self) -> None:
         payload = {
@@ -1665,6 +2065,12 @@ class ExploreGoalSelector(Node):
             "viz_frame": self._viz_frame_id(),
             "map_coords_trusted": self._map_coords_trusted(),
             "pick_stats": self._last_pick_stats,
+            "valid_candidates_count": len(self._last_valid_candidates),
+            "active_area_id": self.active_area_id,
+            "min_goal_clearance_m": self.min_goal_clearance_m,
+            "min_unknown_gain_cells": self.min_unknown_gain_cells,
+            "goal_validation_enabled": self.goal_validation_enabled,
+            "projection_enabled": self.projection_enabled,
             "min_hint_score": self.min_hint_score,
             "num_landmarks": len(self._confirmed_landmarks()),
             "num_frontiers": len(self._last_frontiers),
