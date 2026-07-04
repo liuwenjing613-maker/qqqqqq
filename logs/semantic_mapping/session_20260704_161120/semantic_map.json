@@ -1,0 +1,189 @@
+{
+  "session_id": "session_20260704_161120",
+  "frame_id": "map",
+  "map_name": "semantic_explore_live",
+  "quality": {
+    "loop_xy_error_m": 0.4336,
+    "loop_yaw_error_deg": 61.41,
+    "result": "fail"
+  },
+  "landmarks": [
+    {
+      "landmark_id": "lm_0001",
+      "class_name": "chair",
+      "frame_id": "odom",
+      "x": 3.061012651797998,
+      "y": 0.4691230111853748,
+      "confidence": 0.7007450461387634,
+      "seen_count": 49,
+      "first_seen_time": 1783152684.7868752,
+      "last_seen_time": 1783152693.6863837,
+      "state": "confirmed",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000005",
+        "obs_000010",
+        "obs_000012",
+        "obs_000016",
+        "obs_000018",
+        "obs_000022",
+        "obs_000024",
+        "obs_000027",
+        "obs_000030",
+        "obs_000035",
+        "obs_000038",
+        "obs_000040",
+        "obs_000045",
+        "obs_000046",
+        "obs_000049",
+        "obs_000052",
+        "obs_000057",
+        "obs_000058",
+        "obs_000062",
+        "obs_000065",
+        "obs_000070",
+        "obs_000071",
+        "obs_000075",
+        "obs_000077",
+        "obs_000080",
+        "obs_000086",
+        "obs_000092",
+        "obs_000096",
+        "obs_000102",
+        "obs_000108",
+        "obs_000113",
+        "obs_000117",
+        "obs_000121",
+        "obs_000124",
+        "obs_000127",
+        "obs_000130",
+        "obs_000134",
+        "obs_000139",
+        "obs_000140",
+        "obs_000144",
+        "obs_000149",
+        "obs_000152",
+        "obs_000159",
+        "obs_000165",
+        "obs_000168",
+        "obs_000174",
+        "obs_000179",
+        "obs_000183",
+        "obs_000190"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    },
+    {
+      "landmark_id": "lm_0002",
+      "class_name": "bottle",
+      "frame_id": "map",
+      "x": -0.7020118811103436,
+      "y": -0.9061698512737434,
+      "confidence": 0.35122182965278625,
+      "seen_count": 3,
+      "first_seen_time": 1783152706.83803,
+      "last_seen_time": 1783152707.583667,
+      "state": "candidate",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000194",
+        "obs_000195",
+        "obs_000196"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    },
+    {
+      "landmark_id": "lm_0003",
+      "class_name": "bottle",
+      "frame_id": "map",
+      "x": -1.5945771131004207,
+      "y": -1.0222498335802332,
+      "confidence": 0.35122182965278625,
+      "seen_count": 1,
+      "first_seen_time": 1783152707.8842504,
+      "last_seen_time": 1783152707.8842504,
+      "state": "candidate",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000197"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    }
+  ],
+  "viewpoints": [
+    {
+      "node_id": "vp_000001",
+      "stamp": 1783152693.6863837,
+      "frame_id": "odom",
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0,
+      "observed_classes": [
+        "chair",
+        "person"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000002",
+      "stamp": 1783152705.204062,
+      "frame_id": "map",
+      "x": -0.030975571835787256,
+      "y": -0.03562854113685735,
+      "yaw": -3.0821722312747424,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000003",
+      "stamp": 1783152707.8842504,
+      "frame_id": "map",
+      "x": -0.11702635060326168,
+      "y": -0.06992101727086411,
+      "yaw": -2.555802148743768,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    }
+  ],
+  "observation_count": 197
+}

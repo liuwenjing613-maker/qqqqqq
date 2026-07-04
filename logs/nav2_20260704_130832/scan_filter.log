@@ -77,3 +77,38 @@
 [INFO] [1783142110.580470809] [simple_scan_filter]: scan stats: n=404, zeros=125, nan=0, inf=0, finite_raw=279, finite_out=228, removed_isolated=5
 [INFO] [1783142115.604583998] [simple_scan_filter]: scan stats: n=404, zeros=123, nan=0, inf=0, finite_raw=281, finite_out=238, removed_isolated=5
 [INFO] [1783142120.593539673] [simple_scan_filter]: scan stats: n=404, zeros=114, nan=0, inf=0, finite_raw=290, finite_out=238, removed_isolated=4
+[INFO] [1783142125.583288158] [simple_scan_filter]: scan stats: n=404, zeros=126, nan=0, inf=0, finite_raw=278, finite_out=228, removed_isolated=6
+[INFO] [1783142130.582483100] [simple_scan_filter]: scan stats: n=404, zeros=121, nan=0, inf=0, finite_raw=283, finite_out=226, removed_isolated=6
+[INFO] [1783142135.587176069] [simple_scan_filter]: scan stats: n=404, zeros=128, nan=0, inf=0, finite_raw=276, finite_out=231, removed_isolated=4
+[INFO] [1783142140.594626002] [simple_scan_filter]: scan stats: n=404, zeros=122, nan=0, inf=0, finite_raw=282, finite_out=222, removed_isolated=8
+[INFO] [1783142145.581445865] [simple_scan_filter]: scan stats: n=404, zeros=128, nan=0, inf=0, finite_raw=276, finite_out=223, removed_isolated=6
+[INFO] [1783142150.575200332] [simple_scan_filter]: scan stats: n=404, zeros=124, nan=0, inf=0, finite_raw=280, finite_out=224, removed_isolated=7
+[INFO] [1783142155.576369273] [simple_scan_filter]: scan stats: n=404, zeros=125, nan=0, inf=0, finite_raw=279, finite_out=224, removed_isolated=7
+[INFO] [1783142160.574292144] [simple_scan_filter]: scan stats: n=404, zeros=130, nan=0, inf=0, finite_raw=274, finite_out=221, removed_isolated=7
+[INFO] [1783142165.574745611] [simple_scan_filter]: scan stats: n=404, zeros=123, nan=0, inf=0, finite_raw=281, finite_out=230, removed_isolated=4
+[INFO] [1783142170.579619910] [simple_scan_filter]: scan stats: n=404, zeros=126, nan=0, inf=0, finite_raw=278, finite_out=224, removed_isolated=6
+[INFO] [1783142175.576535886] [simple_scan_filter]: scan stats: n=404, zeros=118, nan=0, inf=0, finite_raw=286, finite_out=231, removed_isolated=7
+[INFO] [1783142180.577014245] [simple_scan_filter]: scan stats: n=404, zeros=113, nan=0, inf=0, finite_raw=291, finite_out=233, removed_isolated=5
+[INFO] [1783142185.578391756] [simple_scan_filter]: scan stats: n=404, zeros=117, nan=0, inf=0, finite_raw=287, finite_out=231, removed_isolated=5
+[INFO] [1783142190.574786384] [simple_scan_filter]: scan stats: n=404, zeros=126, nan=0, inf=0, finite_raw=278, finite_out=221, removed_isolated=7
+[INFO] [1783142195.576959212] [simple_scan_filter]: scan stats: n=404, zeros=119, nan=0, inf=0, finite_raw=285, finite_out=228, removed_isolated=6
+[INFO] [1783142200.575560731] [simple_scan_filter]: scan stats: n=404, zeros=130, nan=0, inf=0, finite_raw=274, finite_out=222, removed_isolated=6
+[INFO] [1783142205.576551311] [simple_scan_filter]: scan stats: n=404, zeros=124, nan=0, inf=0, finite_raw=280, finite_out=226, removed_isolated=5
+[INFO] [1783142210.574060791] [simple_scan_filter]: scan stats: n=404, zeros=127, nan=0, inf=0, finite_raw=277, finite_out=225, removed_isolated=5
+[INFO] [1783142215.574632954] [simple_scan_filter]: scan stats: n=404, zeros=127, nan=0, inf=0, finite_raw=277, finite_out=222, removed_isolated=6
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 197, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 191, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 596, in _wait_for_ready_callbacks
+    wait_set = _rclpy.WaitSet(
+rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130

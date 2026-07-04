@@ -6,7 +6,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 import rclpy
@@ -35,6 +35,7 @@ from src.nav.search_strategy import (
     should_use_free_space,
     turn_dir_from_ex,
 )
+from src.planning.path_follower import follow_path
 from src.perception.free_space_waypoint import FreeSpaceConfig, FreeSpaceWaypointProvider
 from src.perception.target_adapter import NavTarget, TargetAdapter
 
@@ -220,13 +221,24 @@ class SharedNavSemanticExplore(Node):
         self.search_mem = TargetSearchMemory()
 
         self.emergency_stop_distance = float(safety.get("emergency_stop_distance", 0.45))
-        self.hard_stop_distance = float(safety.get("hard_stop_distance", 0.55))
+        self.safety_stop_distance = float(
+            safety.get("stop_distance", safety.get("hard_stop_distance", 0.55))
+        )
+        self.hard_stop_distance = self.safety_stop_distance
         self.slow_distance = float(safety.get("slow_distance", 0.90))
-        self.max_cmd_vx = float(safety.get("max_cmd_vx", 0.06))
-        self.max_cmd_wz = float(safety.get("max_cmd_wz", 0.06))
+        self.max_cmd_vx = float(safety.get("max_cmd_vx_explore", safety.get("max_cmd_vx", 0.06)))
+        self.max_cmd_wz = float(safety.get("max_cmd_wz_explore", safety.get("max_cmd_wz", 0.06)))
+        self.slow_vx = float(safety.get("slow_vx", min(self.max_cmd_vx, 0.02)))
+        self.safe_turn_wz = float(safety.get("safe_turn_wz", min(self.max_cmd_wz, 0.04)))
         self.turn_zero_vx_wz = float(safety.get("turn_zero_vx_wz", 0.05))
         self.turn_slow_vx_wz = float(safety.get("turn_slow_vx_wz", 0.035))
         self.turn_slow_vx_scale = float(safety.get("turn_slow_vx_scale", 0.5))
+        retreat_cfg = section(safety, "blocked_retreat")
+        self.blocked_retreat_enabled = bool(retreat_cfg.get("enabled", True))
+        self.blocked_retreat_margin_m = float(retreat_cfg.get("clearance_margin_m", 0.10))
+        self.blocked_retreat_vx = float(retreat_cfg.get("reverse_vx", 0.03))
+        self.blocked_retreat_max_sec = float(retreat_cfg.get("max_duration_sec", 5.0))
+        self.blocked_retreat_fsm_buffer_m = float(retreat_cfg.get("fsm_unblock_buffer_m", 0.02))
 
         self.bridge = CvBridge()
         self.last_frame = None
@@ -251,19 +263,46 @@ class SharedNavSemanticExplore(Node):
         self.explore_hint_topic = str(explore_cfg.get("hint_topic", "/explore_goal_hint"))
         self.explore_max_hint_age_sec = float(explore_cfg.get("max_hint_age_sec", 1.5))
         self.explore_min_hint_score = float(explore_cfg.get("min_hint_score", 0.42))
+        self.explore_goal_hold_sec = float(explore_cfg.get("goal_hold_sec", 8.0))
+        self.explore_goal_switch_max_distance_m = float(
+            explore_cfg.get("goal_switch_max_distance_m", 0.6)
+        )
+        self.explore_goal_switch_min_dist_m = float(explore_cfg.get("goal_switch_min_dist_m", 0.45))
+        blocked_reasons = explore_cfg.get(
+            "blocked_reject_reasons", ["blocked", "unsafe_front_clearance", "emergency_stop"]
+        )
+        self.explore_blocked_reject_reasons = {str(r) for r in blocked_reasons}
         self.explore_use_in_search_only = bool(explore_cfg.get("use_in_search_only", True))
         self.explore_goal_reached_radius_m = float(explore_cfg.get("goal_reached_radius_m", 0.35))
         self.explore_goal_timeout_sec = float(explore_cfg.get("goal_timeout_sec", 12.0))
+        self.explore_step_distance_m = float(
+            explore_cfg.get("step_goal_distance_m", bearing_cfg.get("step_distance_m", 0.45))
+        )
         self.explore_observe_after_reach_sec = float(explore_cfg.get("observe_after_reach_sec", 1.2))
         self.explore_observe_scan_deg = float(explore_cfg.get("observe_scan_deg", 90.0))
         self.explore_observe_scan_wz = float(explore_cfg.get("observe_scan_wz", 0.05))
         self.explore_blacklist_ttl_sec = float(explore_cfg.get("blacklist_ttl_sec", 180.0))
         self.explore_target_visible_interrupt = bool(explore_cfg.get("target_visible_interrupt", True))
         self.planner_mode = str(planner_cfg.get("mode", "bearing_first"))
+        self.require_astar_path = bool(planner_cfg.get("require_astar_path", True))
+        self.astar_fallback_bearing = bool(
+            planner_cfg.get(
+                "astar_fallback_bearing",
+                planner_cfg.get("require_astar_path", True),
+            )
+        )
+        self.path_follow_lookahead_m = float(planner_cfg.get("path_follow_lookahead_m", 0.35))
         self.bearing_max_vx = float(bearing_cfg.get("max_vx", 0.025))
         self.bearing_max_wz = float(bearing_cfg.get("max_wz", 0.05))
         self.bearing_turn_threshold = float(bearing_cfg.get("turn_in_place_threshold_rad", 0.35))
         self.bearing_forward_threshold = float(bearing_cfg.get("forward_bearing_threshold_rad", 0.22))
+        self.explore_align_max_sec = float(bearing_cfg.get("align_max_sec", 2.5))
+        self.explore_step_mode = str(bearing_cfg.get("step_mode", "distance")).lower()
+        self.explore_step_sec = float(bearing_cfg.get("pulse_sec", 0.35))
+        self.explore_inter_burst_pause_sec = float(
+            bearing_cfg.get("inter_burst_pause_sec", bearing_cfg.get("observe_sec", 0.12))
+        )
+        self.explore_observe_hold_sec = float(bearing_cfg.get("observe_sec", 0.12))
         self.birth_record_sector = bool(birth_raw.get("record_sector", False))
         self.birth_views = int(birth_raw.get("views", 8))
 
@@ -276,13 +315,26 @@ class SharedNavSemanticExplore(Node):
         self.observe_update_active = False
         self.observe_update_start: Optional[float] = None
         self.observe_scan_accum_rad = 0.0
+        self.explore_phase = "EXPLORE_SELECT"
+        self.explore_phase_start = 0.0
+        self.explore_burst_start_xy: Optional[Tuple[float, float]] = None
+        self.explore_goal_traveled_m = 0.0
+        self.explore_last_reject_reason: Optional[str] = None
+        self.explore_last_reject_goal_pose: Optional[list] = None
+        self.blocked_retreat_active = False
+        self.blocked_retreat_start_time = 0.0
+        self.blocked_retreat_clearance_target = 0.0
+        self.active_planned_path: list = []
+        self.active_path_waypoint_idx = -1
         self.birth_sectors: list = []
         self._birth_last_wz = 0.0
         self.latest_odom_yaw: Optional[float] = None
+        self.latest_odom_xy: Optional[Tuple[float, float]] = None
         self.latest_odom_time: Optional[float] = None
         self._birth_odom_start_yaw: Optional[float] = None
         self._birth_odom_last_yaw: Optional[float] = None
         self._birth_odom_accum_rad = 0.0
+        self._birth_odom_fallback_time: Optional[float] = None
         self._fsm_prev_state = NavState.BOOT
         self.last_explore_candidate_id: Optional[str] = None
 
@@ -377,6 +429,10 @@ class SharedNavSemanticExplore(Node):
 
     def odom_cb(self, msg: Odometry) -> None:
         self.latest_odom_yaw = self._yaw_from_odom(msg)
+        self.latest_odom_xy = (
+            float(msg.pose.pose.position.x),
+            float(msg.pose.pose.position.y),
+        )
         self.latest_odom_time = time.time()
 
     def _sync_birth_scan_odom_yaw(self, prev_state: NavState) -> None:
@@ -385,7 +441,16 @@ class SharedNavSemanticExplore(Node):
                 self._birth_odom_last_yaw = None
             return
         if self.latest_odom_yaw is None:
+            now = time.time()
+            if self._birth_odom_fallback_time is not None:
+                dt = max(0.0, now - self._birth_odom_fallback_time)
+                wz = max(abs(float(self.fsm.cfg.birth_scan_effective_wz)), 0.0)
+                self._birth_odom_accum_rad += wz * dt
+                self.fsm.birth_scan_yaw_accumulated_rad = self._birth_odom_accum_rad
+            self._birth_odom_fallback_time = now
             return
+
+        self._birth_odom_fallback_time = None
 
         just_entered = prev_state != NavState.SCANNING
         if just_entered or self._birth_odom_last_yaw is None:
@@ -419,12 +484,27 @@ class SharedNavSemanticExplore(Node):
         for k in expired:
             del self.rejected_candidate_ids[k]
 
-    def valid_explore_hint(self, now: float) -> bool:
-        if not self.semantic_explore_enabled or not self.latest_explore_hint:
+    def _hint_has_planned_path(self, hint: Dict[str, Any]) -> bool:
+        planned = hint.get("planned_path")
+        return isinstance(planned, list) and len(planned) >= 2
+
+    def _hint_uses_bearing_fallback(self, hint: Dict[str, Any]) -> bool:
+        if not self.astar_fallback_bearing:
             return False
-        hint = self.latest_explore_hint
+        if self._hint_has_planned_path(hint):
+            return False
+        if str(hint.get("nav_planner", "")) == "bearing_first":
+            return True
+        return bool(hint.get("astar_fallback"))
+
+    def _hint_is_actionable(self, hint: Dict[str, Any], now: float) -> bool:
         if str(hint.get("mode", "")) == "none":
             return False
+        if self.require_astar_path and not self._hint_has_planned_path(hint):
+            if not self._hint_uses_bearing_fallback(hint):
+                return False
+            if self._goal_pose_xy(hint) is None:
+                return False
         age = now - float(self.latest_explore_hint_time or 0.0)
         if age > self.explore_max_hint_age_sec:
             return False
@@ -436,7 +516,148 @@ class SharedNavSemanticExplore(Node):
                 return False
         return True
 
+    def valid_explore_hint(self, now: float) -> bool:
+        if not self.semantic_explore_enabled or not self.latest_explore_hint:
+            return False
+        return self._hint_is_actionable(self.latest_explore_hint, now)
+
+    def _locked_explore_hint(self, now: float) -> Optional[Dict[str, Any]]:
+        if self.valid_explore_hint(now):
+            return self.latest_explore_hint
+        if not self.active_explore_goal:
+            return None
+        cand_id = str(self.active_explore_goal.get("candidate_id", ""))
+        if cand_id and cand_id in self.rejected_candidate_ids:
+            if self.rejected_candidate_ids[cand_id] > now:
+                return None
+        if self.explore_goal_start_time is None:
+            return None
+        if now - self.explore_goal_start_time > self.explore_goal_timeout_sec:
+            return None
+        hint_time = float(self.latest_explore_hint_time or 0.0)
+        if hint_time > 0.0 and now - hint_time <= self.explore_goal_hold_sec:
+            return self.active_explore_goal
+        return None
+
+    @staticmethod
+    def _goal_pose_xy(hint: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+        goal_pose = hint.get("goal_pose")
+        if isinstance(goal_pose, (list, tuple)) and len(goal_pose) >= 2:
+            return float(goal_pose[0]), float(goal_pose[1])
+        return None
+
+    def _is_same_goal_pose(self, prev: Dict[str, Any], fresh: Dict[str, Any]) -> bool:
+        if prev.get("candidate_id") == fresh.get("candidate_id"):
+            return True
+        prev_xy = self._goal_pose_xy(prev)
+        next_xy = self._goal_pose_xy(fresh)
+        if prev_xy is None or next_xy is None:
+            return False
+        return (
+            math.hypot(next_xy[0] - prev_xy[0], next_xy[1] - prev_xy[1])
+            < self.explore_goal_switch_min_dist_m
+        )
+
+    def _explore_goal_switch_allowed(
+        self,
+        prev: Optional[Dict[str, Any]],
+        fresh: Dict[str, Any],
+        live_distance: float,
+    ) -> bool:
+        if prev is None:
+            return True
+        if self._is_same_goal_pose(prev, fresh):
+            return False
+        return live_distance <= self.explore_goal_switch_max_distance_m
+
+    def _odom_travel_since(self, start_xy: Optional[Tuple[float, float]]) -> float:
+        if start_xy is None or self.latest_odom_xy is None:
+            return 0.0
+        dx = self.latest_odom_xy[0] - start_xy[0]
+        dy = self.latest_odom_xy[1] - start_xy[1]
+        return math.hypot(dx, dy)
+
+    def _begin_explore_goal(self, now: float) -> None:
+        self.explore_goal_start_time = now
+        self.explore_phase = "EXPLORE_ALIGN"
+        self.explore_phase_start = now
+        self.explore_burst_start_xy = None
+        self.explore_goal_traveled_m = 0.0
+        self.observe_update_active = False
+        self.active_planned_path = []
+        self.active_path_waypoint_idx = -1
+
+    @staticmethod
+    def _normalize_angle(angle: float) -> float:
+        return (angle + math.pi) % (2 * math.pi) - math.pi
+
+    def _planned_path_points(self, hint: Dict[str, Any]) -> List[Tuple[float, float]]:
+        planned = hint.get("planned_path")
+        if not isinstance(planned, list):
+            return []
+        out: List[Tuple[float, float]] = []
+        for pt in planned:
+            if isinstance(pt, (list, tuple)) and len(pt) >= 2:
+                out.append((float(pt[0]), float(pt[1])))
+        return out
+
+    def _final_goal_distance(self, hint: Dict[str, Any]) -> float:
+        goal_pose = hint.get("goal_pose")
+        if (
+            isinstance(goal_pose, (list, tuple))
+            and len(goal_pose) >= 2
+            and self.latest_odom_xy is not None
+        ):
+            gx = float(goal_pose[0])
+            gy = float(goal_pose[1])
+            rx, ry = self.latest_odom_xy
+            return math.hypot(gx - rx, gy - ry)
+        return float(hint.get("goal_distance_m", 999.0))
+
+    def _explore_goal_geometry(self, hint: Dict[str, Any]) -> Tuple[float, float]:
+        final_dist = self._final_goal_distance(hint)
+        path = self.active_planned_path or self._planned_path_points(hint)
+        use_path = bool(path) and (
+            self._hint_has_planned_path(hint) or bool(self.active_planned_path)
+        )
+        if (
+            use_path
+            and self.latest_odom_xy is not None
+            and self.latest_odom_yaw is not None
+        ):
+            bearing, _, wp_idx = follow_path(
+                path,
+                self.latest_odom_xy,
+                self.latest_odom_yaw,
+                self.path_follow_lookahead_m,
+            )
+            if bearing is not None:
+                self.active_path_waypoint_idx = wp_idx
+                return bearing, final_dist
+        goal_pose = hint.get("goal_pose")
+        if (
+            isinstance(goal_pose, (list, tuple))
+            and len(goal_pose) >= 2
+            and self.latest_odom_xy is not None
+            and self.latest_odom_yaw is not None
+        ):
+            gx = float(goal_pose[0])
+            gy = float(goal_pose[1])
+            rx, ry = self.latest_odom_xy
+            dx = gx - rx
+            dy = gy - ry
+            bearing = self._normalize_angle(math.atan2(dy, dx) - self.latest_odom_yaw)
+            return bearing, final_dist
+        return (
+            float(hint.get("goal_bearing_rad", 0.0)),
+            final_dist,
+        )
+
     def _reject_candidate(self, hint: Dict[str, Any], now: float, reason: str) -> None:
+        self.explore_last_reject_reason = reason
+        goal_pose = hint.get("goal_pose")
+        if isinstance(goal_pose, (list, tuple)):
+            self.explore_last_reject_goal_pose = list(goal_pose)
         cand_id = str(hint.get("candidate_id", ""))
         if cand_id:
             self.rejected_candidate_ids[cand_id] = now + self.explore_blacklist_ttl_sec
@@ -453,19 +674,70 @@ class SharedNavSemanticExplore(Node):
         )
         self.active_explore_goal = None
         self.observe_update_active = False
+        self.explore_phase = "EXPLORE_SELECT"
+        self.explore_phase_start = now
+        self.explore_burst_start_xy = None
+        self.explore_goal_traveled_m = 0.0
+        self.active_planned_path = []
+        self.active_path_waypoint_idx = -1
 
     def command_from_explore_hint(self, now: float) -> Optional[Tuple[ServoCommand, str]]:
-        if not self.valid_explore_hint(now):
+        hint = self._locked_explore_hint(now)
+        if hint is None:
             return None
-        hint = self.latest_explore_hint or {}
-        if not self.observe_update_active:
-            prev_id = (self.active_explore_goal or {}).get("candidate_id")
-            self.active_explore_goal = dict(hint)
-            if prev_id != hint.get("candidate_id") or self.explore_goal_start_time is None:
-                self.explore_goal_start_time = now
+        if self.valid_explore_hint(now):
+            fresh = self.latest_explore_hint or hint
+            prev = self.active_explore_goal
+            prev_id = (prev or {}).get("candidate_id")
+            next_id = fresh.get("candidate_id")
+            switch_ids = prev_id != next_id
+            if prev:
+                _, live_distance = self._explore_goal_geometry(prev)
+            else:
+                live_distance = 999.0
+            switch_allowed = (
+                prev is None
+                or (
+                    switch_ids
+                    and self._explore_goal_switch_allowed(prev, fresh, live_distance)
+                )
+            )
+            if switch_allowed:
+                self.active_explore_goal = dict(fresh)
+                if self._hint_has_planned_path(fresh):
+                    self.active_planned_path = self._planned_path_points(fresh)
+                else:
+                    self.active_planned_path = []
+                self._begin_explore_goal(now)
+            else:
+                locked = dict(self.active_explore_goal or fresh)
+                locked["goal_pose"] = fresh.get("goal_pose", locked.get("goal_pose"))
+                locked["look_at"] = fresh.get("look_at", locked.get("look_at"))
+                locked["score"] = fresh.get("score", locked.get("score"))
+                locked["planned_path"] = fresh.get("planned_path", locked.get("planned_path"))
+                locked["nav_planner"] = fresh.get("nav_planner", locked.get("nav_planner"))
+                locked["astar_fallback"] = fresh.get("astar_fallback", locked.get("astar_fallback"))
+                locked["selection_explanation"] = fresh.get(
+                    "selection_explanation", locked.get("selection_explanation")
+                )
+                self.active_explore_goal = locked
+                if self._hint_has_planned_path(fresh):
+                    self.active_planned_path = self._planned_path_points(fresh)
+                elif str(fresh.get("nav_planner", "")) == "bearing_first" or fresh.get(
+                    "astar_fallback"
+                ):
+                    self.active_planned_path = []
+        elif self.active_explore_goal is None:
+            return None
+
         active = self.active_explore_goal or hint
         distance = float(active.get("goal_distance_m", 999.0))
         bearing = float(active.get("goal_bearing_rad", 0.0))
+        live_bearing, live_distance = self._explore_goal_geometry(active)
+        bearing = live_bearing
+        distance = live_distance
+        active["goal_bearing_rad"] = bearing
+        active["goal_distance_m"] = distance
 
         if self.explore_goal_start_time and now - self.explore_goal_start_time > self.explore_goal_timeout_sec:
             self._reject_candidate(active, now, "goal_timeout")
@@ -493,17 +765,90 @@ class SharedNavSemanticExplore(Node):
             self._reject_candidate(active, now, "arrived_but_no_target")
             return None
 
-        kp = 0.8
-        if abs(bearing) > self.bearing_turn_threshold:
-            vx = 0.0
-            wz = clamp(kp * bearing, -self.bearing_max_wz, self.bearing_max_wz)
-        elif abs(bearing) > self.bearing_forward_threshold:
-            vx = 0.012
-            wz = clamp(kp * bearing, -self.bearing_max_wz, self.bearing_max_wz)
-        else:
-            vx = self.bearing_max_vx
-            wz = clamp(kp * bearing * 0.5, -self.bearing_max_wz, self.bearing_max_wz)
-        return ServoCommand(vx=vx, wz=wz), "semantic_explore"
+        front = self.front_min_distance()
+        align_threshold = self.bearing_turn_threshold
+        kp = 0.9
+        align_elapsed = now - self.explore_phase_start
+
+        if self.explore_phase not in (
+            "EXPLORE_ALIGN",
+            "EXPLORE_STEP",
+            "EXPLORE_BURST_PAUSE",
+        ):
+            self.explore_phase = "EXPLORE_ALIGN"
+            self.explore_phase_start = now
+
+        if self.explore_phase == "EXPLORE_ALIGN":
+            if abs(bearing) > align_threshold and align_elapsed < self.explore_align_max_sec:
+                wz = clamp(kp * bearing, -self.bearing_max_wz, self.bearing_max_wz)
+                return ServoCommand(vx=0.0, wz=wz), "semantic_explore_align"
+            self.explore_phase = "EXPLORE_STEP"
+            self.explore_phase_start = now
+            if self.latest_odom_xy is not None:
+                self.explore_burst_start_xy = self.latest_odom_xy
+
+        if self.explore_phase == "EXPLORE_STEP":
+            if abs(bearing) > align_threshold * 1.35:
+                self.explore_phase = "EXPLORE_ALIGN"
+                self.explore_phase_start = now
+                self.explore_burst_start_xy = None
+                wz = clamp(kp * bearing, -self.bearing_max_wz, self.bearing_max_wz)
+                return ServoCommand(vx=0.0, wz=wz), "semantic_explore_align"
+            if front is not None and front < self.safety_stop_distance:
+                self._reject_candidate(active, now, "unsafe_front_clearance")
+                return None
+            if self.explore_burst_start_xy is None and self.latest_odom_xy is not None:
+                self.explore_burst_start_xy = self.latest_odom_xy
+            burst_traveled = self._odom_travel_since(self.explore_burst_start_xy)
+            step_done = (
+                burst_traveled >= self.explore_step_distance_m
+                if self.explore_step_mode == "distance"
+                else (now - self.explore_phase_start) >= self.explore_step_sec
+            )
+            if not step_done:
+                vx = clamp(self.bearing_max_vx, 0.0, self.max_cmd_vx)
+                return ServoCommand(vx=vx, wz=0.0), "semantic_explore_step"
+            self.explore_goal_traveled_m += burst_traveled
+            self.explore_burst_start_xy = None
+            self.explore_phase = "EXPLORE_BURST_PAUSE"
+            self.explore_phase_start = now
+            return ServoCommand(vx=0.0, wz=0.0), "semantic_explore_burst_pause"
+
+        if self.explore_phase == "EXPLORE_BURST_PAUSE":
+            if now - self.explore_phase_start < self.explore_inter_burst_pause_sec:
+                return ServoCommand(vx=0.0, wz=0.0), "semantic_explore_burst_pause"
+            self.explore_phase = "EXPLORE_ALIGN"
+            self.explore_phase_start = now
+            return ServoCommand(vx=0.0, wz=0.0), "semantic_explore_select"
+
+        return ServoCommand(vx=0.0, wz=0.0), "semantic_explore_select"
+
+    def _blocked_retreat_clearance_target(self) -> float:
+        """Back until front clearance reaches emergency+margin, and above stop_distance for FSM unblock."""
+        primary = self.emergency_stop_distance + self.blocked_retreat_margin_m
+        fsm_min = self.safety_stop_distance + self.blocked_retreat_fsm_buffer_m
+        return max(primary, fsm_min)
+
+    def _start_blocked_retreat(self, now: float) -> None:
+        self.blocked_retreat_active = True
+        self.blocked_retreat_start_time = now
+        self.blocked_retreat_clearance_target = self._blocked_retreat_clearance_target()
+
+    def _stop_blocked_retreat(self) -> None:
+        self.blocked_retreat_active = False
+        self.blocked_retreat_start_time = 0.0
+
+    def _blocked_retreat_cmd(self, now: float) -> Tuple[ServoCommand, str]:
+        front = self.front_min_distance()
+        target = self.blocked_retreat_clearance_target or self._blocked_retreat_clearance_target()
+        if front is not None and front >= target:
+            self._stop_blocked_retreat()
+            return ServoCommand(vx=0.0, wz=0.0), "blocked_retreat_complete"
+        if now - self.blocked_retreat_start_time > self.blocked_retreat_max_sec:
+            self._stop_blocked_retreat()
+            return ServoCommand(vx=0.0, wz=0.0), "blocked_retreat_timeout"
+        vx = -abs(self.blocked_retreat_vx)
+        return ServoCommand(vx=vx, wz=0.0), "blocked_retreat_reverse"
 
     def _record_birth_sector(self, now: float) -> None:
         if not self.birth_record_sector or self.fsm.state != NavState.SCANNING:
@@ -549,6 +894,8 @@ class SharedNavSemanticExplore(Node):
         ):
             self.active_explore_goal = None
             self.observe_update_active = False
+            self.explore_phase = "EXPLORE_SELECT"
+            self.explore_phase_start = now
         front_min = self.front_min_distance()
         lidar_dist = self.effective_lidar_distance(target)
         obs = self.make_observation(now, target, lidar_dist, front_min=front_min)
@@ -559,8 +906,19 @@ class SharedNavSemanticExplore(Node):
         self.last_fsm_result = result
         self.last_target = target
 
+        if prev_state == NavState.BLOCKED and result.state != NavState.BLOCKED:
+            self._stop_blocked_retreat()
+
         if result.changed and result.state == NavState.BLOCKED:
             self.search_mem.search_turn_locked_until = 0.0
+            if self.blocked_retreat_enabled:
+                self._start_blocked_retreat(now)
+            if (
+                self.semantic_explore_enabled
+                and self.active_explore_goal
+                and result.reason in ("blocked", "emergency")
+            ):
+                self._reject_candidate(self.active_explore_goal, now, "blocked")
         if self.target_ok(target):
             self.search_mem.search_mode = "visual_handoff"
 
@@ -788,6 +1146,10 @@ class SharedNavSemanticExplore(Node):
                 explore_cmd = self.command_from_explore_hint(now)
                 if explore_cmd is not None:
                     return explore_cmd
+                hint = self.latest_explore_hint or {}
+                hint_age = now - float(self.latest_explore_hint_time or 0.0)
+                if hint_age < 4.0 and str(hint.get("mode", "")) == "none":
+                    return ServoCommand(), "semantic_explore_waiting_candidate"
             return self.resolve_search_cmd(now)
         if state == NavState.CANDIDATE_LOCK:
             if self.target_ok(target):
@@ -823,8 +1185,19 @@ class SharedNavSemanticExplore(Node):
             cmd, reason = self.resolve_search_cmd(now)
             return cmd, f"lost_recovery_{reason}"
         if state == NavState.BLOCKED:
+            if self.blocked_retreat_active:
+                return self._blocked_retreat_cmd(now)
             if self.last_safety.get("safety_reason") == "emergency_stop":
+                if self.semantic_explore_enabled and self.active_explore_goal:
+                    self._reject_candidate(self.active_explore_goal, now, "emergency_stop")
+                if self.blocked_retreat_enabled:
+                    self._start_blocked_retreat(now)
+                    return self._blocked_retreat_cmd(now)
                 return ServoCommand(), "blocked_emergency_stop"
+            if self.semantic_explore_enabled:
+                explore_cmd = self.command_from_explore_hint(now)
+                if explore_cmd is not None:
+                    return explore_cmd
             return self.blocked_recovery_cmd(target, now)
         return ServoCommand(), "unhandled_stop"
 
@@ -855,17 +1228,41 @@ class SharedNavSemanticExplore(Node):
         }
         safe = Twist()
         birth_scanning = self.desired_reason == "birth_scanning"
+        is_retreat = self.blocked_retreat_active or str(self.desired_reason).startswith(
+            "blocked_retreat"
+        )
         if (
             self.require_lidar
             and (scan_age is None or scan_age > self.scan_stale_sec)
             and not birth_scanning
+            and not is_retreat
         ):
             info.update({"safe_cmd_vx": 0.0, "safe_cmd_wz": 0.0, "safety_reason": "stale_scan"})
             return safe, info
+
+        vx = float(raw_cmd.linear.x)
+        wz = float(raw_cmd.angular.z)
+
+        if is_retreat:
+            vx = clamp(vx, -abs(self.blocked_retreat_vx), 0.0)
+            wz = 0.0
+            safe.linear.x = vx
+            safe.angular.z = wz
+            info.update(
+                {
+                    "safe_cmd_vx": float(safe.linear.x),
+                    "safe_cmd_wz": float(safe.angular.z),
+                    "safety_reason": "blocked_retreat_pass",
+                    "blocked_retreat_target_m": self.blocked_retreat_clearance_target,
+                    "safety_limited": True,
+                }
+            )
+            return safe, info
+
         if (
             not birth_scanning
-            and safety_dist is not None
-            and safety_dist <= self.emergency_stop_distance
+            and front_min is not None
+            and front_min < self.emergency_stop_distance
         ):
             info.update(
                 {
@@ -885,20 +1282,25 @@ class SharedNavSemanticExplore(Node):
             vx = 0.0
             info["safety_limited"] = True
             reason = "birth_scan_vx_zero"
-        elif safety_dist is not None and safety_dist <= self.hard_stop_distance:
+        elif front_min is not None and front_min < self.safety_stop_distance:
             vx = 0.0
+            wz = clamp(wz, -self.safe_turn_wz, self.safe_turn_wz)
             info["safety_limited"] = True
-            reason = "hard_stop"
-        elif safety_dist is not None and safety_dist < self.slow_distance and vx > 0.0:
-            span = max(self.slow_distance - self.stop_distance, 1e-6)
-            vx = min(vx, self.max_cmd_vx * clamp((safety_dist - self.stop_distance) / span, 0.0, 1.0))
+            reason = "front_stop_turn_only"
+        elif front_min is not None and front_min < self.slow_distance and vx > 0.0:
+            vx = min(vx, self.slow_vx)
             info["safety_limited"] = True
-            reason = "slow_zone_scale"
+            reason = "front_slow_vx"
 
         if not birth_scanning and abs(wz) > self.turn_zero_vx_wz:
-            vx = 0.0
-            info["safety_limited"] = True
-            reason = "turn_zero_vx"
+            explore_forward = self.desired_reason in (
+                "semantic_explore_step",
+                "semantic_explore_burst_pause",
+            )
+            if not explore_forward:
+                vx = 0.0
+                info["safety_limited"] = True
+                reason = "turn_zero_vx"
         elif abs(wz) > self.turn_slow_vx_wz and vx > 0.0:
             vx *= self.turn_slow_vx_scale
             info["safety_limited"] = True
@@ -1019,11 +1421,26 @@ class SharedNavSemanticExplore(Node):
             "birth_scan_budget_deg": math.degrees(self.fsm._birth_scan_budget_rad()),
             "birth_scan_odom_yaw_deg": math.degrees(self._birth_odom_accum_rad),
             "birth_scan_target_deg": math.degrees(self.birth_scan_target_rad),
+            "explore_phase": self.explore_phase,
+            "explore_goal_traveled_m": round(self.explore_goal_traveled_m, 3),
+            "explore_step_distance_m": self.explore_step_distance_m,
+            "explore_goal_switch_max_distance_m": self.explore_goal_switch_max_distance_m,
+            "explore_path_waypoint_idx": self.active_path_waypoint_idx,
+            "explore_planned_path_len": len(self.active_planned_path),
+            "explore_nav_planner": (self.active_explore_goal or {}).get("nav_planner"),
+            "explore_astar_fallback": (self.active_explore_goal or {}).get("astar_fallback"),
+            "explore_last_reject_reason": self.explore_last_reject_reason,
+            "explore_last_reject_goal_pose": self.explore_last_reject_goal_pose,
+            "blocked_retreat_active": self.blocked_retreat_active,
+            "blocked_retreat_target_m": round(self.blocked_retreat_clearance_target, 3),
+            "blocked_retreat_margin_m": self.blocked_retreat_margin_m,
             "time": time.time(),
         }
         if self.active_explore_goal:
             data["explore_candidate_id"] = self.active_explore_goal.get("candidate_id")
             data["explore_mode"] = self.active_explore_goal.get("mode")
+            _, goal_dist = self._explore_goal_geometry(self.active_explore_goal)
+            data["explore_goal_distance_m"] = round(goal_dist, 3)
         elif self.last_explore_candidate_id:
             data["explore_candidate_id"] = self.last_explore_candidate_id
         if self.failed_explore_goals:

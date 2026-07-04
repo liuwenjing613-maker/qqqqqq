@@ -1,60 +1,39 @@
 [BPU_PLAT]BPU Platform Version(1.3.6)! soc info(x5)
 [HBRT] set log level as 0. version = 3.15.55.0
 [DNN] Runtime version = 1.24.5_(3.15.55 HBRT)
-[A][DNN][packed_model.cpp:247][Model](2026-07-04,12:54:26.598.688) [HorizonRT] The model builder version = 1.23.8
-[INFO] [1783140866.955284708] [yolov5s_bpu_web_node]: subscribing raw image: /image_raw
-[INFO] [1783140866.972595905] [yolov5s_bpu_web_node]: semantic depth overlay ON topic=/semantic_observations
-[INFO] [1783140866.983609307] [yolov5s_bpu_web_node]: ===== YOLOv5s-BPU web node started =====
-[INFO] [1783140866.986202497] [yolov5s_bpu_web_node]: model=/root/rdk_model_zoo/samples/vision/yolov5/model/yolov5s_tag_v7.0_detect_640x640_bayese_nv12.bin
-[INFO] [1783140866.988425452] [yolov5s_bpu_web_node]: target_classes=['backpack', 'book', 'bottle', 'cell phone', 'chair', 'couch', 'cup', 'dining table', 'potted plant']
-[INFO] [1783140866.990579201] [yolov5s_bpu_web_node]: out_topic=/target_bbox_json
-[INFO] [1783140866.992770157] [yolov5s_bpu_web_node]: annotated_topic=/yolov5s_bpu/annotated/compressed
-[INFO] [1783140866.994986320] [yolov5s_bpu_web_node]: web=http://<RDK_IP>:8088/
-[INFO] [1783140866.997166776] [yolov5s_bpu_web_node]: nav overlay topics state=/nav_state cmd=/cmd_vel
-[INFO] [1783140878.135175507] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140881.264557188] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140884.168373176] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140887.179328978] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140890.136609606] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140893.139817973] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140896.164668439] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140899.195064131] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140902.183904081] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140905.150067580] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140908.169940985] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140911.140372556] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140914.141039181] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140917.139559517] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140920.264328733] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140923.263951560] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140926.281165621] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140929.263473269] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140932.243583900] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140935.253142942] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140938.245740060] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140941.239576904] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140944.254417678] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140947.245910607] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140950.242000424] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140953.245619158] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140956.243565126] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140959.258399632] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140962.241475226] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140965.258778782] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140968.241370692] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140971.239736023] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140974.244237433] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140977.241038446] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140980.138059401] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140983.138473808] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140986.137484984] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140989.136013352] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140992.136654292] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140995.242905932] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783140998.137970617] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783141001.140056907] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783141004.138456650] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783141007.140048651] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783141010.253403883] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783141013.243191929] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
-[INFO] [1783141016.250554292] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[A][DNN][packed_model.cpp:247][Model](2026-07-04,16:21:31.251.179) [HorizonRT] The model builder version = 1.23.8
+[INFO] [1783153291.590142296] [yolov5s_bpu_web_node]: subscribing raw image: /image_raw
+[INFO] [1783153291.606666209] [yolov5s_bpu_web_node]: semantic depth overlay ON topic=/semantic_observations
+[INFO] [1783153291.617314262] [yolov5s_bpu_web_node]: ===== YOLOv5s-BPU web node started =====
+[INFO] [1783153291.619653131] [yolov5s_bpu_web_node]: model=/root/rdk_model_zoo/samples/vision/yolov5/model/yolov5s_tag_v7.0_detect_640x640_bayese_nv12.bin
+[INFO] [1783153291.622245957] [yolov5s_bpu_web_node]: target_classes=['backpack', 'book', 'bottle', 'cell phone', 'chair', 'couch', 'cup', 'dining table', 'potted plant']
+[INFO] [1783153291.624937283] [yolov5s_bpu_web_node]: out_topic=/target_bbox_json
+[INFO] [1783153291.627280234] [yolov5s_bpu_web_node]: annotated_topic=/yolov5s_bpu/annotated/compressed
+[INFO] [1783153291.629684853] [yolov5s_bpu_web_node]: web=http://<RDK_IP>:8088/
+[INFO] [1783153291.632292720] [yolov5s_bpu_web_node]: nav overlay topics state=/nav_state cmd=/cmd_vel
+[INFO] [1783153307.004354751] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153310.013524544] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153313.009759956] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153316.044054468] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153319.015766945] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153322.042334810] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153325.025918835] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153328.026342103] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153331.026870120] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153334.009964309] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153337.010821448] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153340.006153101] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153343.014886798] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153346.030734974] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153349.008013549] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153352.015290288] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153355.033876911] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153358.026577022] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153361.014371479] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153364.101204116] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153367.066403467] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153370.092848520] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153372.966842625] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153376.007975426] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153379.072824284] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783153382.173404541] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
