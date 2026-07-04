@@ -242,3 +242,53 @@
 [INFO] [1783155507.244575991] [simple_scan_filter]: scan stats: n=404, zeros=112, nan=0, inf=0, finite_raw=292, finite_out=209, removed_isolated=3
 [INFO] [1783155512.392208906] [simple_scan_filter]: scan stats: n=404, zeros=107, nan=0, inf=0, finite_raw=297, finite_out=212, removed_isolated=5
 [INFO] [1783155517.396259095] [simple_scan_filter]: scan stats: n=404, zeros=100, nan=0, inf=0, finite_raw=304, finite_out=214, removed_isolated=6
+[INFO] [1783155522.180685451] [simple_scan_filter]: scan stats: n=404, zeros=96, nan=0, inf=0, finite_raw=308, finite_out=215, removed_isolated=6
+[INFO] [1783155527.335051277] [simple_scan_filter]: scan stats: n=404, zeros=99, nan=0, inf=0, finite_raw=305, finite_out=209, removed_isolated=8
+[INFO] [1783155532.200374754] [simple_scan_filter]: scan stats: n=404, zeros=98, nan=0, inf=0, finite_raw=306, finite_out=210, removed_isolated=7
+[INFO] [1783155537.387270572] [simple_scan_filter]: scan stats: n=404, zeros=104, nan=0, inf=0, finite_raw=300, finite_out=214, removed_isolated=4
+[INFO] [1783155542.377215204] [simple_scan_filter]: scan stats: n=404, zeros=98, nan=0, inf=0, finite_raw=306, finite_out=212, removed_isolated=7
+[INFO] [1783155547.382599749] [simple_scan_filter]: scan stats: n=404, zeros=97, nan=0, inf=0, finite_raw=307, finite_out=214, removed_isolated=7
+[INFO] [1783155552.105578371] [simple_scan_filter]: scan stats: n=404, zeros=102, nan=0, inf=0, finite_raw=302, finite_out=209, removed_isolated=8
+[INFO] [1783155557.301693460] [simple_scan_filter]: scan stats: n=404, zeros=96, nan=0, inf=0, finite_raw=308, finite_out=214, removed_isolated=6
+[INFO] [1783155562.215722085] [simple_scan_filter]: scan stats: n=404, zeros=98, nan=0, inf=0, finite_raw=306, finite_out=213, removed_isolated=7
+[INFO] [1783155567.235896783] [simple_scan_filter]: scan stats: n=404, zeros=97, nan=0, inf=0, finite_raw=307, finite_out=217, removed_isolated=7
+[INFO] [1783155572.236512447] [simple_scan_filter]: scan stats: n=404, zeros=99, nan=0, inf=0, finite_raw=305, finite_out=209, removed_isolated=9
+[INFO] [1783155577.252750107] [simple_scan_filter]: scan stats: n=404, zeros=102, nan=0, inf=0, finite_raw=302, finite_out=217, removed_isolated=5
+[INFO] [1783155582.246590231] [simple_scan_filter]: scan stats: n=404, zeros=106, nan=0, inf=0, finite_raw=298, finite_out=214, removed_isolated=5
+[INFO] [1783155587.238743337] [simple_scan_filter]: scan stats: n=404, zeros=100, nan=0, inf=0, finite_raw=304, finite_out=213, removed_isolated=7
+[INFO] [1783155592.263499286] [simple_scan_filter]: scan stats: n=404, zeros=94, nan=0, inf=0, finite_raw=310, finite_out=214, removed_isolated=8
+[INFO] [1783155597.268863202] [simple_scan_filter]: scan stats: n=404, zeros=97, nan=0, inf=0, finite_raw=307, finite_out=211, removed_isolated=5
+[INFO] [1783155602.279244397] [simple_scan_filter]: scan stats: n=404, zeros=97, nan=0, inf=0, finite_raw=307, finite_out=213, removed_isolated=7
+[INFO] [1783155607.297527414] [simple_scan_filter]: scan stats: n=404, zeros=102, nan=0, inf=0, finite_raw=302, finite_out=214, removed_isolated=5
+[INFO] [1783155612.291015895] [simple_scan_filter]: scan stats: n=404, zeros=95, nan=0, inf=0, finite_raw=309, finite_out=217, removed_isolated=7
+[INFO] [1783155617.286653944] [simple_scan_filter]: scan stats: n=404, zeros=106, nan=0, inf=0, finite_raw=298, finite_out=209, removed_isolated=5
+[INFO] [1783155622.319353422] [simple_scan_filter]: scan stats: n=404, zeros=106, nan=0, inf=0, finite_raw=298, finite_out=216, removed_isolated=4
+[INFO] [1783155627.318613273] [simple_scan_filter]: scan stats: n=404, zeros=102, nan=0, inf=0, finite_raw=302, finite_out=215, removed_isolated=6
+[INFO] [1783155632.317725066] [simple_scan_filter]: scan stats: n=404, zeros=102, nan=0, inf=0, finite_raw=302, finite_out=214, removed_isolated=6
+[INFO] [1783155637.332183354] [simple_scan_filter]: scan stats: n=404, zeros=102, nan=0, inf=0, finite_raw=302, finite_out=211, removed_isolated=6
+[INFO] [1783155642.397716749] [simple_scan_filter]: scan stats: n=404, zeros=103, nan=0, inf=0, finite_raw=301, finite_out=208, removed_isolated=8
+[INFO] [1783155647.352781498] [simple_scan_filter]: scan stats: n=404, zeros=98, nan=0, inf=0, finite_raw=306, finite_out=208, removed_isolated=8
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 197, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 191, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 748, in _spin_once_impl
+    raise handler.exception()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 254, in __call__
+    self._handler.send(None)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 447, in handler
+    await call_coroutine(entity, arg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 372, in _execute_subscription
+    await await_or_execute(sub.callback, msg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 107, in await_or_execute
+    return callback(*args)
+  File "/root/rdk_x5_vln_robot/ros2_bridge/simple_scan_filter.py", line 143, in cb
+    self.pub.publish(out)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py", line 70, in publish
+    self.__publisher.publish(msg)
+rclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389

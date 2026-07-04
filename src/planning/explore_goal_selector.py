@@ -233,6 +233,7 @@ class ExploreGoalSelector(Node):
         self._last_selection_explanation = "initializing"
         self._nav_abort_reselect = False
         self._last_nav_reject_reason = ""
+        self._last_pick_stats: Dict[str, Any] = {}
 
         self.pub_hint = self.create_publisher(String, self.hint_topic, 10)
         self.pub_state = self.create_publisher(String, self.state_topic, 10)
@@ -465,6 +466,16 @@ class ExploreGoalSelector(Node):
                 out.append(lm)
         return out
 
+    def _landmark_map_xy(self, lm: Dict[str, Any]) -> Tuple[float, float]:
+        ox = float(lm.get("x", 0.0))
+        oy = float(lm.get("y", 0.0))
+        frame = str(
+            lm.get("frame_id")
+            or self.semantic_map.get("frame_id")
+            or self._map_frame_id()
+        )
+        return self._to_map_xy(ox, oy, source_frame=frame)
+
     def _standoff_goal(
         self, obj_x: float, obj_y: float, robot_xy: Tuple[float, float]
     ) -> Optional[Tuple[float, float, float]]:
@@ -532,20 +543,22 @@ class ExploreGoalSelector(Node):
     def _goal_on_scanned_map(self, goal_xy: Tuple[float, float]) -> bool:
         if not self.require_goal_on_known_free:
             return True
-        if self.latest_map is None or not self._pose_matches_map():
+        if self.latest_map is None or not self._map_coords_trusted():
             return True
+        gx, gy = self._goal_map_xy(goal_xy)
         on_known, _, _ = goal_on_scanned_map(
-            self.latest_map, goal_xy[0], goal_xy[1], self._map_grid_cfg()
+            self.latest_map, gx, gy, self._map_grid_cfg()
         )
         return on_known
 
     def _apply_known_map_scoring(self, candidates: List[ExploreCandidate]) -> None:
-        if self.latest_map is None or not self._pose_matches_map():
+        if self.latest_map is None or not self._map_coords_trusted():
             return
         cfg = self._map_grid_cfg()
         for cand in candidates:
+            gx, gy = self._goal_map_xy(cand.goal_xy)
             on_known, is_edge, is_interior = goal_on_scanned_map(
-                self.latest_map, cand.goal_xy[0], cand.goal_xy[1], cfg
+                self.latest_map, gx, gy, cfg
             )
             if not on_known:
                 cand.unknown_goal_penalty = self.unknown_goal_penalty_weight
@@ -572,26 +585,29 @@ class ExploreGoalSelector(Node):
     ) -> None:
         if (
             not self.scanned_free_candidates
-            or self.latest_map is None
-            or not self._pose_matches_map()
+            or not self._can_use_map_planning()
         ):
+            return
+        plan_robot = self._planning_robot_xy()
+        if plan_robot is None:
             return
         goals = collect_scanned_free_goals(
             self.latest_map,
-            robot_xy,
+            plan_robot,
             self._map_grid_cfg(),
             self.min_goal_select_distance_m,
             self.max_goal_select_distance_m,
             self.scanned_free_max_candidates,
         )
         for fx, fy, yaw, is_edge in goals:
-            dist = math.hypot(fx - robot_xy[0], fy - robot_xy[1])
+            px, py = self._to_pose_frame_xy(fx, fy)
+            dist = math.hypot(px - robot_xy[0], py - robot_xy[1])
             cand = ExploreCandidate(
-                candidate_id=make_candidate_id("scanned_free", fx, fy),
+                candidate_id=make_candidate_id("scanned_free", px, py),
                 mode="scanned_free",
-                goal_xy=(fx, fy),
+                goal_xy=(px, py),
                 goal_yaw=yaw,
-                look_at=(fx, fy),
+                look_at=(px, py),
                 semantic_score=0.12,
                 information_gain=0.45 if is_edge else 0.25,
                 reachability=0.85,
@@ -602,41 +618,109 @@ class ExploreGoalSelector(Node):
                 source={"type": "scanned_free", "is_frontier_edge": is_edge},
                 target_class=target_class,
             )
-            cand.blacklist_penalty = self._blacklist_penalty(fx, fy, target_class) * float(
+            cand.blacklist_penalty = self._blacklist_penalty(px, py, target_class) * float(
                 self.scoring_weights.get("blacklist_penalty", 0.3)
             )
             candidates.append(cand)
+
+    def _append_free_space_fallback(
+        self,
+        candidates: List[ExploreCandidate],
+        robot_xy: Tuple[float, float, float],
+        ranges: List[float],
+        angles: List[float],
+        map_ok: bool,
+    ) -> None:
+        target_class = self.parsed.target_category
+        scored_dirs = sorted(
+            [
+                (i, ranges[i], angles[i])
+                for i in range(len(ranges))
+                if 0.1 < ranges[i] < 4.0 and not math.isinf(ranges[i])
+            ],
+            key=lambda t: t[1],
+            reverse=True,
+        )
+        for best_i, r, a in scored_dirs[:5]:
+            step = min(
+                max(r * 0.45, self.min_goal_select_distance_m),
+                self.max_goal_select_distance_m * 0.95,
+            )
+            gx = robot_xy[0] + step * math.cos(robot_xy[2] + a)
+            gy = robot_xy[1] + step * math.sin(robot_xy[2] + a)
+            use_goal = True
+            if map_ok and self.require_goal_on_known_free:
+                mx, my = self._to_map_xy(gx, gy)
+                plan_robot_fb = self._planning_robot_xy()
+                if plan_robot_fb is not None:
+                    snapped = snap_to_known_free(
+                        self.latest_map,
+                        mx,
+                        my,
+                        plan_robot_fb,
+                        self._map_grid_cfg(),
+                        self.min_goal_select_distance_m,
+                        self.max_goal_select_distance_m,
+                    )
+                    if snapped is None:
+                        use_goal = False
+                    else:
+                        gx, gy = self._to_pose_frame_xy(snapped[0], snapped[1])
+            if not use_goal:
+                continue
+            dist = math.hypot(gx - robot_xy[0], gy - robot_xy[1])
+            if not (
+                self.min_goal_select_distance_m <= dist <= self.max_goal_select_distance_m
+            ):
+                continue
+            candidates.append(
+                ExploreCandidate(
+                    candidate_id=make_candidate_id("free_space", gx, gy),
+                    mode="free_space",
+                    goal_xy=(gx, gy),
+                    goal_yaw=robot_xy[2] + a,
+                    look_at=(gx, gy),
+                    semantic_score=0.15,
+                    information_gain=0.55,
+                    reachability=0.75,
+                    novelty=0.55,
+                    safety_margin=min(1.0, r / 2.0),
+                    reason="free_space fallback on scanned cell",
+                    source={"type": "free_space"},
+                    target_class=target_class,
+                )
+            )
+            return
 
     def _generate_candidates(self, robot_xy: Tuple[float, float]) -> List[ExploreCandidate]:
         candidates: List[ExploreCandidate] = []
         ranges, angles = self._scan_arrays()
         target_class = self.parsed.target_category
-        map_aligned = self._pose_matches_map()
-        marker_frame = (
-            str(self.latest_map.header.frame_id)
-            if self.latest_map is not None and map_aligned
-            else self._pose_frame
-        )
-        self._fixed_frame = marker_frame
+        map_ok = self._can_use_map_planning()
+        plan_robot = self._planning_robot_xy() if map_ok else None
+        self._prepare_viz_frame()
 
-        if map_aligned:
+        if map_ok and plan_robot is not None:
+            plan_xy = (plan_robot[0], plan_robot[1])
             for lm in self._confirmed_landmarks():
                 cls = str(lm.get("class_name", ""))
                 if is_target_match(self.parsed.target_aliases, cls) <= 0:
                     continue
-                ox, oy = float(lm.get("x", 0.0)), float(lm.get("y", 0.0))
-                standoff = self._standoff_goal(ox, oy, robot_xy)
+                ox, oy = self._landmark_map_xy(lm)
+                standoff = self._standoff_goal(ox, oy, plan_xy)
                 if standoff is None:
                     continue
                 gx, gy, gyaw = standoff
-                dist = math.hypot(gx - robot_xy[0], gy - robot_xy[1])
+                px, py = self._to_pose_frame_xy(gx, gy)
+                look_px, look_py = self._to_pose_frame_xy(ox, oy)
+                dist = math.hypot(px - robot_xy[0], py - robot_xy[1])
                 landmark_id = str(lm.get("landmark_id") or "").strip()
                 cand = ExploreCandidate(
                     candidate_id=f"landmark:{landmark_id}" if landmark_id else make_candidate_id("landmark", ox, oy),
                     mode="target_landmark",
-                    goal_xy=(gx, gy),
+                    goal_xy=(px, py),
                     goal_yaw=gyaw,
-                    look_at=(ox, oy),
+                    look_at=(look_px, look_py),
                     semantic_score=1.0,
                     information_gain=0.4,
                     reachability=0.8,
@@ -647,12 +731,13 @@ class ExploreGoalSelector(Node):
                     source={"type": "target_landmark", "landmark_id": lm.get("landmark_id"), "class_name": cls},
                     target_class=target_class,
                 )
-                cand.blacklist_penalty = self._blacklist_penalty(gx, gy, target_class) * float(
+                cand.blacklist_penalty = self._blacklist_penalty(px, py, target_class) * float(
                     self.scoring_weights.get("blacklist_penalty", 0.3)
                 )
                 candidates.append(cand)
 
-        if map_aligned:
+        if map_ok and plan_robot is not None:
+            plan_xy = (plan_robot[0], plan_robot[1])
             context_objects = self.parsed.context_objects
             if not context_objects:
                 for key in ("cup", "bottle", "backpack", "book", "plant"):
@@ -668,19 +753,21 @@ class ExploreGoalSelector(Node):
                 sem = context_score(target_class, cls, self.priors_cfg)
                 if sem <= 0.1:
                     continue
-                ox, oy = float(lm.get("x", 0.0)), float(lm.get("y", 0.0))
-                standoff = self._standoff_goal(ox, oy, robot_xy)
+                ox, oy = self._landmark_map_xy(lm)
+                standoff = self._standoff_goal(ox, oy, plan_xy)
                 if standoff is None:
                     continue
                 gx, gy, gyaw = standoff
-                dist = math.hypot(gx - robot_xy[0], gy - robot_xy[1])
+                px, py = self._to_pose_frame_xy(gx, gy)
+                look_px, look_py = self._to_pose_frame_xy(ox, oy)
+                dist = math.hypot(px - robot_xy[0], py - robot_xy[1])
                 landmark_id = str(lm.get("landmark_id") or "").strip()
                 cand = ExploreCandidate(
                     candidate_id=f"landmark:{landmark_id}" if landmark_id else make_candidate_id("landmark", ox, oy),
                     mode="context_landmark",
-                    goal_xy=(gx, gy),
+                    goal_xy=(px, py),
                     goal_yaw=gyaw,
-                    look_at=(ox, oy),
+                    look_at=(look_px, look_py),
                     semantic_score=sem,
                     information_gain=0.5,
                     reachability=0.75,
@@ -691,81 +778,42 @@ class ExploreGoalSelector(Node):
                     source={"type": "semantic_context", "landmark_id": lm.get("landmark_id"), "class_name": cls},
                     target_class=target_class,
                 )
-                cand.blacklist_penalty = self._blacklist_penalty(gx, gy, target_class) * float(
+                cand.blacklist_penalty = self._blacklist_penalty(px, py, target_class) * float(
                     self.scoring_weights.get("blacklist_penalty", 0.3)
                 )
                 candidates.append(cand)
 
-        if map_aligned and bool(self.frontier_cfg.get("enabled", True)) and self.latest_map is not None:
+        if map_ok and plan_robot is not None and bool(self.frontier_cfg.get("enabled", True)):
             frontiers = extract_frontiers(
-                self.latest_map, (robot_xy[0], robot_xy[1]), self.frontier_cfg, ranges, angles
+                self.latest_map, plan_xy, self.frontier_cfg, ranges, angles, plan_robot[2]
             )
             self._last_frontiers = frontiers
             for fg in frontiers:
-                gx, gy = fg.goal_xy
+                px, py = self._to_pose_frame_xy(fg.goal_xy[0], fg.goal_xy[1])
+                lx, ly = self._to_pose_frame_xy(fg.cluster_center[0], fg.cluster_center[1])
                 cand = ExploreCandidate(
-                    candidate_id=make_candidate_id("frontier", gx, gy),
+                    candidate_id=make_candidate_id("frontier", px, py),
                     mode="frontier",
-                    goal_xy=(gx, gy),
+                    goal_xy=(px, py),
                     goal_yaw=fg.goal_yaw,
-                    look_at=fg.cluster_center,
+                    look_at=(lx, ly),
                     semantic_score=0.1,
                     information_gain=fg.unknown_gain,
                     reachability=fg.reachability,
                     novelty=0.7,
                     safety_margin=min(1.0, fg.reachability),
                     travel_cost_penalty=min(0.5, fg.distance_m / 4.0),
-                    reason="frontier unknown_gain",
+                    reason="frontier scanned edge",
                     source={"type": "frontier", "frontier_id": fg.frontier_id},
                     target_class=target_class,
                 )
-                cand.blacklist_penalty = self._blacklist_penalty(gx, gy, target_class) * float(
+                cand.blacklist_penalty = self._blacklist_penalty(px, py, target_class) * float(
                     self.scoring_weights.get("blacklist_penalty", 0.3)
                 )
                 candidates.append(cand)
 
-        if map_aligned:
+        if map_ok:
             self._append_scanned_free_candidates(candidates, robot_xy, target_class)
-
-        if not candidates and ranges and angles:
-            best_i = max(range(len(ranges)), key=lambda i: ranges[i] if 0.1 < ranges[i] < 4.0 else 0.0)
-            r = ranges[best_i]
-            a = angles[best_i]
-            gx = robot_xy[0] + r * 0.5 * math.cos(robot_xy[2] + a)
-            gy = robot_xy[1] + r * 0.5 * math.sin(robot_xy[2] + a)
-            use_goal = True
-            if map_aligned and self.latest_map is not None and self.require_goal_on_known_free:
-                snapped = snap_to_known_free(
-                    self.latest_map,
-                    gx,
-                    gy,
-                    robot_xy,
-                    self._map_grid_cfg(),
-                    self.min_goal_select_distance_m,
-                    self.max_goal_select_distance_m,
-                )
-                if snapped is None:
-                    use_goal = False
-                else:
-                    gx, gy = snapped
-            if use_goal:
-                candidates.append(
-                    ExploreCandidate(
-                        candidate_id=make_candidate_id("free_space", gx, gy),
-                        mode="free_space",
-                        goal_xy=(gx, gy),
-                        goal_yaw=robot_xy[2] + a,
-                        look_at=(gx, gy),
-                        semantic_score=0.15,
-                        information_gain=0.55,
-                        reachability=0.75,
-                        novelty=0.55,
-                        safety_margin=min(1.0, r / 2.0),
-                        reason="free_space fallback on scanned cell",
-                        source={"type": "free_space"},
-                        target_class=target_class,
-                    )
-                )
 
         w = self.scoring_weights
         for c in candidates:
@@ -776,6 +824,23 @@ class ExploreGoalSelector(Node):
             c.safety_margin *= float(w.get("safety_margin", 0.10))
 
         self._apply_known_map_scoring(candidates)
+
+        in_range_safe = [
+            c
+            for c in candidates
+            if self._within_select_range(robot_xy, c) and self._candidate_safe(c)
+        ]
+        if not in_range_safe and ranges and angles:
+            before = len(candidates)
+            self._append_free_space_fallback(candidates, robot_xy, ranges, angles, map_ok)
+            for c in candidates[before:]:
+                c.semantic_score *= float(w.get("semantic_score", 0.25))
+                c.information_gain *= float(w.get("information_gain", 0.25))
+                c.reachability *= float(w.get("reachability", 0.20))
+                c.novelty *= float(w.get("novelty", 0.15))
+                c.safety_margin *= float(w.get("safety_margin", 0.10))
+            self._apply_known_map_scoring(candidates[before:])
+
         return candidates
 
     def _astar_cfg(self) -> Dict[str, Any]:
@@ -795,12 +860,19 @@ class ExploreGoalSelector(Node):
     ) -> List[Tuple[float, float]]:
         if not bool(self.planner_cfg.get("astar_enabled", False)) or self.latest_map is None:
             return []
-        return plan_path(
+        if not self._map_coords_trusted():
+            return []
+        start = self._to_map_xy(robot_xy[0], robot_xy[1])
+        goal = self._goal_map_xy(goal_xy)
+        path_map = plan_path(
             self.latest_map,
-            (robot_xy[0], robot_xy[1]),
-            goal_xy,
+            start,
+            goal,
             self._astar_cfg(),
         )
+        if not path_map:
+            return []
+        return [self._to_pose_frame_xy(px, py) for px, py in path_map]
 
     def _rank_candidates(self, candidates: List[ExploreCandidate]) -> List[ExploreCandidate]:
         if self.qwen.enabled:
@@ -861,12 +933,23 @@ class ExploreGoalSelector(Node):
         return ranked[0] if ranked[0].total_score >= self.min_hint_score else None
 
     def _candidate_summary(self, candidate: ExploreCandidate, rank: int) -> Dict[str, Any]:
+        dist_m = None
+        if self.robot_pose is not None:
+            dist_m = round(
+                self._goal_distance_m(self.robot_pose, candidate.goal_xy), 3
+            )
         return {
             "rank": rank,
             "candidate_id": candidate.candidate_id,
             "mode": candidate.mode,
             "score": round(candidate.total_score, 3),
             "safe": self._candidate_safe(candidate),
+            "dist_m": dist_m,
+            "in_range": (
+                self._within_select_range(self.robot_pose, candidate)
+                if self.robot_pose is not None
+                else None
+            ),
             "goal_xy": [round(candidate.goal_xy[0], 3), round(candidate.goal_xy[1], 3)],
             "look_at": [round(candidate.look_at[0], 3), round(candidate.look_at[1], 3)],
             "reason": candidate.reason,
@@ -877,6 +960,7 @@ class ExploreGoalSelector(Node):
                 "novelty": round(candidate.novelty, 3),
                 "safety": round(candidate.safety_margin, 3),
                 "blacklist": round(candidate.blacklist_penalty, 3),
+                "unknown": round(candidate.unknown_goal_penalty, 3),
                 "travel_cost": round(candidate.travel_cost_penalty, 3),
                 "known_map": round(candidate.known_map_bonus, 3),
             },
@@ -1085,12 +1169,14 @@ class ExploreGoalSelector(Node):
             path_msg = NavPath()
             path_msg.header = Header()
             path_msg.header.stamp = self.get_clock().now().to_msg()
+            self._prepare_viz_frame()
             path_msg.header.frame_id = self._fixed_frame
             for px, py in path:
+                vx, vy = self._xy_to_viz_frame(px, py)
                 ps = PoseStamped()
                 ps.header = path_msg.header
-                ps.pose.position.x = px
-                ps.pose.position.y = py
+                ps.pose.position.x = vx
+                ps.pose.position.y = vy
                 path_msg.poses.append(ps)
             self.pub_path.publish(path_msg)
 
@@ -1129,6 +1215,111 @@ class ExploreGoalSelector(Node):
         self.pub_hint.publish(String(data=json.dumps(payload, ensure_ascii=False)))
         stamp = self.get_clock().now().to_msg()
         self._publish_astar_markers(robot_xy, selected, stamp)
+
+    def _map_frame_id(self) -> str:
+        if self.latest_map is not None:
+            return str(self.latest_map.header.frame_id or self._frame_fixed)
+        return self._pose_frame
+
+    def _map_coords_trusted(self) -> bool:
+        if self.latest_map is None or self.robot_pose is None:
+            return False
+        map_frame = self._map_frame_id()
+        if self._pose_frame == map_frame:
+            return True
+        if self.tf_buffer is None:
+            return False
+        try:
+            self.tf_buffer.lookup_transform(
+                map_frame,
+                self._pose_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.2),
+            )
+            return True
+        except Exception:
+            return False
+
+    def _to_map_xy(self, x: float, y: float, source_frame: Optional[str] = None) -> Tuple[float, float]:
+        src = source_frame or self._pose_frame
+        dst = self._map_frame_id()
+        if src == dst:
+            return x, y
+        if self.tf_buffer is None:
+            return x, y
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                dst,
+                src,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.2),
+            )
+            tx = float(tf.transform.translation.x)
+            ty = float(tf.transform.translation.y)
+            q = tf.transform.rotation
+            yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
+            cos_y = math.cos(yaw)
+            sin_y = math.sin(yaw)
+            return cos_y * x - sin_y * y + tx, sin_y * x + cos_y * y + ty
+        except Exception:
+            return x, y
+
+    def _to_pose_frame_xy(self, x: float, y: float) -> Tuple[float, float]:
+        src = self._map_frame_id()
+        dst = self._pose_frame
+        if src == dst:
+            return x, y
+        if self.tf_buffer is None:
+            return x, y
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                dst,
+                src,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.2),
+            )
+            tx = float(tf.transform.translation.x)
+            ty = float(tf.transform.translation.y)
+            q = tf.transform.rotation
+            yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
+            cos_y = math.cos(yaw)
+            sin_y = math.sin(yaw)
+            return cos_y * x - sin_y * y + tx, sin_y * x + cos_y * y + ty
+        except Exception:
+            return x, y
+
+    def _planning_robot_xy(self) -> Optional[Tuple[float, float, float]]:
+        if self.robot_pose is None:
+            return None
+        rx, ry, yaw = self.robot_pose
+        mx, my = self._to_map_xy(rx, ry)
+        return mx, my, yaw
+
+    def _can_use_map_planning(self) -> bool:
+        return self.latest_map is not None and self._map_coords_trusted()
+
+    def _goal_map_xy(self, goal_xy: Tuple[float, float]) -> Tuple[float, float]:
+        return self._to_map_xy(goal_xy[0], goal_xy[1])
+
+    def _viz_frame_id(self) -> str:
+        if self.latest_map is not None:
+            return str(self.latest_map.header.frame_id or self._frame_fixed)
+        return self._pose_frame
+
+    def _xy_to_viz_frame(
+        self,
+        x: float,
+        y: float,
+        source_frame: Optional[str] = None,
+    ) -> Tuple[float, float]:
+        return self._to_map_xy(x, y, source_frame=source_frame or self._pose_frame)
+
+    def _robot_xy_viz(self, robot_xy: Tuple[float, float, float]) -> Tuple[float, float, float]:
+        vx, vy = self._xy_to_viz_frame(robot_xy[0], robot_xy[1])
+        return vx, vy, robot_xy[2]
+
+    def _prepare_viz_frame(self) -> None:
+        self._fixed_frame = self._viz_frame_id()
 
     def _marker_sphere(
         self, ns: str, mid: int, x: float, y: float, color: Tuple[float, float, float, float], scale: float = 0.15
@@ -1181,6 +1372,8 @@ class ExploreGoalSelector(Node):
         selected: Optional[ExploreCandidate],
         stamp,
     ) -> None:
+        self._prepare_viz_frame()
+        robot_viz = self._robot_xy_viz(robot_xy)
         arr = MarkerArray()
         for ns in ("astar_path", "astar_waypoints", "astar_endpoints"):
             arr.markers.append(self._marker_delete_all(ns, stamp))
@@ -1197,27 +1390,25 @@ class ExploreGoalSelector(Node):
         line.scale.x = 0.06
         line.color = ColorRGBA(r=0.1, g=0.95, b=1.0, a=0.95)
         line.pose.orientation.w = 1.0
-        line.points.append(Point(x=robot_xy[0], y=robot_xy[1], z=0.06))
+        line.points.append(Point(x=robot_viz[0], y=robot_viz[1], z=0.06))
         for px, py in self._last_path:
-            line.points.append(Point(x=px, y=py, z=0.06))
+            vx, vy = self._xy_to_viz_frame(px, py)
+            line.points.append(Point(x=vx, y=vy, z=0.06))
         arr.markers.append(line)
 
         for i, (px, py) in enumerate(self._last_path[:20]):
-            wp = self._marker_sphere("astar_waypoints", i + 1, px, py, (0.1, 0.8, 1.0, 0.85), 0.07)
+            vx, vy = self._xy_to_viz_frame(px, py)
+            wp = self._marker_sphere("astar_waypoints", i + 1, vx, vy, (0.1, 0.8, 1.0, 0.85), 0.07)
             wp.header.stamp = stamp
             arr.markers.append(wp)
 
-        start = self._marker_sphere("astar_endpoints", 1, robot_xy[0], robot_xy[1], (0.0, 0.8, 1.0, 1.0), 0.1)
+        start = self._marker_sphere(
+            "astar_endpoints", 1, robot_viz[0], robot_viz[1], (0.0, 0.8, 1.0, 1.0), 0.1
+        )
         start.header.stamp = stamp
         arr.markers.append(start)
-        end = self._marker_sphere(
-            "astar_endpoints",
-            2,
-            selected.goal_xy[0],
-            selected.goal_xy[1],
-            (0.0, 0.5, 1.0, 1.0),
-            0.12,
-        )
+        gx, gy = self._xy_to_viz_frame(selected.goal_xy[0], selected.goal_xy[1])
+        end = self._marker_sphere("astar_endpoints", 2, gx, gy, (0.0, 0.5, 1.0, 1.0), 0.12)
         end.header.stamp = stamp
         arr.markers.append(end)
         self.pub_astar_markers.publish(arr)
@@ -1229,15 +1420,20 @@ class ExploreGoalSelector(Node):
         selected: Optional[ExploreCandidate],
         stamp,
     ) -> None:
+        self._prepare_viz_frame()
+        robot_viz = self._robot_xy_viz(robot_xy)
         arr = MarkerArray()
         for ns in ("robot", "links", "pending", "status"):
             arr.markers.append(self._marker_delete_all(ns, stamp))
 
-        robot_m = self._marker_sphere("robot", 0, robot_xy[0], robot_xy[1], (0.0, 0.9, 0.9, 1.0), 0.14)
+        robot_m = self._marker_sphere(
+            "robot", 0, robot_viz[0], robot_viz[1], (0.0, 0.9, 0.9, 1.0), 0.14
+        )
         robot_m.header.stamp = stamp
         arr.markers.append(robot_m)
 
         if selected:
+            gx, gy = self._xy_to_viz_frame(selected.goal_xy[0], selected.goal_xy[1])
             link = Marker()
             link.header = self._marker_header(stamp)
             link.ns = "links"
@@ -1248,22 +1444,16 @@ class ExploreGoalSelector(Node):
             link.color = ColorRGBA(r=0.1, g=1.0, b=0.2, a=0.9)
             link.pose.orientation.w = 1.0
             link.points = [
-                Point(x=robot_xy[0], y=robot_xy[1], z=0.08),
-                Point(x=selected.goal_xy[0], y=selected.goal_xy[1], z=0.08),
+                Point(x=robot_viz[0], y=robot_viz[1], z=0.08),
+                Point(x=gx, y=gy, z=0.08),
             ]
             arr.markers.append(link)
 
         if self._pending_switch_id:
             pending = next((c for c in candidates if c.candidate_id == self._pending_switch_id), None)
             if pending:
-                pm = self._marker_sphere(
-                    "pending",
-                    1,
-                    pending.goal_xy[0],
-                    pending.goal_xy[1],
-                    (1.0, 0.45, 0.0, 1.0),
-                    0.16,
-                )
+                px, py = self._xy_to_viz_frame(pending.goal_xy[0], pending.goal_xy[1])
+                pm = self._marker_sphere("pending", 1, px, py, (1.0, 0.45, 0.0, 1.0), 0.16)
                 pm.header.stamp = stamp
                 arr.markers.append(pm)
 
@@ -1273,8 +1463,8 @@ class ExploreGoalSelector(Node):
         status.id = 1
         status.type = Marker.TEXT_VIEW_FACING
         status.action = Marker.ADD
-        status.pose.position.x = robot_xy[0]
-        status.pose.position.y = robot_xy[1]
+        status.pose.position.x = robot_viz[0]
+        status.pose.position.y = robot_viz[1]
         status.pose.position.z = 0.45
         status.scale.z = 0.14
         status.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=0.98)
@@ -1294,6 +1484,8 @@ class ExploreGoalSelector(Node):
         selected: Optional[ExploreCandidate],
     ) -> None:
         stamp = self.get_clock().now().to_msg()
+        self._prepare_viz_frame()
+        robot_viz = self._robot_xy_viz(robot_xy)
         ranked = sorted(candidates, key=lambda c: c.total_score, reverse=True)
         rank_by_id = {c.candidate_id: i + 1 for i, c in enumerate(ranked)}
 
@@ -1305,7 +1497,8 @@ class ExploreGoalSelector(Node):
             is_pending = c.candidate_id == self._pending_switch_id
             color = self._mode_color(c.mode, selected=is_sel, pending=is_pending)
             scale = 0.18 if is_sel else (0.14 if is_pending else 0.11)
-            m = self._marker_sphere("candidates", i, c.goal_xy[0], c.goal_xy[1], color, scale)
+            gx, gy = self._xy_to_viz_frame(c.goal_xy[0], c.goal_xy[1])
+            m = self._marker_sphere("candidates", i, gx, gy, color, scale)
             m.header.stamp = stamp
             cand_arr.markers.append(m)
 
@@ -1317,8 +1510,8 @@ class ExploreGoalSelector(Node):
             label.id = 100 + i
             label.type = Marker.TEXT_VIEW_FACING
             label.action = Marker.ADD
-            label.pose.position.x = c.goal_xy[0]
-            label.pose.position.y = c.goal_xy[1]
+            label.pose.position.x = gx
+            label.pose.position.y = gy
             label.pose.position.z = 0.28
             label.scale.z = 0.11
             label.color = ColorRGBA(r=1.0, g=1.0, b=0.95, a=0.98)
@@ -1334,7 +1527,9 @@ class ExploreGoalSelector(Node):
         sel_arr.markers.append(self._marker_delete_all("selected_arrow", stamp))
         sel_arr.markers.append(self._marker_delete_all("selected_label", stamp))
         if selected:
-            m = self._marker_sphere("selected", 0, selected.goal_xy[0], selected.goal_xy[1], (0.0, 1.0, 0.0, 1.0), 0.22)
+            gx, gy = self._xy_to_viz_frame(selected.goal_xy[0], selected.goal_xy[1])
+            lx, ly = self._xy_to_viz_frame(selected.look_at[0], selected.look_at[1])
+            m = self._marker_sphere("selected", 0, gx, gy, (0.0, 1.0, 0.0, 1.0), 0.22)
             m.header.stamp = stamp
             sel_arr.markers.append(m)
             arrow = Marker()
@@ -1344,8 +1539,8 @@ class ExploreGoalSelector(Node):
             arrow.type = Marker.ARROW
             arrow.action = Marker.ADD
             arrow.points = [
-                Point(x=selected.goal_xy[0], y=selected.goal_xy[1], z=0.05),
-                Point(x=selected.look_at[0], y=selected.look_at[1], z=0.05),
+                Point(x=gx, y=gy, z=0.05),
+                Point(x=lx, y=ly, z=0.05),
             ]
             arrow.scale.x = 0.05
             arrow.scale.y = 0.1
@@ -1357,8 +1552,8 @@ class ExploreGoalSelector(Node):
             sel_label.id = 2
             sel_label.type = Marker.TEXT_VIEW_FACING
             sel_label.action = Marker.ADD
-            sel_label.pose.position.x = selected.goal_xy[0]
-            sel_label.pose.position.y = selected.goal_xy[1]
+            sel_label.pose.position.x = gx
+            sel_label.pose.position.y = gy
             sel_label.pose.position.z = 0.42
             sel_label.scale.z = 0.13
             sel_label.color = ColorRGBA(r=0.2, g=1.0, b=0.2, a=1.0)
@@ -1370,7 +1565,8 @@ class ExploreGoalSelector(Node):
         fr_arr.markers.append(self._marker_delete_all("frontiers", stamp))
         fr_arr.markers.append(self._marker_delete_all("frontier_labels", stamp))
         for i, fg in enumerate(self._last_frontiers[:12]):
-            m = self._marker_sphere("frontiers", i, fg.goal_xy[0], fg.goal_xy[1], (0.2, 0.4, 1.0, 0.8), 0.08)
+            fx, fy = self._xy_to_viz_frame(fg.goal_xy[0], fg.goal_xy[1])
+            m = self._marker_sphere("frontiers", i, fx, fy, (0.2, 0.4, 1.0, 0.8), 0.08)
             m.header.stamp = stamp
             fr_arr.markers.append(m)
             fl = Marker()
@@ -1379,8 +1575,8 @@ class ExploreGoalSelector(Node):
             fl.id = 200 + i
             fl.type = Marker.TEXT_VIEW_FACING
             fl.action = Marker.ADD
-            fl.pose.position.x = fg.goal_xy[0]
-            fl.pose.position.y = fg.goal_xy[1]
+            fl.pose.position.x = fx
+            fl.pose.position.y = fy
             fl.pose.position.z = 0.2
             fl.scale.z = 0.09
             fl.color = ColorRGBA(r=0.6, g=0.8, b=1.0, a=0.95)
@@ -1413,12 +1609,34 @@ class ExploreGoalSelector(Node):
         robot_xy = self.robot_pose
         candidates = self._generate_candidates(robot_xy)
         self._last_candidates = candidates
+        in_range = [c for c in candidates if self._within_select_range(robot_xy, c)]
+        self._last_pick_stats = {
+            "candidates_total": len(candidates),
+            "candidates_in_range": len(in_range),
+            "candidates_safe": sum(1 for c in candidates if self._candidate_safe(c)),
+            "candidates_in_range_safe": sum(1 for c in in_range if self._candidate_safe(c)),
+            "candidates_above_threshold": sum(
+                1 for c in in_range if self._candidate_safe(c) and c.total_score >= self.min_hint_score
+            ),
+            "map_coords_trusted": self._map_coords_trusted(),
+            "can_use_map_planning": self._can_use_map_planning(),
+        }
         self._update_candidate_debug(candidates)
         best, _path = self._pick_navigable_candidate(robot_xy, candidates)
         selected = self._choose_sticky_candidate(best, candidates, now)
         self._selected = selected
         if selected is None:
-            self._status_message = "no_candidate_above_threshold"
+            stats = self._last_pick_stats
+            if stats.get("candidates_total", 0) == 0:
+                self._status_message = "no_candidates_generated"
+            elif stats.get("candidates_in_range", 0) == 0:
+                self._status_message = "no_candidate_in_select_range"
+            elif stats.get("candidates_in_range_safe", 0) == 0:
+                self._status_message = "no_candidate_passes_safety"
+            elif stats.get("candidates_above_threshold", 0) == 0:
+                self._status_message = "no_candidate_above_threshold"
+            else:
+                self._status_message = "no_navigable_candidate"
         elif self._status_message not in (
             "keep_current_min_time",
             "keep_current_score_margin",
@@ -1444,6 +1662,10 @@ class ExploreGoalSelector(Node):
             "pose_frame": self._pose_frame,
             "map_frame": str(self.latest_map.header.frame_id) if self.latest_map else None,
             "pose_map_aligned": self._pose_matches_map(),
+            "viz_frame": self._viz_frame_id(),
+            "map_coords_trusted": self._map_coords_trusted(),
+            "pick_stats": self._last_pick_stats,
+            "min_hint_score": self.min_hint_score,
             "num_landmarks": len(self._confirmed_landmarks()),
             "num_frontiers": len(self._last_frontiers),
             "num_candidates_last": len(self._last_candidates),

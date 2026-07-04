@@ -152,18 +152,19 @@ wait_topic_exists /odom 90 || exit 1
 wait_topic_exists /map 90 || exit 1
 wait_topic_exists /tf 40 || exit 1
 
-echo "[2/8] Start camera + image bridge..."
-ros2 launch "$PROJECT_DIR/perception/launch/usb_cam.launch.py" \
-  usb_video_device:="${CAMERA_DEV:-/dev/video0}" \
-  > logs/semantic_explore_camera.log 2>&1 &
-sleep 5
+# shellcheck source=scripts/lib/camera_stack.sh
+source "${PWD}/scripts/lib/camera_stack.sh"
 
-python3 "$PROJECT_DIR/src/perception/compressed_to_raw_image.py" \
-  --in-topic "${CAMERA_COMPRESSED_TOPIC:-/image}" \
-  --out-topic "${IMAGE_RAW_TOPIC:-/image_raw}" \
-  --max-fps "${IMAGE_RAW_MAX_FPS:-8}" \
-  > logs/semantic_explore_image_raw.log 2>&1 &
-sleep 2
+echo "[2/8] Start camera + image bridge..."
+ensure_camera_image_stream logs/semantic_explore_camera.log || {
+  echo "[semantic_explore] ERROR: camera failed; see logs/semantic_explore_camera.log"
+  exit 1
+}
+ensure_image_raw_stream logs/semantic_explore_image_raw.log || {
+  echo "[semantic_explore] ERROR: image bridge failed; see logs/semantic_explore_image_raw.log"
+  camera_stack_diagnose logs/semantic_explore_camera.log logs/semantic_explore_image_raw.log
+  exit 1
+}
 
 echo "[3/8] Start detector..."
 if [ "${DETECTOR_BACKEND:-yolov5s_bpu}" = "yolov5s_bpu" ]; then

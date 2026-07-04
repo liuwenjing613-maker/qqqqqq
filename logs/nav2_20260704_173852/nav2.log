@@ -1,0 +1,370 @@
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-04-17-39-20-240455-ubuntu-176792
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [map_server-1]: process started with pid [176806]
+[INFO] [amcl-2]: process started with pid [176808]
+[INFO] [lifecycle_manager-3]: process started with pid [176810]
+[INFO] [controller_server-4]: process started with pid [176812]
+[INFO] [smoother_server-5]: process started with pid [176814]
+[INFO] [planner_server-6]: process started with pid [176816]
+[INFO] [behavior_server-7]: process started with pid [176818]
+[INFO] [bt_navigator-8]: process started with pid [176820]
+[INFO] [waypoint_follower-9]: process started with pid [176822]
+[INFO] [velocity_smoother-10]: process started with pid [176826]
+[INFO] [lifecycle_manager-11]: process started with pid [176839]
+[lifecycle_manager-3] [INFO] [1783157962.892384560] [lifecycle_manager_localization]: Creating
+[lifecycle_manager-3] [INFO] [1783157963.041011418] [lifecycle_manager_localization]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[controller_server-4] [INFO] [1783157963.087354642] [controller_server]: 
+[controller_server-4] 	controller_server lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1783157963.236397335] [controller_server]: Creating controller server
+[lifecycle_manager-11] [INFO] [1783157963.633889682] [lifecycle_manager_navigation]: Creating
+[velocity_smoother-10] [INFO] [1783157963.681956618] [velocity_smoother]: 
+[velocity_smoother-10] 	velocity_smoother lifecycle node launched. 
+[velocity_smoother-10] 	Waiting on external lifecycle transitions to activate
+[velocity_smoother-10] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-8] [INFO] [1783157963.738086237] [bt_navigator]: 
+[bt_navigator-8] 	bt_navigator lifecycle node launched. 
+[bt_navigator-8] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-8] [INFO] [1783157963.738705905] [bt_navigator]: Creating
+[smoother_server-5] [INFO] [1783157963.869152892] [smoother_server]: 
+[smoother_server-5] 	smoother_server lifecycle node launched. 
+[smoother_server-5] 	Waiting on external lifecycle transitions to activate
+[smoother_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-11] [INFO] [1783157963.878387828] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[smoother_server-5] [INFO] [1783157963.933764321] [smoother_server]: Creating smoother server
+[behavior_server-7] [INFO] [1783157963.995826828] [behavior_server]: 
+[behavior_server-7] 	behavior_server lifecycle node launched. 
+[behavior_server-7] 	Waiting on external lifecycle transitions to activate
+[behavior_server-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[amcl-2] [INFO] [1783157964.054584578] [amcl]: 
+[amcl-2] 	amcl lifecycle node launched. 
+[amcl-2] 	Waiting on external lifecycle transitions to activate
+[amcl-2] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[amcl-2] [INFO] [1783157964.059870006] [amcl]: Creating
+[waypoint_follower-9] [INFO] [1783157964.179575970] [waypoint_follower]: 
+[waypoint_follower-9] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-9] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-9] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-1] [INFO] [1783157964.181134640] [map_server]: 
+[map_server-1] 	map_server lifecycle node launched. 
+[map_server-1] 	Waiting on external lifecycle transitions to activate
+[map_server-1] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-9] [INFO] [1783157964.183389019] [waypoint_follower]: Creating
+[map_server-1] [INFO] [1783157964.194057126] [map_server]: Creating
+[planner_server-6] [INFO] [1783157964.436107891] [planner_server]: 
+[planner_server-6] 	planner_server lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] [INFO] [1783157964.531112510] [planner_server]: Creating
+[lifecycle_manager-3] [INFO] [1783157965.108301740] [lifecycle_manager_localization]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-3] [INFO] [1783157965.113955210] [lifecycle_manager_localization]: [34m[1mConfiguring map_server[0m[0m
+[map_server-1] [INFO] [1783157965.123876314] [map_server]: Configuring
+[map_server-1] [INFO] [1783157965.124181065] [map_io]: Loading yaml file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.yaml
+[map_server-1] [INFO] [1783157965.125156817] [map_io]: resolution: 0.05
+[map_server-1] [INFO] [1783157965.125226317] [map_io]: origin[0]: -4.58
+[map_server-1] [INFO] [1783157965.125257526] [map_io]: origin[1]: -3.77
+[map_server-1] [INFO] [1783157965.125286359] [map_io]: origin[2]: 0
+[map_server-1] [INFO] [1783157965.125315734] [map_io]: free_thresh: 0.25
+[map_server-1] [INFO] [1783157965.125343484] [map_io]: occupied_thresh: 0.65
+[map_server-1] [INFO] [1783157965.125376651] [map_io]: mode: trinary
+[map_server-1] [INFO] [1783157965.125407026] [map_io]: negate: 0
+[map_server-1] [INFO] [1783157965.126135861] [map_io]: Loading image_file: /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm
+[controller_server-4] [INFO] [1783157965.124030065] [local_costmap.local_costmap]: 
+[controller_server-4] 	local_costmap lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1783157965.142951688] [local_costmap.local_costmap]: Creating Costmap
+[map_server-1] [INFO] [1783157965.267186078] [map_io]: Read map /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.pgm: 206 X 148 map @ 0.05 m/cell
+[lifecycle_manager-3] [INFO] [1783157965.455795271] [lifecycle_manager_localization]: [34m[1mConfiguring amcl[0m[0m
+[amcl-2] [INFO] [1783157965.958753759] [amcl]: Configuring
+[amcl-2] [INFO] [1783157965.959141051] [amcl]: initTransforms
+[lifecycle_manager-11] [INFO] [1783157966.042077561] [lifecycle_manager_navigation]: Waiting for service controller_server/get_state...
+[amcl-2] [INFO] [1783157966.219675189] [amcl]: initPubSub
+[planner_server-6] [INFO] [1783157966.220616483] [global_costmap.global_costmap]: 
+[planner_server-6] 	global_costmap lifecycle node launched. 
+[planner_server-6] 	Waiting on external lifecycle transitions to activate
+[planner_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-6] [INFO] [1783157966.225461701] [global_costmap.global_costmap]: Creating Costmap
+[amcl-2] [INFO] [1783157966.386055585] [amcl]: Subscribed to map topic.
+[lifecycle_manager-3] [INFO] [1783157966.499464201] [lifecycle_manager_localization]: [34m[1mActivating map_server[0m[0m
+[map_server-1] [INFO] [1783157966.502629000] [map_server]: Activating
+[map_server-1] [INFO] [1783157966.504130170] [map_server]: Creating bond (map_server) to lifecycle manager.
+[amcl-2] [INFO] [1783157966.505343422] [amcl]: Received a 206 X 148 map @ 0.050 m/pix
+[lifecycle_manager-3] [INFO] [1783157966.657661496] [lifecycle_manager_localization]: Server map_server connected with bond.
+[lifecycle_manager-3] [INFO] [1783157966.657833288] [lifecycle_manager_localization]: [34m[1mActivating amcl[0m[0m
+[amcl-2] [INFO] [1783157966.658798665] [amcl]: Activating
+[amcl-2] [INFO] [1783157966.658976832] [amcl]: Creating bond (amcl) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783157966.682586091] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-11] [INFO] [1783157966.682781800] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[amcl-2] [INFO] [1783157966.757148708] [amcl]: createLaserObject
+[lifecycle_manager-3] [INFO] [1783157966.831192407] [lifecycle_manager_localization]: Server amcl connected with bond.
+[lifecycle_manager-3] [INFO] [1783157966.831352658] [lifecycle_manager_localization]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-3] [INFO] [1783157966.831410366] [lifecycle_manager_localization]: [34m[1mCreating bond timer...[0m[0m
+[controller_server-4] [INFO] [1783157966.999082931] [controller_server]: Configuring controller interface
+[controller_server-4] [INFO] [1783157966.999827891] [controller_server]: getting goal checker plugins..
+[controller_server-4] [INFO] [1783157967.000359601] [controller_server]: Controller frequency set to 10.0000Hz
+[controller_server-4] [INFO] [1783157967.000623643] [local_costmap.local_costmap]: Configuring
+[controller_server-4] [INFO] [1783157967.053287422] [local_costmap.local_costmap]: Using plugin "voxel_layer"
+[controller_server-4] [INFO] [1783157967.075740094] [local_costmap.local_costmap]: Subscribed to Topics: scan
+[controller_server-4] [INFO] [1783157967.156579516] [local_costmap.local_costmap]: Initialized plugin "voxel_layer"
+[controller_server-4] [INFO] [1783157967.156720058] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-4] [INFO] [1783157967.163900074] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-4] [INFO] [1783157967.255086851] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-4] [INFO] [1783157967.261348947] [controller_server]: Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-4] [INFO] [1783157967.266047541] [controller_server]: Controller Server has general_goal_checker  goal checkers available.
+[controller_server-4] [INFO] [1783157967.268715463] [controller_server]: Created controller : FollowPath of type nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-4] [INFO] [1783157967.324800041] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-11] [INFO] [1783157967.408515219] [lifecycle_manager_navigation]: [34m[1mConfiguring smoother_server[0m[0m
+[smoother_server-5] [INFO] [1783157967.410166014] [smoother_server]: Configuring smoother server
+[smoother_server-5] [INFO] [1783157967.506596844] [smoother_server]: Created smoother : simple_smoother of type nav2_smoother::SimpleSmoother
+[smoother_server-5] [INFO] [1783157967.523979590] [smoother_server]: Smoother Server has simple_smoother  smoothers available.
+[lifecycle_manager-11] [INFO] [1783157967.608489853] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-6] [INFO] [1783157967.609981856] [planner_server]: Configuring
+[planner_server-6] [INFO] [1783157967.611606818] [global_costmap.global_costmap]: Configuring
+[planner_server-6] [INFO] [1783157967.680782798] [global_costmap.global_costmap]: Using plugin "static_layer"
+[planner_server-6] [INFO] [1783157967.706374019] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+[planner_server-6] [INFO] [1783157967.719252463] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+[planner_server-6] [INFO] [1783157967.719397922] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-6] [INFO] [1783157967.728579483] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-6] [INFO] [1783157967.837790007] [global_costmap.global_costmap]: StaticLayer: Resizing costmap to 206 X 148 at 0.050000 m/pix
+[planner_server-6] [INFO] [1783157967.839092218] [planner_server]: Created global planner plugin GridBased of type nav2_navfn_planner/NavfnPlanner
+[planner_server-6] [INFO] [1783157967.839264677] [planner_server]: Configuring plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1783157967.850869827] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-11] [INFO] [1783157967.972565669] [lifecycle_manager_navigation]: [34m[1mConfiguring behavior_server[0m[0m
+[behavior_server-7] [INFO] [1783157967.974976424] [behavior_server]: Configuring
+[amcl-2] [WARN] [1783157968.051368211] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[behavior_server-7] [INFO] [1783157968.076396223] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors/Spin
+[behavior_server-7] [INFO] [1783157968.080625940] [behavior_server]: Configuring spin
+[behavior_server-7] [INFO] [1783157968.172094260] [behavior_server]: Creating behavior plugin backup of type nav2_behaviors/BackUp
+[behavior_server-7] [INFO] [1783157968.177950314] [behavior_server]: Configuring backup
+[behavior_server-7] [INFO] [1783157968.274372852] [behavior_server]: Creating behavior plugin drive_on_heading of type nav2_behaviors/DriveOnHeading
+[behavior_server-7] [INFO] [1783157968.279616738] [behavior_server]: Configuring drive_on_heading
+[behavior_server-7] [INFO] [1783157968.364946087] [behavior_server]: Creating behavior plugin assisted_teleop of type nav2_behaviors/AssistedTeleop
+[behavior_server-7] [INFO] [1783157968.375236317] [behavior_server]: Configuring assisted_teleop
+[behavior_server-7] [INFO] [1783157968.471736814] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors/Wait
+[behavior_server-7] [INFO] [1783157968.476573574] [behavior_server]: Configuring wait
+[lifecycle_manager-11] [INFO] [1783157968.550751440] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-8] [INFO] [1783157968.552678819] [bt_navigator]: Configuring
+[lifecycle_manager-11] [INFO] [1783157969.422724585] [lifecycle_manager_navigation]: [34m[1mConfiguring waypoint_follower[0m[0m
+[waypoint_follower-9] [INFO] [1783157969.424700465] [waypoint_follower]: Configuring
+[waypoint_follower-9] [INFO] [1783157969.646083977] [waypoint_follower]: Created waypoint_task_executor : wait_at_waypoint of type nav2_waypoint_follower::WaitAtWaypoint
+[lifecycle_manager-11] [INFO] [1783157969.659032546] [lifecycle_manager_navigation]: [34m[1mConfiguring velocity_smoother[0m[0m
+[velocity_smoother-10] [INFO] [1783157969.664192849] [velocity_smoother]: Configuring velocity smoother
+[lifecycle_manager-11] [INFO] [1783157969.716599085] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-4] [INFO] [1783157969.718642298] [controller_server]: Activating
+[controller_server-4] [INFO] [1783157969.718871256] [local_costmap.local_costmap]: Activating
+[controller_server-4] [INFO] [1783157969.718945798] [local_costmap.local_costmap]: Checking transform
+[controller_server-4] [INFO] [1783157969.719334966] [local_costmap.local_costmap]: start
+[controller_server-4] [INFO] [1783157969.931635334] [controller_server]: Activating controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-4] [INFO] [1783157969.931848459] [controller_server]: Creating bond (controller_server) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783157970.059422105] [lifecycle_manager_navigation]: Server controller_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783157970.059630022] [lifecycle_manager_navigation]: [34m[1mActivating smoother_server[0m[0m
+[smoother_server-5] [INFO] [1783157970.062667654] [smoother_server]: Activating
+[smoother_server-5] [INFO] [1783157970.062870862] [smoother_server]: Creating bond (smoother_server) to lifecycle manager.
+[amcl-2] [WARN] [1783157970.150340632] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[lifecycle_manager-11] [INFO] [1783157970.190728759] [lifecycle_manager_navigation]: Server smoother_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783157970.190890634] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-6] [INFO] [1783157970.192392263] [planner_server]: Activating
+[planner_server-6] [INFO] [1783157970.192597471] [global_costmap.global_costmap]: Activating
+[planner_server-6] [INFO] [1783157970.192665180] [global_costmap.global_costmap]: Checking transform
+[planner_server-6] [INFO] [1783157970.192791222] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157970.692829409] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157971.192828638] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157971.692830741] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157972.192846594] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157972.252118637] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157972.692821322] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157973.192838758] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157973.692825319] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157974.192822421] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157974.343148532] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157974.692989815] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157975.193029917] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157975.693467936] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157976.193185829] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157976.346150653] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157976.692822721] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157977.192821946] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157977.692823755] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157978.192819439] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157978.384382886] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157978.692838497] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157979.192828097] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157979.692852864] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157980.192817088] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [INFO] [1783157980.570418970] [local_costmap.local_costmap]: Message Filter dropping message: frame 'laser' at time 1783157980.133 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[amcl-2] [WARN] [1783157980.653776729] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157980.692885395] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157980.794174818] [amcl.rclcpp]: failed to send response to /amcl/get_state (timeout): client will not receive response, at ./src/rmw_response.cpp:154, at ./src/rcl/service.c:314
+[planner_server-6] [INFO] [1783157981.192819952] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157981.692815634] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157982.192821566] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157982.692821831] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157982.737494425] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157983.192815887] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157983.692814277] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157984.192813166] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157984.692844263] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157984.834115769] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157985.192817652] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157985.692822873] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157986.192841970] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157986.692811941] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157986.929694857] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157987.192816829] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157987.692843799] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157988.192819562] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157988.692827032] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157988.931321159] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157989.192822960] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157989.692843430] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157990.192838275] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157990.692843036] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157991.033536461] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157991.192825130] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157991.692840640] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157992.192823484] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157992.692826285] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157993.125869113] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157993.192819962] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157993.692831805] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157994.195497820] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157994.692837615] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [WARN] [1783157995.138530593] [amcl]: AMCL cannot publish a pose or update the transform. Please set the initial pose...
+[planner_server-6] [INFO] [1783157995.192823290] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157995.692817716] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157996.192823516] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[planner_server-6] [INFO] [1783157996.692850566] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[amcl-2] [INFO] [1783157996.820162083] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783157996.820654126] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783157996.820369 but the latest data is at time 1783157996.810834, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783157996.820794959] [amcl]: Setting pose (1783157996.820790): -1.813 2.727 0.186
+[planner_server-6] [INFO] [1783157997.193007157] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1783157997.172635 but the earliest data is at time 1783157998.717165, when looking up transform from frame [base_link] to frame [map]
+[planner_server-6] [INFO] [1783157997.692896665] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1783157997.671957 but the earliest data is at time 1783157998.717165, when looking up transform from frame [base_link] to frame [map]
+[planner_server-6] [INFO] [1783157998.192882922] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1783157998.172028 but the earliest data is at time 1783157998.717165, when looking up transform from frame [base_link] to frame [map]
+[planner_server-6] [INFO] [1783157998.692888221] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1783157998.671958 but the earliest data is at time 1783157998.717165, when looking up transform from frame [base_link] to frame [map]
+[planner_server-6] [INFO] [1783157999.193060603] [global_costmap.global_costmap]: start
+[amcl-2] [INFO] [1783158000.008391854] [amcl]: initialPoseReceived
+[amcl-2] [WARN] [1783158000.008717230] [amcl]: Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1783158000.008563 but the latest data is at time 1783157999.972310, when looking up transform from frame [base_link] to frame [odom])
+[amcl-2] [INFO] [1783158000.008819522] [amcl]: Setting pose (1783158000.008815): -1.813 2.727 0.186
+[planner_server-6] [INFO] [1783158000.243424097] [planner_server]: Activating plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1783158000.259709298] [planner_server]: Creating bond (planner_server) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783158000.384926893] [lifecycle_manager_navigation]: Server planner_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783158000.385104810] [lifecycle_manager_navigation]: [34m[1mActivating behavior_server[0m[0m
+[behavior_server-7] [INFO] [1783158000.386489188] [behavior_server]: Activating
+[behavior_server-7] [INFO] [1783158000.386619105] [behavior_server]: Activating spin
+[behavior_server-7] [INFO] [1783158000.386677772] [behavior_server]: Activating backup
+[behavior_server-7] [INFO] [1783158000.386722730] [behavior_server]: Activating drive_on_heading
+[behavior_server-7] [INFO] [1783158000.386766522] [behavior_server]: Activating assisted_teleop
+[behavior_server-7] [INFO] [1783158000.386809439] [behavior_server]: Activating wait
+[behavior_server-7] [INFO] [1783158000.386868314] [behavior_server]: Creating bond (behavior_server) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783158000.515282333] [lifecycle_manager_navigation]: Server behavior_server connected with bond.
+[lifecycle_manager-11] [INFO] [1783158000.515448209] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-8] [INFO] [1783158000.517462379] [bt_navigator]: Activating
+[bt_navigator-8] [INFO] [1783158001.069369703] [bt_navigator]: Creating bond (bt_navigator) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783158001.197683430] [lifecycle_manager_navigation]: Server bt_navigator connected with bond.
+[lifecycle_manager-11] [INFO] [1783158001.197876597] [lifecycle_manager_navigation]: [34m[1mActivating waypoint_follower[0m[0m
+[waypoint_follower-9] [INFO] [1783158001.199398475] [waypoint_follower]: Activating
+[waypoint_follower-9] [INFO] [1783158001.199621726] [waypoint_follower]: Creating bond (waypoint_follower) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783158001.334031132] [lifecycle_manager_navigation]: Server waypoint_follower connected with bond.
+[lifecycle_manager-11] [INFO] [1783158001.334221924] [lifecycle_manager_navigation]: [34m[1mActivating velocity_smoother[0m[0m
+[velocity_smoother-10] [INFO] [1783158001.336182637] [velocity_smoother]: Activating
+[velocity_smoother-10] [INFO] [1783158001.336464179] [velocity_smoother]: Creating bond (velocity_smoother) to lifecycle manager.
+[lifecycle_manager-11] [INFO] [1783158001.479681646] [lifecycle_manager_navigation]: Server velocity_smoother connected with bond.
+[lifecycle_manager-11] [INFO] [1783158001.479829938] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-11] [INFO] [1783158001.479886438] [lifecycle_manager_navigation]: [34m[1mCreating bond timer...[0m[0m
+[waypoint_follower-9] [INFO] [1783158621.882521034] [rclcpp]: signal_handler(signum=2)
+[smoother_server-5] [INFO] [1783158621.882547867] [rclcpp]: signal_handler(signum=2)
+[smoother_server-5] [INFO] [1783158621.882879826] [smoother_server]: Running Nav2 LifecycleNode rcl preshutdown (smoother_server)
+[planner_server-6] [INFO] [1783158621.882645367] [rclcpp]: signal_handler(signum=2)
+[planner_server-6] [INFO] [1783158621.883275327] [planner_server]: Running Nav2 LifecycleNode rcl preshutdown (planner_server)
+[planner_server-6] [INFO] [1783158621.883503244] [planner_server]: Deactivating
+[planner_server-6] [INFO] [1783158621.883620036] [global_costmap.global_costmap]: Deactivating
+[lifecycle_manager-11] [INFO] [1783158621.882547451] [rclcpp]: signal_handler(signum=2)
+[amcl-2] [INFO] [1783158621.883185285] [rclcpp]: signal_handler(signum=2)
+[amcl-2] [INFO] [1783158621.884141411] [amcl]: Running Nav2 LifecycleNode rcl preshutdown (amcl)
+[amcl-2] [INFO] [1783158621.884433203] [amcl]: Deactivating
+[amcl-2] [INFO] [1783158621.884521329] [amcl]: Destroying bond (amcl) to lifecycle manager.
+[behavior_server-7] [INFO] [1783158621.883331077] [rclcpp]: signal_handler(signum=2)
+[controller_server-4] [INFO] [1783158621.883972328] [rclcpp]: signal_handler(signum=2)
+[controller_server-4] [INFO] [1783158621.885237121] [controller_server]: Running Nav2 LifecycleNode rcl preshutdown (controller_server)
+[controller_server-4] [INFO] [1783158621.885512497] [controller_server]: Deactivating
+[controller_server-4] [INFO] [1783158621.885594705] [controller_server]: Deactivating controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-4] [INFO] [1783158621.885708747] [local_costmap.local_costmap]: Deactivating
+[lifecycle_manager-3] [INFO] [1783158621.884118453] [rclcpp]: signal_handler(signum=2)
+[lifecycle_manager-3] [INFO] [1783158621.886050414] [lifecycle_manager_localization]: Running Nav2 LifecycleManager rcl preshutdown (lifecycle_manager_localization)
+[lifecycle_manager-3] [INFO] [1783158621.886193165] [lifecycle_manager_localization]: [34m[1mTerminating bond timer...[0m[0m
+[bt_navigator-8] [INFO] [1783158621.887680125] [rclcpp]: signal_handler(signum=2)
+[map_server-1] [INFO] [1783158621.889234169] [rclcpp]: signal_handler(signum=2)
+[map_server-1] [INFO] [1783158621.889986004] [map_server]: Running Nav2 LifecycleNode rcl preshutdown (map_server)
+[map_server-1] [INFO] [1783158621.890288171] [map_server]: Deactivating
+[map_server-1] [INFO] [1783158621.890404838] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[velocity_smoother-10] [INFO] [1783158621.890893505] [rclcpp]: signal_handler(signum=2)
+[velocity_smoother-10] [INFO] [1783158621.891498464] [velocity_smoother]: Running Nav2 LifecycleNode rcl preshutdown (velocity_smoother)
+[velocity_smoother-10] [INFO] [1783158621.891825673] [velocity_smoother]: Deactivating
+[velocity_smoother-10] [INFO] [1783158621.892364216] [velocity_smoother]: Destroying bond (velocity_smoother) to lifecycle manager.
+[behavior_server-7] [INFO] [1783158621.891150506] [behavior_server]: Running Nav2 LifecycleNode rcl preshutdown (behavior_server)
+[smoother_server-5] [INFO] [1783158621.893812593] [smoother_server]: Deactivating
+[smoother_server-5] [INFO] [1783158621.893966510] [smoother_server]: Destroying bond (smoother_server) to lifecycle manager.
+[behavior_server-7] [INFO] [1783158621.895262429] [behavior_server]: Deactivating
+[behavior_server-7] [INFO] [1783158621.895460637] [behavior_server]: Destroying bond (behavior_server) to lifecycle manager.
+[bt_navigator-8] [INFO] [1783158621.897691182] [bt_navigator]: Running Nav2 LifecycleNode rcl preshutdown (bt_navigator)
+[bt_navigator-8] [INFO] [1783158621.898014724] [bt_navigator]: Deactivating
+[bt_navigator-8] [INFO] [1783158621.898127933] [bt_navigator]: Destroying bond (bt_navigator) to lifecycle manager.
+[waypoint_follower-9] [INFO] [1783158621.901755189] [waypoint_follower]: Running Nav2 LifecycleNode rcl preshutdown (waypoint_follower)
+[waypoint_follower-9] [INFO] [1783158621.902041272] [waypoint_follower]: Deactivating
+[waypoint_follower-9] [INFO] [1783158621.902147731] [waypoint_follower]: Destroying bond (waypoint_follower) to lifecycle manager.
+[map_server-1] [INFO] [1783158621.905980862] [map_server]: Cleaning up
+[map_server-1] [INFO] [1783158621.906218904] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[amcl-2] [INFO] [1783158621.920931302] [amcl]: Cleaning up
+[lifecycle_manager-11] [INFO] [1783158621.921990012] [lifecycle_manager_navigation]: Running Nav2 LifecycleManager rcl preshutdown (lifecycle_manager_navigation)
+[lifecycle_manager-11] [INFO] [1783158621.922185262] [lifecycle_manager_navigation]: [34m[1mTerminating bond timer...[0m[0m
+[velocity_smoother-10] [INFO] [1783158621.994378748] [velocity_smoother]: Cleaning up
+[velocity_smoother-10] [INFO] [1783158621.994581749] [velocity_smoother]: Destroying bond (velocity_smoother) to lifecycle manager.
+[smoother_server-5] [INFO] [1783158621.995255041] [smoother_server]: Cleaning up
+[behavior_server-7] [INFO] [1783158621.996507460] [behavior_server]: Cleaning up
+[waypoint_follower-9] [INFO] [1783158622.011066191] [waypoint_follower]: Cleaning up
+[bt_navigator-8] [INFO] [1783158622.038559108] [bt_navigator]: Cleaning up
+[controller_server-4] [INFO] [1783158622.071950993] [controller_server]: Destroying bond (controller_server) to lifecycle manager.
+[map_server-1] [INFO] [1783158622.167152474] [map_server]: Destroying
+[controller_server-4] [INFO] [1783158622.177953824] [controller_server]: Cleaning up
+[controller_server-4] [INFO] [1783158622.178092199] [controller_server]: Cleaning up controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-4] [INFO] [1783158622.178286783] [local_costmap.local_costmap]: Cleaning up
+[velocity_smoother-10] [INFO] [1783158622.203266321] [velocity_smoother]: Destroying
+[planner_server-6] [INFO] [1783158622.213380045] [planner_server]: Deactivating plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1783158622.213591837] [planner_server]: Destroying bond (planner_server) to lifecycle manager.
+[waypoint_follower-9] [INFO] [1783158622.239822419] [waypoint_follower]: Destroying bond (waypoint_follower) to lifecycle manager.
+[planner_server-6] [INFO] [1783158622.314509743] [planner_server]: Cleaning up
+[smoother_server-5] [INFO] [1783158622.318119915] [smoother_server]: Destroying bond (smoother_server) to lifecycle manager.
+[waypoint_follower-9] [INFO] [1783158622.318960250] [waypoint_follower]: Destroying
+[behavior_server-7] [INFO] [1783158622.341896577] [behavior_server]: Destroying bond (behavior_server) to lifecycle manager.
+[amcl-2] [INFO] [1783158622.396169661] [amcl]: Destroying bond (amcl) to lifecycle manager.
+[smoother_server-5] [INFO] [1783158622.454495543] [smoother_server]: Destroying
+[amcl-2] [INFO] [1783158622.539060757] [amcl]: Destroying
+[lifecycle_manager-3] [INFO] [1783158622.707702684] [lifecycle_manager_localization]: Destroying lifecycle_manager_localization
+[planner_server-6] [INFO] [1783158622.790799063] [global_costmap.global_costmap]: Cleaning up
+[planner_server-6] [INFO] [1783158622.958291613] [planner_server]: Cleaning up plugin GridBased of type NavfnPlanner
+[controller_server-4] [INFO] [1783158622.965725541] [controller_server]: Destroying bond (controller_server) to lifecycle manager.
+[planner_server-6] [INFO] [1783158622.968543629] [planner_server]: Destroying plugin GridBased of type NavfnPlanner
+[controller_server-4] [INFO] [1783158623.063492401] [local_costmap.local_costmap]: Destroying
+[behavior_server-7] [INFO] [1783158623.067148656] [behavior_server]: Destroying
+[lifecycle_manager-11] [INFO] [1783158623.277030314] [lifecycle_manager_navigation]: Destroying lifecycle_manager_navigation
+[INFO] [smoother_server-5]: process has finished cleanly [pid 176814]
+[INFO] [velocity_smoother-10]: process has finished cleanly [pid 176826]
+[INFO] [map_server-1]: process has finished cleanly [pid 176806]
+[INFO] [waypoint_follower-9]: process has finished cleanly [pid 176822]
+[planner_server-6] [INFO] [1783158623.375393216] [planner_server]: Destroying bond (planner_server) to lifecycle manager.
+[planner_server-6] [INFO] [1783158623.439120814] [global_costmap.global_costmap]: Destroying
+[INFO] [amcl-2]: process has finished cleanly [pid 176808]
+[INFO] [lifecycle_manager-3]: process has finished cleanly [pid 176810]
+[controller_server-4] [INFO] [1783158623.622045638] [controller_server]: Destroying
+[planner_server-6] [INFO] [1783158623.835291301] [planner_server]: Destroying
+[INFO] [behavior_server-7]: process has finished cleanly [pid 176818]
+[INFO] [lifecycle_manager-11]: process has finished cleanly [pid 176839]
+[INFO] [controller_server-4]: process has finished cleanly [pid 176812]
+[bt_navigator-8] [INFO] [1783158624.181972295] [bt_navigator]: Completed Cleaning up
+[bt_navigator-8] [INFO] [1783158624.182273337] [bt_navigator]: Destroying bond (bt_navigator) to lifecycle manager.
+[INFO] [planner_server-6]: process has finished cleanly [pid 176816]
+[bt_navigator-8] [INFO] [1783158624.269398180] [bt_navigator]: Destroying
+[INFO] [bt_navigator-8]: process has finished cleanly [pid 176820]

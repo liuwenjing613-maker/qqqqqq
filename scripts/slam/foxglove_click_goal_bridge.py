@@ -45,7 +45,11 @@ from visualization_msgs.msg import Marker
 _SCRIPT_DIR = __import__('pathlib').Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in __import__('sys').path:
     __import__('sys').path.insert(0, str(_SCRIPT_DIR))
-from map_goal_validate import is_known_free, path_stays_in_known_free
+from map_goal_validate import (
+    DEFAULT_ROBOT_RADIUS,
+    is_footprint_known_free,
+    path_stays_in_known_free,
+)
 
 GOAL_MARKER_NS = 'foxglove_click_goal_endpoint'
 PATH_MARKER_NS = 'foxglove_click_goal'
@@ -118,6 +122,7 @@ class FoxgloveClickGoalBridge(Node):
         self.auto_navigate = args.auto_navigate
         self.compute_path_timeout_sec = args.compute_path_timeout_sec
         self.reject_unknown_goals = args.reject_unknown_goals
+        self.robot_radius = float(args.robot_radius)
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -178,11 +183,13 @@ class FoxgloveClickGoalBridge(Node):
 
         self._nav_goal_handle = None
         self._is_navigating = False
+        self._pending_nav_goal: Optional[PoseStamped] = None
         self._goal_seq = 0
         self._last_feedback_log_sec = 0.0
         self._click_ready_announced = False
 
         self.create_timer(1.0, self._check_click_ready)
+        self.create_timer(0.4, self._check_nav_map_safety)
 
         self.get_logger().info('Foxglove click goal bridge started.')
         self.get_logger().info('Listening point click topic:')
@@ -476,15 +483,55 @@ class FoxgloveClickGoalBridge(Node):
         if self._map_grid is None:
             self.get_logger().warn('Map not received yet; cannot validate goal cell. Rejecting goal.')
             return False
-        ok, reason = is_known_free(self._map_grid, x, y)
+        ok, reason = is_footprint_known_free(
+            self._map_grid, x, y, robot_radius=self.robot_radius
+        )
         if not ok:
             self.get_logger().error(
                 f'Reject goal ({x:.3f}, {y:.3f}): {reason}. '
-                'Click only on scanned white (free) area, not gray unknown.'
+                'Click only on scanned white (free) area; robot footprint must not touch gray unknown.'
             )
             return False
-        self.get_logger().info(f'Goal map cell OK: ({x:.3f}, {y:.3f}) -> {reason}')
+        self.get_logger().info(
+            f'Goal footprint OK: ({x:.3f}, {y:.3f}) -> {reason} (radius={self.robot_radius:.2f}m)'
+        )
         return True
+
+    def _validate_robot_pose_on_map(self, x: float, y: float) -> bool:
+        if not self.reject_unknown_goals or self._map_grid is None:
+            return True
+        ok, reason = is_footprint_known_free(
+            self._map_grid, x, y, robot_radius=self.robot_radius
+        )
+        if not ok:
+            self.get_logger().error(
+                f'Reject navigation: robot at ({x:.3f}, {y:.3f}) is not on known-free map ({reason}). '
+                'Use /initialpose in Foxglove to align on white area first.'
+            )
+            return False
+        return True
+
+    def _check_nav_map_safety(self) -> None:
+        if not self._is_navigating or not self.reject_unknown_goals or self._map_grid is None:
+            return
+        pose_xy = self.try_get_current_pose_xy()
+        if pose_xy is None:
+            return
+        ok, reason = is_footprint_known_free(
+            self._map_grid, pose_xy[0], pose_xy[1], robot_radius=self.robot_radius
+        )
+        if ok:
+            return
+        self.get_logger().error(
+            f'Robot left known-free map ({reason}); canceling navigation.'
+        )
+        if self._nav_goal_handle is not None:
+            try:
+                self._nav_goal_handle.cancel_goal_async()
+            except Exception as exc:
+                self.get_logger().warn(f'Could not cancel nav goal after map safety trip: {exc}')
+        self._is_navigating = False
+        self._nav_goal_handle = None
 
     def _validate_frame(self, frame_id: str) -> bool:
         if self.accept_any_frame or frame_id == self.goal_frame:
@@ -608,20 +655,22 @@ class FoxgloveClickGoalBridge(Node):
 
         start_xy = self.try_get_current_pose_xy()
         if start_xy is not None:
+            if not self._validate_robot_pose_on_map(start_xy[0], start_xy[1]):
+                self._publish_goal_endpoint_marker(x, y, self._pending_goal_marker_seq, status='reject')
+                return
             self._publish_start_marker(start_xy[0], start_xy[1], seq)
             self._append_trajectory_point(start_xy[0], start_xy[1])
 
         self._publish_goal_endpoint_marker(x, y, seq, status='ok')
         self.goal_pub.publish(goal)
+        self._pending_nav_goal = goal
 
         x = goal.pose.position.x
         y = goal.pose.position.y
         self.get_logger().info(f'[{seq}] Accepted goal: frame={goal.header.frame_id}, x={x:.3f}, y={y:.3f}')
 
         self._request_path(goal, seq)
-        if self.auto_navigate:
-            self._send_navigation_goal(goal, seq)
-        else:
+        if not self.auto_navigate:
             self.get_logger().warn(f'[{seq}] --no-auto-navigate is set, so only path planning was requested.')
 
     def _request_path(self, goal: PoseStamped, seq: int) -> None:
@@ -664,24 +713,45 @@ class FoxgloveClickGoalBridge(Node):
             self.get_logger().error(f'[{seq}] ComputePathToPose result failed: {exc}')
             return
 
+        if seq != self._goal_seq:
+            self.get_logger().info(f'[{seq}] Ignoring stale planned path result (current goal={self._goal_seq}).')
+            return
+
         if len(path.poses) == 0:
             self.get_logger().warn(
                 f'[{seq}] Planner returned an empty path. Goal may be unreachable or localization is not ready.'
             )
+            if self._pending_nav_goal is not None:
+                gx = self._pending_nav_goal.pose.position.x
+                gy = self._pending_nav_goal.pose.position.y
+                self._publish_goal_endpoint_marker(gx, gy, seq, status='reject')
             return
 
         if self._map_grid is not None and self.reject_unknown_goals:
-            ok, reason = path_stays_in_known_free(self._map_grid, path.poses)
+            ok, reason = path_stays_in_known_free(
+                self._map_grid,
+                path.poses,
+                robot_radius=self.robot_radius,
+            )
             if not ok:
                 self.get_logger().error(
                     f'[{seq}] Reject planned path: crosses non-free area ({reason}). '
-                    'Nav2 allow_unknown=false should prevent this; check costmap.'
+                    'Navigation canceled; click a goal fully inside white scanned area.'
                 )
+                if self._pending_nav_goal is not None:
+                    gx = self._pending_nav_goal.pose.position.x
+                    gy = self._pending_nav_goal.pose.position.y
+                    self._publish_goal_endpoint_marker(gx, gy, seq, status='reject')
+                self._pending_nav_goal = None
                 return
 
         self.path_pub.publish(path)
         self.marker_pub.publish(self._make_path_marker(path, seq))
         self.get_logger().info(f'[{seq}] Planned path published: {len(path.poses)} poses -> /foxglove_click_planned_path')
+
+        if self.auto_navigate and self._pending_nav_goal is not None:
+            self._send_navigation_goal(self._pending_nav_goal, seq)
+            self._pending_nav_goal = None
 
     def _make_path_marker(self, path: Path, marker_id: int) -> Marker:
         marker = Marker()
@@ -811,6 +881,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--reject-unknown-goals', dest='reject_unknown_goals', action='store_true')
     parser.add_argument('--allow-unknown-goals', dest='reject_unknown_goals', action='store_false')
     parser.set_defaults(reject_unknown_goals=True)
+    parser.add_argument(
+        '--robot-radius',
+        type=float,
+        default=DEFAULT_ROBOT_RADIUS,
+        help='Footprint radius (m) for white-area validation; match nav2_params robot_radius.',
+    )
     args = parser.parse_args()
     if args.goal_topic:
         args.goal_pose_topic = args.goal_topic

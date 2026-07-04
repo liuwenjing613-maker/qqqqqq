@@ -1,0 +1,35 @@
+[INFO] [1783158807.910957554] [foxglove_click_goal_bridge]: Foxglove click goal bridge started.
+[INFO] [1783158807.931581570] [foxglove_click_goal_bridge]: Listening point click topic:
+[INFO] [1783158807.934983239] [foxglove_click_goal_bridge]:   /foxglove_goal_point
+[INFO] [1783158807.938220784] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PointStamped
+[INFO] [1783158807.941711411] [foxglove_click_goal_bridge]: Listening pose click topic:
+[INFO] [1783158807.944929539] [foxglove_click_goal_bridge]:   /foxglove_goal_pose
+[INFO] [1783158807.948327500] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PoseStamped
+[INFO] [1783158807.951951961] [foxglove_click_goal_bridge]: Recommended Foxglove tool:
+[INFO] [1783158807.955168963] [foxglove_click_goal_bridge]:   Publish -> 2D point -> /foxglove_goal_point
+[INFO] [1783158807.958453841] [foxglove_click_goal_bridge]: Visual path topic: /foxglove_click_planned_path
+[INFO] [1783158807.962608677] [foxglove_click_goal_bridge]: Visual trajectory: /foxglove_click_trajectory_dots (red dots)
+[INFO] [1783158807.966770097] [foxglove_click_goal_bridge]: Visual start marker: /foxglove_click_start_marker
+[INFO] [1783158807.970404267] [foxglove_click_goal_bridge]: Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label
+[INFO] [1783158809.473700338] [foxglove_click_goal_bridge]: >>> CLICK READY: Foxglove 可以单击地图白色区域发送导航目标。 Topic=/foxglove_goal_point, frame=map。 若 scan 与地图错位，请先用 /initialpose 校正。导航进行中会忽略新点击。
+[INFO] [1783158845.904006073] [foxglove_click_goal_bridge]: Goal marker published at (0.545, 0.259) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783158845.909865202] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=map, x=0.545, y=0.259, goal_yaw=0.186
+[INFO] [1783158845.913660788] [foxglove_click_goal_bridge]: Goal map cell OK: (0.545, 0.259) -> free(val=0)
+[INFO] [1783158845.938135473] [foxglove_click_goal_bridge]: [1] Start marker at (-1.799, 2.636) -> /foxglove_click_start_marker
+[INFO] [1783158845.947109522] [foxglove_click_goal_bridge]: Goal marker published at (0.545, 0.259) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783158845.950560358] [foxglove_click_goal_bridge]: [1] Accepted goal: frame=map, x=0.545, y=0.259
+[INFO] [1783158845.971690248] [foxglove_click_goal_bridge]: [1] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783158845.981052422] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.000 m, recoveries=0
+[INFO] [1783158846.057912688] [foxglove_click_goal_bridge]: [1] Planned path published: 149 poses -> /foxglove_click_planned_path
+[INFO] [1783158847.991247253] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.774 m, recoveries=0
+[INFO] [1783158849.992314491] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.553 m, recoveries=0
+[INFO] [1783158852.013095992] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.428 m, recoveries=0
+[INFO] [1783158854.014187017] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.403 m, recoveries=0
+[INFO] [1783158856.036750097] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.353 m, recoveries=0
+[INFO] [1783158858.052446794] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.345 m, recoveries=0
+[WARN] [1783158858.599393281] [foxglove_click_goal_bridge]: Navigation is running; ignore new clicked point.
+[INFO] [1783158860.052909395] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.303 m, recoveries=0
+[INFO] [1783158862.055227828] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.345 m, recoveries=0
+[INFO] [1783158864.071346685] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.345 m, recoveries=0
+[WARN] [1783158864.288144261] [foxglove_click_goal_bridge]: Navigation is running; ignore new clicked point.
+[INFO] [1783158866.072213737] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.345 m, recoveries=0

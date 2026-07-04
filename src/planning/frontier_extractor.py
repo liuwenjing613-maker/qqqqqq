@@ -71,6 +71,7 @@ def extract_frontiers(
     cfg: Dict[str, Any],
     scan_ranges: Optional[List[float]] = None,
     scan_angles: Optional[List[float]] = None,
+    robot_yaw: Optional[float] = None,
 ) -> List[FrontierGoal]:
     if grid is None or not grid.data:
         return []
@@ -159,7 +160,7 @@ def extract_frontiers(
         unknown_gain = _unknown_gain(
             grid, gmx, gmy, gain_cells, unknown_value, free_threshold, occupied_threshold
         )
-        reach = _reachability_scan(goal_xy, robot_xy, scan_ranges, scan_angles)
+        reach = _reachability_scan(goal_xy, robot_xy, scan_ranges, scan_angles, robot_yaw)
         yaw = math.atan2(fwy - goal_xy[1], fwx - goal_xy[0])
         goals.append(
             FrontierGoal(
@@ -287,10 +288,16 @@ def _reachability_scan(
     robot_xy: Tuple[float, float],
     scan_ranges: Optional[List[float]],
     scan_angles: Optional[List[float]],
+    robot_yaw: Optional[float] = None,
 ) -> float:
     if not scan_ranges or not scan_angles:
         return 0.7
-    bearing = math.atan2(goal_xy[1] - robot_xy[1], goal_xy[0] - robot_xy[0])
+    bearing_world = math.atan2(goal_xy[1] - robot_xy[1], goal_xy[0] - robot_xy[0])
+    if robot_yaw is not None:
+        bearing = bearing_world - float(robot_yaw)
+        bearing = (bearing + math.pi) % (2 * math.pi) - math.pi
+    else:
+        bearing = bearing_world
     dist = math.hypot(goal_xy[0] - robot_xy[0], goal_xy[1] - robot_xy[1])
     best_clear = 0.0
     for r, a in zip(scan_ranges, scan_angles):

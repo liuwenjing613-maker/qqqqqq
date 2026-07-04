@@ -1,0 +1,73 @@
+{
+  "session_id": "session_20260704_191630",
+  "frame_id": "map",
+  "map_name": "semantic_explore_live",
+  "quality": {
+    "loop_xy_error_m": 1.413,
+    "loop_yaw_error_deg": 73.58,
+    "result": "fail"
+  },
+  "landmarks": [
+    {
+      "landmark_id": "lm_0001",
+      "class_name": "bottle",
+      "frame_id": "map",
+      "x": 0.4892746688956211,
+      "y": 1.1302541349087158,
+      "confidence": 0.44405627250671387,
+      "seen_count": 2,
+      "first_seen_time": 1783163859.7441728,
+      "last_seen_time": 1783163859.9008832,
+      "state": "candidate",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000003",
+        "obs_000004"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    }
+  ],
+  "viewpoints": [
+    {
+      "node_id": "vp_000001",
+      "stamp": 1783163809.0473416,
+      "frame_id": "map",
+      "x": -0.04374274878917754,
+      "y": -0.011251223481571608,
+      "yaw": 0.6204200389337539,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000002",
+      "stamp": 1783163859.9008832,
+      "frame_id": "map",
+      "x": 0.22243076035342224,
+      "y": 0.16518845429987705,
+      "yaw": 0.9527645004166215,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    }
+  ],
+  "observation_count": 4
+}
