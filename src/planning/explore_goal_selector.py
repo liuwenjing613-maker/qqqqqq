@@ -218,6 +218,7 @@ class ExploreGoalSelector(Node):
         self.max_candidates_validate_per_tick = max(
             1, int(explore.get("max_candidates_validate_per_tick", 12))
         )
+        self.max_validate_sec_per_tick = float(explore.get("max_validate_sec_per_tick", 0.4))
         self.known_map_bonus_weight = float(scoring.get("known_map_bonus", 0.12))
         self.unknown_goal_penalty_weight = float(scoring.get("unknown_goal_penalty", 1.0))
         self.scoring_weights = scoring
@@ -1280,7 +1281,11 @@ class ExploreGoalSelector(Node):
         if skipped > 0:
             reject_stats["skipped_budget"] = skipped
 
+        validate_deadline = time.time() + self.max_validate_sec_per_tick
         for idx, candidate in enumerate(to_process):
+            if time.time() > validate_deadline:
+                reject_stats["skipped_time_budget"] = len(to_process) - idx
+                break
             ok = self._process_raw_candidate(candidate, robot_xy)
 
             item = self._candidate_summary(candidate, rank=0)
@@ -2524,7 +2529,9 @@ class ExploreGoalSelector(Node):
             self._status_message = "semantic_explore.disabled"
             return
         if self._target_visible():
-            self._status_message = "target_visible_skip"
+            self._status_message = "target_visible_hold"
+            if self._selected is not None and self.robot_pose is not None:
+                self._publish_hint(self._selected, self.robot_pose)
             return
         if not self._update_robot_pose() or self.robot_pose is None:
             self._status_message = "waiting_robot_pose"

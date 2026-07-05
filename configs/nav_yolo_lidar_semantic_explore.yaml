@@ -319,30 +319,34 @@ semantic_explore:
   enabled: true
   hint_topic: /explore_goal_hint
   state_topic: /explore_state_json
+  control_frame: map
   use_in_search_only: true
   max_hint_age_sec: 15.0
   min_hint_score: 0.05
   goal_hold_sec: 30.0
-  max_goal_select_distance_m: 1.5
-  min_goal_select_distance_m: 0.35
+  max_goal_select_distance_m: 3.5
+  min_goal_select_distance_m: 0.5
   goal_switch_max_distance_m: 0.45
   goal_switch_min_dist_m: 0.45
   blocked_reject_reasons:
-  - blocked
   - unsafe_front_clearance
   - emergency_stop
-  target_visible_interrupt: true
-  observe_after_reach_sec: 1.2
-  observe_scan_deg: 30.0
+  target_visible_interrupt: false
+  observe_after_reach_sec: 0.5
+  observe_scan_deg: 0.0
   observe_scan_wz: 0.05
+  min_travel_before_reach_m: 0.25
+  blacklist_on_arrived: false
+  search_prefer_lidar_after_sec: 5.0
   max_goal_age_sec: 20.0
   reselect_interval_sec: 4.0
-  max_candidates_validate_per_tick: 6
+  max_candidates_validate_per_tick: 4
+  max_validate_sec_per_tick: 0.35
   keep_goal_min_sec: 8.0
   switch_score_margin: 0.35
   switch_confirm_count: 3
-  step_goal_distance_m: 0.6
-  goal_reached_radius_m: 0.32
+  step_goal_distance_m: 0.5
+  goal_reached_radius_m: 0.22
   goal_timeout_sec: 60.0
   tf_cache_ttl_sec: 0.25
   tf_lookup_timeout_sec: 0.12
@@ -406,10 +410,10 @@ frontier:
   unknown_value: -1
   free_threshold: 20
   occupied_threshold: 65
-  inflation_radius_m: 0.12
+  inflation_radius_m: 0.22
   min_distance_m: 0.20
-  max_distance_m: 1.5
-  observation_standoff_m: 0.35
+  max_distance_m: 3.0
+  observation_standoff_m: 0.8
   unknown_gain_radius_m: 0.6
   require_goal_on_known_free: true
   scanned_free_candidates: true
@@ -418,11 +422,12 @@ planner:
   mode: astar
   astar_enabled: true
   require_astar_path: true
-  astar_fallback_bearing: false
+  astar_fallback_bearing: true
   allow_unknown: false
   grid_resolution_override: null
   path_publish_topic: /explore_path
   path_follow_lookahead_m: 0.35
+  follow_planned_path: true
 goal_validation:
   enabled: true
   strict: true
@@ -436,12 +441,12 @@ goal_validation:
   min_astar_path_points: 2
 safe_goal_projection:
   enabled: true
-  max_projection_radius_m: 1.2
+  max_projection_radius_m: 1.0
   projection_step_m: 0.15
   projection_max_samples: 16
   prefer_nearest: true
   require_unknown_gain: false
-  min_unknown_gain_cells: 0
+  min_unknown_gain_cells: 1
   frontier_standoff_m: 0.35
   landmark_view_min_radius_m: 0.45
   landmark_view_max_radius_m: 1.0
