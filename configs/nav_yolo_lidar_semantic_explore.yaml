@@ -136,14 +136,14 @@ safety:
   stop_distance: 0.42
   slow_distance: 0.65
   max_cmd_vx_explore: 0.04
-  max_cmd_wz_explore: 0.06
+  max_cmd_wz_explore: 0.05
   slow_vx: 0.045
-  safe_turn_wz: 0.04
+  safe_turn_wz: 0.05
   max_cmd_vx: 0.04
-  max_cmd_wz: 0.06
+  max_cmd_wz: 0.05
   turn_zero_vx_wz: 0.05
-  turn_slow_vx_wz: 0.02
-  turn_slow_vx_scale: 0.5
+  turn_slow_vx_wz: 0.05
+  turn_slow_vx_scale: 0.4
   blocked_retreat:
     enabled: true
     clearance_margin_m: 0.10
@@ -151,7 +151,7 @@ safety:
     max_duration_sec: 5.0
     fsm_unblock_buffer_m: 0.02
 search:
-  scan_wz: 0.04
+  scan_wz: 0.05
   search_arc_vx: 0.04
   pulse_sec: 0.35
   observe_sec: 0.1
@@ -187,12 +187,12 @@ chassis:
   wheel_layout: fl-rl-fr-rr
   motor_signs: 1,1,1,1
   vx_pwm_deadband: 6.0
-  wz_pwm_deadband: 8.0
-  pwm_max: 30.0
+  wz_pwm_deadband: 10.0
+  pwm_max: 40.0
   vx_pwm_gain: 180.0
   wz_pwm_gain: 120.0
   pwm_smooth_alpha: 0.35
-  max_pwm_delta: 3.0
+  max_pwm_delta: 5.0
   debug: true
 semantic_mapping:
   frames:
@@ -320,7 +320,7 @@ semantic_explore:
   hint_topic: /explore_goal_hint
   state_topic: /explore_state_json
   use_in_search_only: true
-  max_hint_age_sec: 4.0
+  max_hint_age_sec: 15.0
   min_hint_score: 0.05
   goal_hold_sec: 30.0
   max_goal_select_distance_m: 1.5
@@ -333,17 +333,19 @@ semantic_explore:
   - emergency_stop
   target_visible_interrupt: true
   observe_after_reach_sec: 1.2
-  observe_scan_deg: 90.0
+  observe_scan_deg: 30.0
   observe_scan_wz: 0.05
   max_goal_age_sec: 20.0
   reselect_interval_sec: 4.0
-  max_candidates_validate_per_tick: 12
+  max_candidates_validate_per_tick: 6
   keep_goal_min_sec: 8.0
   switch_score_margin: 0.35
   switch_confirm_count: 3
   step_goal_distance_m: 0.6
   goal_reached_radius_m: 0.32
-  goal_timeout_sec: 20.0
+  goal_timeout_sec: 60.0
+  tf_cache_ttl_sec: 0.25
+  tf_lookup_timeout_sec: 0.12
   blacklist_radius_m: 0.6
   blacklist_ttl_sec: 180.0
   repeated_observation_decay: 0.6
@@ -436,6 +438,7 @@ safe_goal_projection:
   enabled: true
   max_projection_radius_m: 1.2
   projection_step_m: 0.15
+  projection_max_samples: 16
   prefer_nearest: true
   require_unknown_gain: false
   min_unknown_gain_cells: 0
@@ -445,9 +448,9 @@ safe_goal_projection:
   bearing_first:
     max_vx: 0.05
     max_wz: 0.05
-    turn_in_place_threshold_rad: 0.22
-    forward_bearing_threshold_rad: 0.22
-    align_max_sec: 3.0
+    turn_in_place_threshold_rad: 0.18
+    forward_bearing_threshold_rad: 0.14
+    align_max_sec: 10.0
     step_mode: distance
     step_distance_m: 0.45
     pulse_sec: 0.35

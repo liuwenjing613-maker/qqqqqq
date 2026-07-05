@@ -27,6 +27,11 @@ from src.config.nav_success import load_success_config
 from src.config.nav_voter import load_voter_config
 from src.control.point_servo import PointServo, PointServoConfig, ServoCommand, clamp
 from src.fsm.nav_state_machine import NavFSMConfig, NavObservation, NavState, NavStateMachine
+from src.nav.frame_transform_2d import (
+    Transform2D,
+    hint_goal_frame,
+    transform2d_from_tf_message,
+)
 from src.nav.lidar_distance import combine_lidar_distances
 from src.nav.search_strategy import (
     TargetSearchMemory,
@@ -325,7 +330,32 @@ class SharedNavSemanticExplore(Node):
         self.blocked_retreat_start_time = 0.0
         self.blocked_retreat_clearance_target = 0.0
         self.active_planned_path: list = []
+        self.active_planned_path_frame: Optional[str] = None
         self.active_path_waypoint_idx = -1
+        mapping_frames = section(section(cfg, "semantic_mapping"), "frames")
+        self.explore_map_frame = str(mapping_frames.get("fixed_frame", "map"))
+        self.explore_odom_frame = str(mapping_frames.get("odom_frame", "odom"))
+        self.explore_control_frame = self.explore_odom_frame
+        self.explore_tf_cache_ttl_sec = float(
+            explore_cfg.get("tf_cache_ttl_sec", 0.25)
+        )
+        self.explore_tf_lookup_timeout_sec = float(
+            explore_cfg.get("tf_lookup_timeout_sec", 0.12)
+        )
+        self.tf_buffer = None
+        self.tf_listener = None
+        self._explore_tf_cache: Dict[Tuple[str, str], Tuple[float, Transform2D]] = {}
+        self._explore_tf_last_error = ""
+        self._explore_geometry_trusted = False
+        self._explore_geometry_error = ""
+        self.latest_odom_frame: Optional[str] = None
+        try:
+            import tf2_ros
+
+            self.tf_buffer = tf2_ros.Buffer(cache_time=rclpy.duration.Duration(seconds=10.0))
+            self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        except Exception as exc:
+            self.get_logger().warn(f"explore TF unavailable: {exc!r}")
         self.birth_sectors: list = []
         self._birth_last_wz = 0.0
         self.latest_odom_yaw: Optional[float] = None
@@ -374,7 +404,9 @@ class SharedNavSemanticExplore(Node):
         self.get_logger().info(f"===== shared_nav_semantic_explore mode={self.mode} =====")
         if self.semantic_explore_enabled:
             self.get_logger().info(
-                f"semantic_explore enabled hint={self.explore_hint_topic} planner={self.planner_mode}"
+                f"semantic_explore enabled hint={self.explore_hint_topic} planner={self.planner_mode} "
+                f"goal_frame={self.explore_map_frame} control_frame={self.explore_control_frame} "
+                f"tf_buffer={'ok' if self.tf_buffer is not None else 'missing'}"
             )
         self.get_logger().info(f"topics image={self.image_topic} scan={self.scan_topic} cmd={self.cmd_topic}")
         if voter_cfg["enabled"]:
@@ -433,6 +465,7 @@ class SharedNavSemanticExplore(Node):
             float(msg.pose.pose.position.x),
             float(msg.pose.pose.position.y),
         )
+        self.latest_odom_frame = str(msg.header.frame_id or self.explore_odom_frame)
         self.latest_odom_time = time.time()
 
     def _sync_birth_scan_odom_yaw(self, prev_state: NavState) -> None:
@@ -584,8 +617,7 @@ class SharedNavSemanticExplore(Node):
         self.explore_burst_start_xy = None
         self.explore_goal_traveled_m = 0.0
         self.observe_update_active = False
-        self.active_planned_path = []
-        self.active_path_waypoint_idx = -1
+        self._clear_active_planned_path()
 
     @staticmethod
     def _normalize_angle(angle: float) -> float:
@@ -601,57 +633,148 @@ class SharedNavSemanticExplore(Node):
                 out.append((float(pt[0]), float(pt[1])))
         return out
 
-    def _final_goal_distance(self, hint: Dict[str, Any]) -> float:
-        goal_pose = hint.get("goal_pose")
+    def _set_active_planned_path(self, hint: Dict[str, Any]) -> None:
+        self.active_planned_path = self._planned_path_points(hint)
+        self.active_planned_path_frame = self._hint_goal_frame(hint)
+
+    def _clear_active_planned_path(self) -> None:
+        self.active_planned_path = []
+        self.active_planned_path_frame = None
+        self.active_path_waypoint_idx = -1
+
+    def _hint_goal_frame(self, hint: Dict[str, Any]) -> str:
+        return hint_goal_frame(hint, self.explore_map_frame)
+
+    def _path_source_frame(self, hint: Dict[str, Any]) -> str:
+        if self.active_planned_path and self.active_planned_path_frame:
+            return self.active_planned_path_frame
+        return self._hint_goal_frame(hint)
+
+    def _lookup_frame_transform(
+        self, target_frame: str, source_frame: str
+    ) -> Optional[Transform2D]:
+        if not target_frame or not source_frame:
+            self._explore_tf_last_error = f"{target_frame}<-{source_frame}: empty frame"
+            return None
+        if target_frame == source_frame:
+            return Transform2D.identity()
+
+        cache_key = (target_frame, source_frame)
+        now = time.time()
+        cached = self._explore_tf_cache.get(cache_key)
+        if cached and now - cached[0] <= self.explore_tf_cache_ttl_sec:
+            return cached[1]
+
+        if self.tf_buffer is None:
+            self._explore_tf_last_error = f"{target_frame}<-{source_frame}: no tf_buffer"
+            return cached[1] if cached else None
+
+        try:
+            tf_msg = self.tf_buffer.lookup_transform(
+                target_frame,
+                source_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=self.explore_tf_lookup_timeout_sec),
+            )
+            transform = transform2d_from_tf_message(tf_msg)
+            self._explore_tf_cache[cache_key] = (now, transform)
+            self._explore_tf_last_error = ""
+            return transform
+        except Exception as exc:
+            self._explore_tf_last_error = f"{target_frame}<-{source_frame}: {exc}"
+            return cached[1] if cached else None
+
+    def _transform_xy_to_control(
+        self, x: float, y: float, source_frame: str
+    ) -> Optional[Tuple[float, float]]:
+        transform = self._lookup_frame_transform(self.explore_control_frame, source_frame)
+        if transform is None:
+            return None
+        return transform.apply(x, y)
+
+    def _path_in_control_frame(
+        self, hint: Dict[str, Any], path: List[Tuple[float, float]]
+    ) -> Optional[List[Tuple[float, float]]]:
+        if not path:
+            return None
+        source_frame = self._path_source_frame(hint)
+        if source_frame == self.explore_control_frame:
+            return list(path)
+        transform = self._lookup_frame_transform(self.explore_control_frame, source_frame)
+        if transform is None:
+            return None
+        return transform.apply_path(path)
+
+    def _goal_pose_in_control(self, hint: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+        goal_xy = self._goal_pose_xy(hint)
+        if goal_xy is None:
+            return None
+        source_frame = self._hint_goal_frame(hint)
+        if source_frame == self.explore_control_frame:
+            return goal_xy
+        return self._transform_xy_to_control(goal_xy[0], goal_xy[1], source_frame)
+
+    def _robot_control_pose(self) -> Optional[Tuple[float, float, float]]:
+        if self.latest_odom_xy is None or self.latest_odom_yaw is None:
+            return None
         if (
-            isinstance(goal_pose, (list, tuple))
-            and len(goal_pose) >= 2
-            and self.latest_odom_xy is not None
+            self.latest_odom_frame
+            and self.latest_odom_frame != self.explore_control_frame
         ):
-            gx = float(goal_pose[0])
-            gy = float(goal_pose[1])
-            rx, ry = self.latest_odom_xy
-            return math.hypot(gx - rx, gy - ry)
+            self._explore_geometry_error = (
+                f"odom_frame_mismatch:{self.latest_odom_frame}!={self.explore_control_frame}"
+            )
+            return None
+        return self.latest_odom_xy[0], self.latest_odom_xy[1], self.latest_odom_yaw
+
+    def _final_goal_distance(self, hint: Dict[str, Any]) -> float:
+        goal_xy = self._goal_pose_in_control(hint)
+        robot = self._robot_control_pose()
+        if goal_xy is not None and robot is not None:
+            return math.hypot(goal_xy[0] - robot[0], goal_xy[1] - robot[1])
         return float(hint.get("goal_distance_m", 999.0))
 
     def _explore_goal_geometry(self, hint: Dict[str, Any]) -> Tuple[float, float]:
+        self._explore_geometry_trusted = False
+        self._explore_geometry_error = ""
+
         final_dist = self._final_goal_distance(hint)
-        path = self.active_planned_path or self._planned_path_points(hint)
-        use_path = bool(path) and (
+        raw_path = self.active_planned_path or self._planned_path_points(hint)
+        use_path = bool(raw_path) and (
             self._hint_has_planned_path(hint) or bool(self.active_planned_path)
         )
-        if (
-            use_path
-            and self.latest_odom_xy is not None
-            and self.latest_odom_yaw is not None
-        ):
-            bearing, _, wp_idx = follow_path(
-                path,
-                self.latest_odom_xy,
-                self.latest_odom_yaw,
-                self.path_follow_lookahead_m,
+        robot = self._robot_control_pose()
+        if robot is None:
+            self._explore_geometry_error = "robot_pose_unavailable"
+            return float(hint.get("goal_bearing_rad", 0.0)), final_dist
+
+        rx, ry, ryaw = robot
+        if use_path:
+            path_control = self._path_in_control_frame(hint, raw_path)
+            if path_control:
+                bearing, _, wp_idx = follow_path(
+                    path_control,
+                    (rx, ry),
+                    ryaw,
+                    self.path_follow_lookahead_m,
+                )
+                if bearing is not None:
+                    self.active_path_waypoint_idx = wp_idx
+                    self._explore_geometry_trusted = True
+                    return bearing, final_dist
+            self._explore_geometry_error = (
+                self._explore_geometry_error or "path_transform_failed"
             )
-            if bearing is not None:
-                self.active_path_waypoint_idx = wp_idx
-                return bearing, final_dist
-        goal_pose = hint.get("goal_pose")
-        if (
-            isinstance(goal_pose, (list, tuple))
-            and len(goal_pose) >= 2
-            and self.latest_odom_xy is not None
-            and self.latest_odom_yaw is not None
-        ):
-            gx = float(goal_pose[0])
-            gy = float(goal_pose[1])
-            rx, ry = self.latest_odom_xy
-            dx = gx - rx
-            dy = gy - ry
-            bearing = self._normalize_angle(math.atan2(dy, dx) - self.latest_odom_yaw)
+
+        goal_xy = self._goal_pose_in_control(hint)
+        if goal_xy is not None:
+            gx, gy = goal_xy
+            bearing = self._normalize_angle(math.atan2(gy - ry, gx - rx) - ryaw)
+            self._explore_geometry_trusted = True
             return bearing, final_dist
-        return (
-            float(hint.get("goal_bearing_rad", 0.0)),
-            final_dist,
-        )
+
+        self._explore_geometry_error = self._explore_tf_last_error or "goal_transform_failed"
+        return float(hint.get("goal_bearing_rad", 0.0)), 999.0
 
     def _reject_candidate(self, hint: Dict[str, Any], now: float, reason: str) -> None:
         self.explore_last_reject_reason = reason
@@ -678,8 +801,7 @@ class SharedNavSemanticExplore(Node):
         self.explore_phase_start = now
         self.explore_burst_start_xy = None
         self.explore_goal_traveled_m = 0.0
-        self.active_planned_path = []
-        self.active_path_waypoint_idx = -1
+        self._clear_active_planned_path()
 
     def command_from_explore_hint(self, now: float) -> Optional[Tuple[ServoCommand, str]]:
         hint = self._locked_explore_hint(now)
@@ -703,18 +825,17 @@ class SharedNavSemanticExplore(Node):
                 )
             )
             if switch_allowed:
+                self._begin_explore_goal(now)
                 self.active_explore_goal = dict(fresh)
                 if self._hint_has_planned_path(fresh):
-                    self.active_planned_path = self._planned_path_points(fresh)
-                else:
-                    self.active_planned_path = []
-                self._begin_explore_goal(now)
+                    self._set_active_planned_path(fresh)
             else:
                 locked = dict(self.active_explore_goal or fresh)
                 locked["goal_pose"] = fresh.get("goal_pose", locked.get("goal_pose"))
                 locked["look_at"] = fresh.get("look_at", locked.get("look_at"))
                 locked["score"] = fresh.get("score", locked.get("score"))
                 locked["planned_path"] = fresh.get("planned_path", locked.get("planned_path"))
+                locked["goal_frame"] = fresh.get("goal_frame", locked.get("goal_frame"))
                 locked["nav_planner"] = fresh.get("nav_planner", locked.get("nav_planner"))
                 locked["astar_fallback"] = fresh.get("astar_fallback", locked.get("astar_fallback"))
                 locked["selection_explanation"] = fresh.get(
@@ -722,11 +843,11 @@ class SharedNavSemanticExplore(Node):
                 )
                 self.active_explore_goal = locked
                 if self._hint_has_planned_path(fresh):
-                    self.active_planned_path = self._planned_path_points(fresh)
+                    self._set_active_planned_path(fresh)
                 elif str(fresh.get("nav_planner", "")) == "bearing_first" or fresh.get(
                     "astar_fallback"
                 ):
-                    self.active_planned_path = []
+                    self._clear_active_planned_path()
         elif self.active_explore_goal is None:
             return None
 
@@ -742,6 +863,9 @@ class SharedNavSemanticExplore(Node):
         if self.explore_goal_start_time and now - self.explore_goal_start_time > self.explore_goal_timeout_sec:
             self._reject_candidate(active, now, "goal_timeout")
             return None
+
+        if not self._explore_geometry_trusted:
+            return ServoCommand(vx=0.0, wz=0.0), "semantic_explore_tf_wait"
 
         if distance < self.explore_goal_reached_radius_m:
             if not self.observe_update_active:
@@ -913,11 +1037,17 @@ class SharedNavSemanticExplore(Node):
             self.search_mem.search_turn_locked_until = 0.0
             if self.blocked_retreat_enabled:
                 self._start_blocked_retreat(now)
-            if (
+            reject_on_blocked = (
                 self.semantic_explore_enabled
                 and self.active_explore_goal
                 and result.reason in ("blocked", "emergency")
-            ):
+            )
+            # In-place align should not blacklist the explore goal when front
+            # clearance is near stop_distance (~0.42m indoors).
+            if reject_on_blocked and result.reason == "blocked":
+                if self.explore_phase in ("EXPLORE_ALIGN", "EXPLORE_BURST_PAUSE"):
+                    reject_on_blocked = False
+            if reject_on_blocked:
                 self._reject_candidate(self.active_explore_goal, now, "blocked")
         if self.target_ok(target):
             self.search_mem.search_mode = "visual_handoff"
@@ -1439,8 +1569,15 @@ class SharedNavSemanticExplore(Node):
         if self.active_explore_goal:
             data["explore_candidate_id"] = self.active_explore_goal.get("candidate_id")
             data["explore_mode"] = self.active_explore_goal.get("mode")
-            _, goal_dist = self._explore_goal_geometry(self.active_explore_goal)
+            bearing, goal_dist = self._explore_goal_geometry(self.active_explore_goal)
             data["explore_goal_distance_m"] = round(goal_dist, 3)
+            data["explore_goal_bearing_rad"] = round(bearing, 4)
+            data["explore_geometry_trusted"] = self._explore_geometry_trusted
+            data["explore_geometry_error"] = self._explore_geometry_error or None
+            data["explore_goal_frame"] = self._hint_goal_frame(self.active_explore_goal)
+            data["explore_control_frame"] = self.explore_control_frame
+            data["explore_planned_path_frame"] = self.active_planned_path_frame
+            data["explore_tf_error"] = self._explore_tf_last_error or None
         elif self.last_explore_candidate_id:
             data["explore_candidate_id"] = self.last_explore_candidate_id
         if self.failed_explore_goals:
