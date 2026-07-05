@@ -7,7 +7,7 @@ Node name: _NODE_NAME_UNKNOWN_
 Node namespace: _NODE_NAMESPACE_UNKNOWN_
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: PUBLISHER
-GID: 01.0f.c9.96.96.61.3a.2e.00.00.01.00.00.00.18.03.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.35.6f.45.0f.00.00.01.00.00.00.18.03.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -23,7 +23,21 @@ Node name: _NODE_NAME_UNKNOWN_
 Node namespace: _NODE_NAMESPACE_UNKNOWN_
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.10.63.3c.1e.00.00.01.00.00.01.10.04.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.35.6f.45.0f.00.00.01.00.00.00.25.04.00.00.00.00.00.00.00.00
+QoS profile:
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: VOLATILE
+  Lifespan: Infinite
+  Deadline: Infinite
+  Liveliness: AUTOMATIC
+  Liveliness lease duration: Infinite
+
+Node name: _NODE_NAME_UNKNOWN_
+Node namespace: _NODE_NAMESPACE_UNKNOWN_
+Topic type: nav_msgs/msg/OccupancyGrid
+Endpoint type: SUBSCRIPTION
+GID: 01.0f.c9.96.71.70.ea.99.00.00.01.00.00.01.08.04.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -33,25 +47,11 @@ QoS profile:
   Liveliness: AUTOMATIC
   Liveliness lease duration: Infinite
 
-Node name: _NODE_NAME_UNKNOWN_
-Node namespace: _NODE_NAMESPACE_UNKNOWN_
+Node name: semantic_mapper
+Node namespace: /
 Topic type: nav_msgs/msg/OccupancyGrid
 Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.96.61.3a.2e.00.00.01.00.00.00.25.04.00.00.00.00.00.00.00.00
-QoS profile:
-  Reliability: RELIABLE
-  History (Depth): UNKNOWN
-  Durability: VOLATILE
-  Lifespan: Infinite
-  Deadline: Infinite
-  Liveliness: AUTOMATIC
-  Liveliness lease duration: Infinite
-
-Node name: _NODE_NAME_UNKNOWN_
-Node namespace: _NODE_NAMESPACE_UNKNOWN_
-Topic type: nav_msgs/msg/OccupancyGrid
-Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.c6.50.dc.15.00.00.00.00.00.00.17.04.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.71.b9.03.64.00.00.00.00.00.00.17.04.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -62,19 +62,19 @@ QoS profile:
   Liveliness lease duration: Infinite
 
 
-[INFO] [1783240879.435683260] [map_saver]: 
+[INFO] [1783252031.923176327] [map_saver]: 
 	map_saver lifecycle node launched. 
 	Waiting on external lifecycle transitions to activate
 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
-[INFO] [1783240879.436364635] [map_saver]: Creating
-[INFO] [1783240879.437253052] [map_saver]: Configuring
-[INFO] [1783240879.449195133] [map_saver]: Saving map from '/map' topic to '/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260705_164112' file
-[WARN] [1783240879.449538758] [map_saver]: Free threshold unspecified. Setting it to default value: 0.250000
-[WARN] [1783240879.449753592] [map_saver]: Occupied threshold unspecified. Setting it to default value: 0.650000
-[WARN] [1783240880.342667909] [map_io]: Image format unspecified. Setting it to: pgm
-[INFO] [1783240880.343064284] [map_io]: Received a 186 X 145 map @ 0.05 m/pix
-[INFO] [1783240880.414152064] [map_io]: Writing map occupancy data to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260705_164112.pgm
-[INFO] [1783240880.416779814] [map_io]: Writing map metadata to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260705_164112.yaml
-[INFO] [1783240880.417442730] [map_io]: Map saved
-[INFO] [1783240880.417542689] [map_saver]: Map saved successfully
-[INFO] [1783240880.420915438] [map_saver]: Destroying
+[INFO] [1783252031.924200327] [map_saver]: Creating
+[INFO] [1783252031.925897037] [map_saver]: Configuring
+[INFO] [1783252031.933351751] [map_saver]: Saving map from '/map' topic to '/root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260705_194704' file
+[WARN] [1783252031.934170793] [map_saver]: Free threshold unspecified. Setting it to default value: 0.250000
+[WARN] [1783252031.934532460] [map_saver]: Occupied threshold unspecified. Setting it to default value: 0.650000
+[WARN] [1783252032.861532812] [map_io]: Image format unspecified. Setting it to: pgm
+[INFO] [1783252032.861916354] [map_io]: Received a 226 X 293 map @ 0.05 m/pix
+[INFO] [1783252032.997312579] [map_io]: Writing map occupancy data to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260705_194704.pgm
+[INFO] [1783252033.000859498] [map_io]: Writing map metadata to /root/rdk_x5_vln_robot/maps/joy_calibrated_corridor_map.tmp_20260705_194704.yaml
+[INFO] [1783252033.001633040] [map_io]: Map saved
+[INFO] [1783252033.001732957] [map_saver]: Map saved successfully
+[INFO] [1783252033.004376126] [map_saver]: Destroying
