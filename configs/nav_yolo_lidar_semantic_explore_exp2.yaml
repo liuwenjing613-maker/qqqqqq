@@ -488,3 +488,62 @@ qwen_text:
   min_confidence: 0.55
   weight: 0.05
 debug: true
+
+explore_memory:
+  enabled: true
+
+  # 阶段控制：
+  # visual_only: 只记录轨迹，不影响候选点
+  # log_only: 记录 visited/failed，但不影响候选点
+  # soft_penalty: 对重复候选点扣分
+  # hard_reject: 对太近 visited goal 的候选点直接拒绝
+  mode: visual_only
+
+  trajectory_topic: /explore_trajectory_exp2
+  marker_topic: /explore_memory_markers_exp2
+
+  trajectory_min_dist_m: 0.08
+  trajectory_min_yaw_deg: 12.0
+  max_trajectory_points: 1200
+
+  visited_goal_reject_radius_m: 0.45
+  visited_goal_penalty_radius_m: 0.90
+  visited_goal_penalty_weight: 0.45
+
+  path_penalty_radius_m: 0.30
+  path_penalty_weight: 0.12
+
+  no_target_radius_m: 0.65
+  no_target_ttl_sec: 240.0
+
+  blocked_radius_m: 0.45
+  blocked_ttl_sec: 180.0
+
+  unsafe_radius_m: 0.50
+  unsafe_ttl_sec: 120.0
+
+direction_lock:
+  enabled: false
+
+  # 8 个 sector，每个 45°，先别调大
+  sector_count: 8
+
+  # 初始方向选择：
+  # best_front_sector: 在当前正前方 ±90° 内选择候选最多/分最高的 sector
+  # best_global_sector: 全局最高分 sector
+  initial_policy: best_front_sector
+
+  front_sector_angle_deg: 90.0
+
+  hard_filter_active_sector: true
+  allow_neighbor_when_empty: true
+  neighbor_order: alternating
+
+  active_sector_bonus: 0.35
+  inactive_sector_penalty: 0.45
+
+  exhaust_no_candidate_cycles: 3
+  exhaust_failed_goals: 2
+  exhaust_visited_goals: 3
+
+  reset_when_all_exhausted: true
