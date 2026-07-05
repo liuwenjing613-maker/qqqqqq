@@ -7,28 +7,28 @@
 [lidar_frame_config] base_link -> laser
 [lidar_frame_config] xyz=(0.10, 0.0, 0.12) rpy=(0.0, 0.0, 3.141592653589793)
 [lidar_frame_config] WARN: LASER_YAW=3.141592653589793 (non-zero compensation enabled)
-[21:46:21] ===== Corridor SLAM Live (Foxglove, known-good style) =====
-[21:46:21] PROJECT_DIR=/root/rdk_x5_vln_robot
-[21:46:21] No auto motion. Drive manually via joystick /cmd_vel.
-[21:46:21] SLAM config OK: /root/rdk_x5_vln_robot/configs/slam_toolbox.yaml
-[21:46:21] Stopping old SLAM-related processes...
-[21:46:25] [1/6] LiDAR -> /scan
-[21:46:25] Starting lidar -> /root/rdk_x5_vln_robot/logs/slam_live/lidar.log
-[21:46:32] Waiting for /scan ...
-[21:46:37] OK: /scan
-[21:46:37] [scan_filter] Start /scan -> /scan_filtered
-[21:46:37] Starting scan_filter -> /root/rdk_x5_vln_robot/logs/slam_live/scan_filter.log
-[21:46:39] Waiting for /scan_filtered ...
-[21:46:41] OK: /scan_filtered
-[21:46:41] [2/6] Chassis PWM bridge + /odom
-[21:46:41] Calibration mode: re-applied slam_calibrated_env after mvp_tune
-[21:46:48] [3/6] Static TF base_link -> laser
-[21:46:48] Starting static_tf -> /root/rdk_x5_vln_robot/logs/slam_live/static_tf.log
-[21:46:50] [4/6] slam_toolbox online_async (scan_topic=/scan_filtered)
-[21:46:50] Starting slam_toolbox -> /root/rdk_x5_vln_robot/logs/slam_live/slam_toolbox.log
-[21:47:00] [5/6] foxglove_bridge port 8765
-[21:47:00] Starting foxglove_bridge -> /root/rdk_x5_vln_robot/logs/slam_live/foxglove_bridge.log
-[21:47:05] ERROR: foxglove_bridge failed (see /root/rdk_x5_vln_robot/logs/slam_live/foxglove_bridge.log)
+[22:35:46] ===== Corridor SLAM Live (Foxglove, known-good style) =====
+[22:35:46] PROJECT_DIR=/root/rdk_x5_vln_robot
+[22:35:46] No auto motion. Drive manually via joystick /cmd_vel.
+[22:35:46] SLAM config OK: /root/rdk_x5_vln_robot/configs/slam_toolbox.yaml
+[22:35:46] Stopping old SLAM-related processes...
+[22:35:51] [1/6] LiDAR -> /scan
+[22:35:51] Starting lidar -> /root/rdk_x5_vln_robot/logs/slam_live/lidar.log
+[22:35:57] Waiting for /scan ...
+[22:36:10] OK: /scan
+[22:36:11] [scan_filter] Start /scan -> /scan_filtered
+[22:36:11] Starting scan_filter -> /root/rdk_x5_vln_robot/logs/slam_live/scan_filter.log
+[22:36:13] Waiting for /scan_filtered ...
+[22:36:23] OK: /scan_filtered
+[22:36:23] [2/6] Chassis PWM bridge + /odom
+[22:36:23] Calibration mode: re-applied slam_calibrated_env after mvp_tune
+[22:36:30] [3/6] Static TF base_link -> laser
+[22:36:30] Starting static_tf -> /root/rdk_x5_vln_robot/logs/slam_live/static_tf.log
+[22:36:33] [4/6] slam_toolbox online_async (scan_topic=/scan_filtered)
+[22:36:33] Starting slam_toolbox -> /root/rdk_x5_vln_robot/logs/slam_live/slam_toolbox.log
+[22:36:43] [5/6] foxglove_bridge port 8765
+[22:36:43] Starting foxglove_bridge -> /root/rdk_x5_vln_robot/logs/slam_live/foxglove_bridge.log
+[22:36:48] ERROR: foxglove_bridge failed (see /root/rdk_x5_vln_robot/logs/slam_live/foxglove_bridge.log)
 
 ========== ROS TOPICS ==========
 /chassis_bridge_state
@@ -39,6 +39,7 @@
 /odom
 /scan
 /scan_filtered
+/semantic_map_json
 /slam_toolbox/scan_visualization
 /tf
 /tf_static
@@ -52,7 +53,7 @@ Node name: ydlidar_ros2_driver_node
 Node namespace: /
 Topic type: sensor_msgs/msg/LaserScan
 Endpoint type: PUBLISHER
-GID: 01.0f.c9.96.7a.22.cf.7e.00.00.00.00.00.00.12.03.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.24.bf.d5.c9.00.00.00.00.00.00.12.03.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: BEST_EFFORT
   History (Depth): UNKNOWN
@@ -68,7 +69,7 @@ Node name: foxglove_bridge
 Node namespace: /
 Topic type: sensor_msgs/msg/LaserScan
 Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.b4.24.c5.c9.00.00.01.00.00.00.89.04.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.8e.c2.bc.a3.00.00.01.00.00.00.21.04.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: BEST_EFFORT
   History (Depth): UNKNOWN
@@ -82,7 +83,7 @@ Node name: simple_scan_filter
 Node namespace: /
 Topic type: sensor_msgs/msg/LaserScan
 Endpoint type: SUBSCRIPTION
-GID: 01.0f.c9.96.c0.22.cb.d0.00.00.00.00.00.00.12.04.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.c0.bf.5a.9c.00.00.00.00.00.00.12.04.00.00.00.00.00.00.00.00
 QoS profile:
 
 ========== /odom info ==========
@@ -94,7 +95,7 @@ Node name: m1_pwm_cmd_vel_bridge
 Node namespace: /
 Topic type: nav_msgs/msg/Odometry
 Endpoint type: PUBLISHER
-GID: 01.0f.c9.96.46.23.0e.79.00.00.00.00.00.00.14.03.00.00.00.00.00.00.00.00
+GID: 01.0f.c9.96.5b.c0.f6.02.00.00.00.00.00.00.14.03.00.00.00.00.00.00.00.00
 QoS profile:
   Reliability: RELIABLE
   History (Depth): UNKNOWN
@@ -104,20 +105,43 @@ QoS profile:
   Liveliness: AUTOMATIC
   Liveliness lease duration: Infinite
 
-Subscription count: 0
+Subscription count: 12
 
+Node name: explore_goal_selector
+Node namespace: /
+Topic type: nav_msgs/msg/Odometry
+Endpoint type: SUBSCRIPTION
+GID: 01.0f.c9.96.32.28.20.9f.00.00.00.00.00.00.23.04.00.00.00.00.00.00.00.00
+QoS profile:
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: VOLATILE
+  Lifespan: Infinite
+  Deadline: Infinite
+  Liveliness: AUTOMATIC
+  Liveliness lease duration: Infinite
+
+Node name: explore_goal_selector
+Node namespace: /
+Topic type: nav_msgs/msg/Odometry
+Endpoint type: SUBSCRIPTION
+GID: 01.0f.c9.96.43.5e.13.e3.00.00.00.00.00.00.23.04.00.00.00.00.00.00.00.00
+QoS profile:
 
 ========== /map_metadata once ==========
+A message was lost!!!
+	total count change:1
+	total count: 1---
 map_load_time:
   sec: 0
   nanosec: 0
 resolution: 0.05000000074505806
-width: 142
-height: 134
+width: 115
+height: 143
 origin:
   position:
-    x: -3.3648349424377946
-    y: -3.011022026537948
+    x: -3.8228808975993167
+    y: -3.4761689932661395
     z: 0.0
   orientation:
     x: 0.0
@@ -127,7 +151,7 @@ origin:
 ---
 
 ========== TF odom -> laser ==========
-At time 1783259237.798088610
+At time 1783262229.276259930
 - Translation: [0.100, 0.000, 0.120]
 - Rotation: in Quaternion (xyzw) [0.000, 0.000, 1.000, 0.000]
 - Rotation: in RPY (radian) [0.000, -0.000, 3.142]
@@ -137,7 +161,7 @@ At time 1783259237.798088610
   0.000 -1.000  0.000  0.000
   0.000  0.000  1.000  0.120
   0.000  0.000  0.000  1.000
-At time 1783259238.797915176
+At time 1783262230.249987605
 - Translation: [0.100, 0.000, 0.120]
 - Rotation: in Quaternion (xyzw) [0.000, 0.000, 1.000, 0.000]
 - Rotation: in RPY (radian) [0.000, -0.000, 3.142]
@@ -147,7 +171,7 @@ At time 1783259238.797915176
   0.000 -1.000  0.000  0.000
   0.000  0.000  1.000  0.120
   0.000  0.000  0.000  1.000
-At time 1783259239.798254243
+At time 1783262231.360706663
 - Translation: [0.100, 0.000, 0.120]
 - Rotation: in Quaternion (xyzw) [0.000, 0.000, 1.000, 0.000]
 - Rotation: in RPY (radian) [0.000, -0.000, 3.142]
@@ -159,10 +183,10 @@ Scan filter log:   /root/rdk_x5_vln_robot/logs/slam_live/scan_filter.log
 Chassis log:       /root/rdk_x5_vln_robot/logs/slam_live/chassis_bridge.log
 SLAM log:          /root/rdk_x5_vln_robot/logs/slam_live/slam_toolbox.log
 Foxglove log:      /root/rdk_x5_vln_robot/logs/slam_live/foxglove_bridge.log
-[21:47:21] ===== SLAM live stack started =====
-[21:47:21] Do NOT close this terminal.
-[21:47:21] WARN: Foxglove bridge NOT running — lidar/SLAM OK but no ws://8765
-[21:47:21] WARN: tail -f /root/rdk_x5_vln_robot/logs/slam_live/foxglove_bridge.log
-[21:47:21] Now open terminal 2: joy_node.
-[21:47:21] Then terminal 3: teleop_twist_joy.
-[21:47:21] Terminal 4: monitoring and map saving.
+[22:37:11] ===== SLAM live stack started =====
+[22:37:11] Do NOT close this terminal.
+[22:37:12] WARN: Foxglove bridge NOT running — lidar/SLAM OK but no ws://8765
+[22:37:12] WARN: tail -f /root/rdk_x5_vln_robot/logs/slam_live/foxglove_bridge.log
+[22:37:12] Now open terminal 2: joy_node.
+[22:37:12] Then terminal 3: teleop_twist_joy.
+[22:37:12] Terminal 4: monitoring and map saving.

@@ -174,7 +174,7 @@ freshness:
 rates:
   decision_hz: 10
   control_hz: 20
-  state_pub_hz: 5
+  state_pub_hz: 2
   selector_hz: 2
   selector_log_hz: 1
 chassis:
@@ -490,7 +490,7 @@ qwen_text:
 debug: true
 
 explore_memory:
-  enabled: true
+  enabled: false
 
   # 阶段控制：
   # visual_only: 只记录轨迹，不影响候选点
@@ -523,7 +523,7 @@ explore_memory:
   unsafe_ttl_sec: 120.0
 
 direction_lock:
-  enabled: false
+  enabled: true
 
   # 8 个 sector，每个 45°，先别调大
   sector_count: 8
