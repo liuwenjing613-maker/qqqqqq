@@ -27,6 +27,7 @@ def _lookup_ok(buffer: Buffer, target: str, source: str, timeout_sec: float) -> 
 
 
 def wait_link(
+    node,
     buffer: Buffer,
     target: str,
     source: str,
@@ -38,7 +39,10 @@ def wait_link(
     print(f"[WAIT] TF {label}, need {need_ok} consecutive OK", flush=True)
     ok_count = 0
     start = time.time()
+    last_err = ""
     while time.time() - start < timeout_sec:
+        # TransformListener only fills the buffer while the node is spun.
+        rclpy.spin_once(node, timeout_sec=0.0)
         if _lookup_ok(buffer, target, source, 0.35):
             ok_count += 1
             print(f"[WAIT] TF {label}: OK {ok_count}/{need_ok}", flush=True)
@@ -47,7 +51,20 @@ def wait_link(
                 return True
         else:
             ok_count = 0
-            print(f"[WAIT] TF {label}: not ready", flush=True)
+            try:
+                buffer.lookup_transform(
+                    target,
+                    source,
+                    Time(),
+                    timeout=Duration(seconds=0.05),
+                )
+            except Exception as exc:
+                err = str(exc).strip()
+                if err and err != last_err:
+                    last_err = err
+                    print(f"[WAIT] TF {label}: not ready ({err})", flush=True)
+                else:
+                    print(f"[WAIT] TF {label}: not ready", flush=True)
         time.sleep(poll_sec)
     print(f"[ERROR] TF {label} not stable after {timeout_sec:.0f}s (last lookup failed)", flush=True)
     return False
@@ -75,14 +92,26 @@ def main() -> int:
 
     per_link_timeout = max(30.0, args.timeout * 0.45)
     if not wait_link(
-        buffer, args.map_frame, args.odom_frame, per_link_timeout, 2, args.poll
+        node,
+        buffer,
+        args.map_frame,
+        args.odom_frame,
+        per_link_timeout,
+        2,
+        args.poll,
     ):
         node.destroy_node()
         rclpy.shutdown()
         return 1
 
     if not wait_link(
-        buffer, args.odom_frame, args.base_frame, per_link_timeout, 2, args.poll
+        node,
+        buffer,
+        args.odom_frame,
+        args.base_frame,
+        per_link_timeout,
+        2,
+        args.poll,
     ):
         node.destroy_node()
         rclpy.shutdown()
@@ -91,7 +120,13 @@ def main() -> int:
     # Direct map<-base_link often fails with tf2_echo extrapolation even when the
     # chain is valid; use latest-time lookup here.
     if wait_link(
-        buffer, args.map_frame, args.base_frame, per_link_timeout, args.need_ok, args.poll
+        node,
+        buffer,
+        args.map_frame,
+        args.base_frame,
+        per_link_timeout,
+        args.need_ok,
+        args.poll,
     ):
         node.destroy_node()
         rclpy.shutdown()

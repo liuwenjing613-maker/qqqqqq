@@ -273,6 +273,9 @@ wait_topic_exists /odom 90 || exit 1
 wait_topic_exists /map 90 || exit 1
 wait_topic_exists /tf 40 || exit 1
 
+echo "[semantic_explore] waiting for SLAM TF chain (map<-odom, odom<-base_link) before perception stack..."
+wait_tf_before_explore_nodes || exit 1
+
 # shellcheck source=scripts/lib/camera_stack.sh
 source "${PWD}/scripts/lib/camera_stack.sh"
 

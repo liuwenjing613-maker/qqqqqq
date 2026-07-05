@@ -12,6 +12,13 @@ pkill -f yolo_world_to_bbox_json.py || true
 pkill -f hobot_yolo_world || true
 pkill -f compressed_to_raw_image.py || true
 pkill -f hobot_usb_cam || true
+pkill -TERM -f "run_slam_calibrated.sh" 2>/dev/null || true
+pkill -TERM -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
+pkill -TERM -f "async_slam_toolbox_node" 2>/dev/null || true
+sleep 1
+pkill -KILL -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
+pkill -KILL -f "run_slam_calibrated.sh" 2>/dev/null || true
+pkill -KILL -f "async_slam_toolbox_node" 2>/dev/null || true
 pkill -f ydlidar_ros2_driver_node || true
 pkill -f m1_pwm_cmd_vel_bridge.py || true
 pkill -f cmd_vel_to_rosmaster.py || true
