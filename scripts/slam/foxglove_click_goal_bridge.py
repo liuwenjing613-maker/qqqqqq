@@ -15,6 +15,7 @@ Publish for visualization:
   /foxglove_click_goal_marker     visualization_msgs/msg/Marker  (goal circle ring)
   /foxglove_click_goal_label      visualization_msgs/msg/Marker  (goal text label)
   /foxglove_click_accepted_goal   geometry_msgs/msg/PoseStamped
+  /foxglove_map_viz               nav_msgs/msg/OccupancyGrid  (Foxglove-friendly map display)
 
 Action clients:
   /compute_path_to_pose  nav2_msgs/action/ComputePathToPose
@@ -48,6 +49,7 @@ if str(_SCRIPT_DIR) not in __import__('sys').path:
 from map_goal_validate import (
     DEFAULT_ROBOT_RADIUS,
     is_footprint_known_free,
+    is_nav_runtime_safe,
     path_stays_in_known_free,
 )
 
@@ -66,6 +68,8 @@ GOAL_TEXT_HEIGHT = 0.09
 GOAL_COLOR_OK = (1.0, 0.42, 0.08, 0.92)
 GOAL_COLOR_PENDING = (1.0, 0.82, 0.12, 0.75)
 GOAL_COLOR_REJECT = (0.95, 0.18, 0.18, 0.88)
+MAP_VIZ_TOPIC = '/foxglove_map_viz'
+MAP_VIZ_OCCUPIED_VALUE = 99  # Foxglove treats 100 as transparent in custom color mode
 
 
 def yaw_to_quaternion(yaw: float) -> Quaternion:
@@ -107,6 +111,25 @@ def _copy_goal_pose(msg: PoseStamped, frame_id: str) -> PoseStamped:
     return goal
 
 
+def _occupancy_grid_for_foxglove(msg: OccupancyGrid) -> OccupancyGrid:
+    out = OccupancyGrid()
+    out.header = msg.header
+    out.info = msg.info
+    remapped = []
+    for raw in msg.data:
+        val = int(raw)
+        if val < 0:
+            remapped.append(-1)
+        elif val == 0:
+            remapped.append(0)
+        elif val >= 65:
+            remapped.append(MAP_VIZ_OCCUPIED_VALUE)
+        else:
+            remapped.append(50)
+    out.data = remapped
+    return out
+
+
 class FoxgloveClickGoalBridge(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__('foxglove_click_goal_bridge')
@@ -135,6 +158,8 @@ class FoxgloveClickGoalBridge(Node):
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
         self.create_subscription(OccupancyGrid, '/map', self._on_map, map_qos)
+        self._map_viz_pub = self.create_publisher(OccupancyGrid, MAP_VIZ_TOPIC, map_qos)
+        self.create_timer(2.0, self._republish_map_viz)
 
         latched_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -204,6 +229,12 @@ class FoxgloveClickGoalBridge(Node):
         self.get_logger().info('Visual trajectory: /foxglove_click_trajectory_dots (red dots)')
         self.get_logger().info('Visual start marker: /foxglove_click_start_marker')
         self.get_logger().info('Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label')
+        self.get_logger().info(f'Foxglove map viz: {MAP_VIZ_TOPIC} (use in 3D panel instead of /map)')
+
+    def _republish_map_viz(self) -> None:
+        if self._map_grid is None:
+            return
+        self._map_viz_pub.publish(_occupancy_grid_for_foxglove(self._map_grid))
 
     def _delete_marker(self, ns: str, marker_id: int = 0) -> Marker:
         marker = Marker()
@@ -476,6 +507,7 @@ class FoxgloveClickGoalBridge(Node):
 
     def _on_map(self, msg: OccupancyGrid) -> None:
         self._map_grid = msg
+        self._map_viz_pub.publish(_occupancy_grid_for_foxglove(msg))
 
     def _validate_goal_on_map(self, x: float, y: float) -> bool:
         if not self.reject_unknown_goals:
@@ -517,13 +549,13 @@ class FoxgloveClickGoalBridge(Node):
         pose_xy = self.try_get_current_pose_xy()
         if pose_xy is None:
             return
-        ok, reason = is_footprint_known_free(
+        ok, reason = is_nav_runtime_safe(
             self._map_grid, pose_xy[0], pose_xy[1], robot_radius=self.robot_radius
         )
         if ok:
             return
         self.get_logger().error(
-            f'Robot left known-free map ({reason}); canceling navigation.'
+            f'Robot left safe nav area ({reason}); canceling navigation.'
         )
         if self._nav_goal_handle is not None:
             try:

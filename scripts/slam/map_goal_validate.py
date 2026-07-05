@@ -66,6 +66,29 @@ def _footprint_offsets(radius_m: float, resolution: float) -> Iterable[Tuple[int
                 yield dx, dy
 
 
+def is_footprint_unknown(
+    grid: OccupancyGrid,
+    x: float,
+    y: float,
+    robot_radius: float = DEFAULT_ROBOT_RADIUS,
+) -> Tuple[bool, str]:
+    """True if any cell under the robot disk is unknown (gray)."""
+    center = world_to_map(grid, x, y)
+    if center is None:
+        return True, 'out_of_map'
+    mx0, my0 = center
+    res = grid.info.resolution
+    for dx, dy in _footprint_offsets(robot_radius, res):
+        mx = mx0 + dx
+        my = my0 + dy
+        if mx < 0 or my < 0 or mx >= grid.info.width or my >= grid.info.height:
+            return True, 'footprint_out_of_map'
+        val = map_cell_value(grid, mx, my)
+        if classify_map_cell(val) == 'unknown':
+            return True, f'footprint_unknown(val={val}) at cell ({mx},{my})'
+    return False, 'ok'
+
+
 def is_footprint_known_free(
     grid: OccupancyGrid,
     x: float,
@@ -87,6 +110,27 @@ def is_footprint_known_free(
         kind = classify_map_cell(val)
         if kind != 'free':
             return False, f'footprint_{kind}(val={val}) at cell ({mx},{my})'
+    return True, 'ok'
+
+
+def is_nav_runtime_safe(
+    grid: OccupancyGrid,
+    x: float,
+    y: float,
+    robot_radius: float = DEFAULT_ROBOT_RADIUS,
+) -> Tuple[bool, str]:
+    """Runtime nav safety: block unknown anywhere in footprint; wall only if center hits occupied."""
+    has_unknown, unknown_reason = is_footprint_unknown(grid, x, y, robot_radius)
+    if has_unknown:
+        return False, unknown_reason
+    center = world_to_map(grid, x, y)
+    if center is None:
+        return False, 'out_of_map'
+    mx, my = center
+    val = map_cell_value(grid, mx, my)
+    kind = classify_map_cell(val)
+    if kind == 'occupied':
+        return False, f'center_{kind}(val={val}) at cell ({mx},{my})'
     return True, 'ok'
 
 
