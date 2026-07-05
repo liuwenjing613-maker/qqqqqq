@@ -239,6 +239,9 @@ class ExploreGoalSelector(Node):
         self.projection_max_radius_m = float(projection_cfg.get("max_projection_radius_m", 0.9))
         self.projection_step_m = float(projection_cfg.get("projection_step_m", 0.1))
         self.projection_prefer_nearest = bool(projection_cfg.get("prefer_nearest", True))
+        self.projection_max_samples = max(
+            4, int(projection_cfg.get("projection_max_samples", 24))
+        )
         self.require_unknown_gain = bool(projection_cfg.get("require_unknown_gain", True))
         self.min_unknown_gain_cells = int(projection_cfg.get("min_unknown_gain_cells", 6))
         self.landmark_view_min_radius_m = float(projection_cfg.get("landmark_view_min_radius_m", 0.6))
@@ -1021,7 +1024,7 @@ class ExploreGoalSelector(Node):
         raw_x, raw_y = raw_goal_xy
 
         for p in self._sample_projection_points(raw_goal_xy):
-            if sampled >= 64:
+            if sampled >= self.projection_max_samples:
                 break
             sampled += 1
             cheap = self.validate_nav_goal(
@@ -2389,6 +2392,8 @@ class ExploreGoalSelector(Node):
         robot_xy: Tuple[float, float, float],
         candidates: List[ExploreCandidate],
         selected: Optional[ExploreCandidate],
+        *,
+        full: bool = True,
     ) -> None:
         stamp = self.get_clock().now().to_msg()
         self._prepare_viz_frame()
@@ -2493,6 +2498,9 @@ class ExploreGoalSelector(Node):
             fr_arr.markers.append(fl)
         self.pub_frontier_markers.publish(fr_arr)
 
+        if not full:
+            return
+
         self._publish_selection_process_markers(robot_xy, candidates, selected, stamp)
         self._publish_astar_markers(robot_xy, selected, stamp)
         self._publish_projection_debug_markers(robot_xy, selected, stamp)
@@ -2531,6 +2539,7 @@ class ExploreGoalSelector(Node):
             return
         self._last_select_time = now
         robot_xy = self.robot_pose
+        self._status_message = "generating_candidates"
         raw_candidates = self._generate_raw_candidates(robot_xy)
         self._last_candidates = raw_candidates
         self._last_pick_stats = {
@@ -2543,6 +2552,10 @@ class ExploreGoalSelector(Node):
             "projection_enabled": self.projection_enabled,
             "active_area_id": self.active_area_id,
         }
+        # Lightweight viz first so Foxglove shows goals while validation runs.
+        if raw_candidates:
+            self._publish_markers(robot_xy, raw_candidates, self._selected, full=False)
+        self._status_message = "validating_candidates"
         best, path = self._pick_navigable_candidate(robot_xy, raw_candidates)
         self._update_candidate_debug(raw_candidates)
         if path:
@@ -2573,8 +2586,7 @@ class ExploreGoalSelector(Node):
         ):
             self._status_message = "selected"
         self._publish_hint(selected, robot_xy)
-        if self._select_tick_count % 2 == 0 or selected is not None:
-            self._publish_markers(robot_xy, raw_candidates, selected)
+        self._publish_markers(robot_xy, raw_candidates, selected)
         if selected is not None:
             path_len = len(selected.source.get("planned_path") or self._last_path or [])
             self.get_logger().info(
@@ -2672,8 +2684,16 @@ class ExploreGoalSelector(Node):
 
     def _publish_state_tick(self) -> None:
         try:
+            self._update_robot_pose()
             payload = self._build_state_payload()
             self.pub_state.publish(String(data=json.dumps(payload, ensure_ascii=False)))
+            if self.robot_pose is not None and self._last_candidates:
+                self._publish_markers(
+                    self.robot_pose,
+                    self._last_candidates,
+                    self._selected,
+                    full=False,
+                )
         except Exception as exc:
             self.get_logger().error(f"publish_state_tick failed: {exc!r}")
 
