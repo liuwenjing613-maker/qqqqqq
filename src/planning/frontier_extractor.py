@@ -139,6 +139,7 @@ def extract_frontiers(
         cy = sum(c[1] for c in cluster) / len(cluster)
         fwx, fwy = _map_to_world(grid, int(cx), int(cy))
 
+        allow_unknown_neighbors = bool(cfg.get("allow_unknown_neighbors", True))
         goal_xy = _find_standoff_goal(
             grid,
             fwx,
@@ -149,6 +150,7 @@ def extract_frontiers(
             free_threshold,
             occupied_threshold,
             unknown_value,
+            allow_unknown_neighbors=allow_unknown_neighbors,
         )
         if goal_xy is None:
             continue

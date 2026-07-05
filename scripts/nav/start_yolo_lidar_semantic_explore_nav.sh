@@ -126,6 +126,63 @@ wait_tf_before_explore_nodes() {
   wait_tf_stable map base_link 60 3 || return 1
 }
 
+wait_map_topic_ready() {
+  local timeout_sec="${1:-30}"
+  echo "[semantic_explore] waiting for /map (transient_local latch) up to ${timeout_sec}s..."
+  # slam_toolbox publishes /map with TRANSIENT_LOCAL. Default `ros2 topic echo` uses
+  # volatile QoS and --full-length can exceed a 2s timeout on embedded boards.
+  if python3 - "$timeout_sec" <<'PY'
+import sys
+import time
+
+import rclpy
+from nav_msgs.msg import OccupancyGrid
+from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+
+timeout = float(sys.argv[1])
+rclpy.init()
+node = Node("semantic_explore_wait_map")
+qos = QoSProfile(
+    depth=1,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+    reliability=ReliabilityPolicy.RELIABLE,
+)
+got = {"ok": False, "w": 0, "h": 0}
+
+
+def cb(msg: OccupancyGrid) -> None:
+    if msg.info.width > 0 and msg.info.height > 0:
+        got["ok"] = True
+        got["w"] = msg.info.width
+        got["h"] = msg.info.height
+
+
+node.create_subscription(OccupancyGrid, "/map", cb, qos)
+start = time.time()
+while time.time() - start < timeout:
+    rclpy.spin_once(node, timeout_sec=0.5)
+    if got["ok"]:
+        print(
+            f"[semantic_explore] OK: /map latched {got['w']}x{got['h']}",
+            flush=True,
+        )
+        node.destroy_node()
+        rclpy.shutdown()
+        raise SystemExit(0)
+    time.sleep(0.1)
+
+node.destroy_node()
+rclpy.shutdown()
+raise SystemExit(1)
+PY
+  then
+    return 0
+  fi
+  echo "[semantic_explore] WARN: /map not received within ${timeout_sec}s"
+  return 1
+}
+
 ensure_foxglove_bridge() {
   local port="${FOXGLOVE_PORT:-8765}"
   if ! ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
@@ -151,8 +208,16 @@ ensure_foxglove_bridge() {
   return 1
 }
 
-pkill -f run_shared_nav_semantic_explore.py || true
-pkill -f explore_goal_selector.py || true
+stop_explore_nav_nodes() {
+  pkill -TERM -f run_shared_nav_semantic_explore.py 2>/dev/null || true
+  pkill -TERM -f explore_goal_selector.py 2>/dev/null || true
+  sleep 1
+  pkill -KILL -f run_shared_nav_semantic_explore.py 2>/dev/null || true
+  pkill -KILL -f explore_goal_selector.py 2>/dev/null || true
+  sleep 0.5
+}
+
+stop_explore_nav_nodes
 pkill -f semantic_mapper_node.py || true
 pkill -f yolov5s_bpu_web_node.py || true
 pkill -f yolo_world_to_bbox_json.py || true
@@ -167,8 +232,9 @@ if [ "$NAV_ONLY" = "1" ]; then
   echo "[semantic_explore] NAV_ONLY=1: selector + semantic nav only"
   echo "[semantic_explore] waiting for TF stable before explore nodes..."
   wait_tf_before_explore_nodes || exit 1
+  wait_map_topic_ready 30 || echo "[semantic_explore] WARN: continuing without latched /map (volatile sub may still work)"
   if [ "$SEMANTIC_EXPLORE_ENABLED" = "1" ]; then
-    python3 "$PROJECT_DIR/src/planning/explore_goal_selector.py" \
+    python3 -u "$PROJECT_DIR/src/planning/explore_goal_selector.py" \
       --config "$CONFIG" \
       --instruction "$INSTRUCTION" \
       > "$PROJECT_DIR/logs/semantic_explore_selector.log" 2>&1 &
@@ -261,8 +327,9 @@ wait_topic_exists /semantic_map_json 60 || {
 if [ "$SEMANTIC_EXPLORE_ENABLED" = "1" ]; then
   echo "[semantic_explore] waiting for TF stable before explore nodes..."
   wait_tf_before_explore_nodes || exit 1
+  wait_map_topic_ready 30 || echo "[semantic_explore] WARN: continuing without latched /map (volatile sub may still work)"
   echo "[5/8] Start explore goal selector..."
-  python3 "$PROJECT_DIR/src/planning/explore_goal_selector.py" \
+  python3 -u "$PROJECT_DIR/src/planning/explore_goal_selector.py" \
     --config "$CONFIG" \
     --instruction "$INSTRUCTION" \
     > logs/semantic_explore_selector.log 2>&1 &
