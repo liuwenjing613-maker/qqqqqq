@@ -18,8 +18,16 @@ import rclpy
 import yaml
 from geometry_msgs.msg import Point, PoseStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path as NavPath
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import ColorRGBA, Header, String
 from visualization_msgs.msg import Marker, MarkerArray
@@ -207,6 +215,9 @@ class ExploreGoalSelector(Node):
         self.scanned_free_max_candidates = max(
             0, int(frontier_cfg.get("scanned_free_max_candidates", 10))
         )
+        self.max_candidates_validate_per_tick = max(
+            1, int(explore.get("max_candidates_validate_per_tick", 12))
+        )
         self.known_map_bonus_weight = float(scoring.get("known_map_bonus", 0.12))
         self.unknown_goal_penalty_weight = float(scoring.get("unknown_goal_penalty", 1.0))
         self.scoring_weights = scoring
@@ -237,6 +248,7 @@ class ExploreGoalSelector(Node):
         )
         self.selector_hz = float(rates.get("selector_hz", 2.0))
         self.state_hz = float(rates.get("state_pub_hz", 5.0))
+        self.selector_log_hz = float(rates.get("selector_log_hz", 1.0))
 
         self.priors_cfg = load_semantic_priors_config(cfg)
         self.parsed = parse_instruction_by_rules(
@@ -291,6 +303,10 @@ class ExploreGoalSelector(Node):
         self._tf_debug: Dict[str, Any] = {}
         self._last_tf_error = ""
         self._pose_source = ""
+        self._logged_sensors: set = set()
+        self._last_logged_status = ""
+        self._select_tick_count = 0
+        self._select_busy = False
 
         self.pub_hint = self.create_publisher(String, self.hint_topic, 10)
         self.pub_state = self.create_publisher(String, self.state_topic, 10)
@@ -308,20 +324,56 @@ class ExploreGoalSelector(Node):
             MarkerArray, "/explore_projection_markers", 10
         )
 
+        self._sensor_cb_group = ReentrantCallbackGroup()
+        self._timer_cb_group = ReentrantCallbackGroup()
+        # Heavy select tick must not overlap: reentrant timers caused piled-up
+        # projection/A* work, 100% CPU, and frozen selector logs.
+        self._select_cb_group = MutuallyExclusiveCallbackGroup()
+        map_topic = str(frontier_cfg.get("map_topic", "/map"))
         map_qos = QoSProfile(
             depth=1,
+            history=HistoryPolicy.KEEP_LAST,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
             reliability=ReliabilityPolicy.RELIABLE,
         )
-        self.create_subscription(String, "/semantic_map_json", self._on_semantic_map, 10)
         self.create_subscription(
-            OccupancyGrid, frontier_cfg.get("map_topic", "/map"), self._on_map, map_qos
+            String, "/semantic_map_json", self._on_semantic_map, 10,
+            callback_group=self._sensor_cb_group,
         )
-        self.create_subscription(LaserScan, "/scan_filtered", self._on_scan, qos_profile_sensor_data)
-        self.create_subscription(String, "/target_bbox_json", self._on_bbox, 10)
-        self.create_subscription(String, "/nav_state", self._on_nav_state, 10)
-        self.create_subscription(Odometry, mapping_topics.get("odom", "/odom"), self._on_odom, 10)
-        self.create_subscription(PoseWithCovarianceStamped, "/pose", self._on_pose, 10)
+        self.create_subscription(
+            OccupancyGrid, map_topic, self._on_map, map_qos,
+            callback_group=self._sensor_cb_group,
+        )
+        map_qos_live = QoSProfile(
+            depth=5,
+            history=HistoryPolicy.KEEP_LAST,
+            durability=DurabilityPolicy.VOLATILE,
+            reliability=ReliabilityPolicy.RELIABLE,
+        )
+        self.create_subscription(
+            OccupancyGrid, map_topic, self._on_map, map_qos_live,
+            callback_group=self._sensor_cb_group,
+        )
+        self.create_subscription(
+            LaserScan, "/scan_filtered", self._on_scan, qos_profile_sensor_data,
+            callback_group=self._sensor_cb_group,
+        )
+        self.create_subscription(
+            String, "/target_bbox_json", self._on_bbox, 10,
+            callback_group=self._sensor_cb_group,
+        )
+        self.create_subscription(
+            String, "/nav_state", self._on_nav_state, 10,
+            callback_group=self._sensor_cb_group,
+        )
+        self.create_subscription(
+            Odometry, mapping_topics.get("odom", "/odom"), self._on_odom, 10,
+            callback_group=self._sensor_cb_group,
+        )
+        self.create_subscription(
+            PoseWithCovarianceStamped, "/pose", self._on_pose, 10,
+            callback_group=self._sensor_cb_group,
+        )
 
         self.tf_buffer = None
         self.tf_listener = None
@@ -329,9 +381,124 @@ class ExploreGoalSelector(Node):
             self.tf_buffer = tf2_ros.Buffer(cache_time=rclpy.duration.Duration(seconds=10.0))
             self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
-        self.create_timer(1.0 / max(self.selector_hz, 0.1), self._select_tick)
-        self.create_timer(1.0 / max(self.state_hz, 0.1), self._publish_state_tick)
+        self.create_timer(
+            1.0 / max(self.selector_hz, 0.1), self._select_tick,
+            callback_group=self._select_cb_group,
+        )
+        self.create_timer(
+            1.0 / max(self.state_hz, 0.1), self._publish_state_tick,
+            callback_group=self._timer_cb_group,
+        )
+        self.create_timer(
+            1.0 / max(self.selector_log_hz, 0.1), self._diagnostic_log_tick,
+            callback_group=self._timer_cb_group,
+        )
         self.get_logger().info(f"explore_goal_selector ready instruction={self.instruction!r}")
+        self._log_startup_config()
+
+    def _log_startup_config(self) -> None:
+        self.get_logger().info(
+            "selector config: "
+            f"selector_hz={self.selector_hz} state_hz={self.state_hz} log_hz={self.selector_log_hz} "
+            f"hint_topic={self.hint_topic} state_topic={self.state_topic} "
+            f"tf_buffer_ok={self.tf_buffer is not None} map_frame={self._frame_fixed} "
+            f"require_astar={self.require_astar_path} projection={self.projection_enabled} "
+            f"min_clearance_m={self.min_goal_clearance_m} min_hint_score={self.min_hint_score}"
+        )
+
+    def _log_sensor_milestones(self) -> None:
+        checks = [
+            ("map", self.latest_map is not None),
+            ("scan", self.latest_scan is not None),
+            ("odom", self.latest_odom is not None),
+            ("pose", self.latest_pose is not None),
+            ("semantic_map", bool(self.semantic_map)),
+        ]
+        for name, ready in checks:
+            if not ready or name in self._logged_sensors:
+                continue
+            self._logged_sensors.add(name)
+            extra = ""
+            if name == "map" and self.latest_map is not None:
+                m = self.latest_map
+                extra = (
+                    f" frame={m.header.frame_id}"
+                    f" size={m.info.width}x{m.info.height}"
+                    f" res={m.info.resolution:.3f}"
+                )
+            elif name == "semantic_map":
+                extra = (
+                    f" landmarks={len(self._confirmed_landmarks())}"
+                    f" viewpoints={len(self.observed_sectors)}"
+                )
+            self.get_logger().info(f"sensor ready: {name}{extra}")
+
+    def _format_compact_log(self) -> str:
+        reject_stats = self._last_pick_stats.get("reject_stats", {})
+        reject = json.dumps(reject_stats, ensure_ascii=False) if reject_stats else "{}"
+        selected = self._selected.candidate_id if self._selected else "none"
+        trusted = bool(self._tf_debug.get("map_coords_trusted", False))
+        return (
+            f"[SEL] tick={self._select_tick_count} status={self._status_message} "
+            f"trusted={trusted} pose={self._pose_frame}/{self._pose_source or 'n/a'} "
+            f"has_map={self.latest_map is not None} has_scan={self.latest_scan is not None} "
+            f"raw={self._last_raw_count} valid={self._last_valid_count} "
+            f"frontiers={len(self._last_frontiers)} landmarks={len(self._confirmed_landmarks())} "
+            f"selected={selected} path_pts={len(self._last_path)} reject={reject} "
+            f"tf_buf={self.tf_buffer is not None} tf_err={self._last_tf_error or 'ok'}"
+        )
+
+    def _format_detail_log(self) -> str:
+        payload = self._build_state_payload()
+        slim: Dict[str, Any] = {
+            k: payload[k]
+            for k in (
+                "status",
+                "selection_explanation",
+                "map_coords_trusted",
+                "tf_debug",
+                "candidate_pipeline",
+                "selected_candidate",
+                "selected_mode",
+                "selected_score",
+                "num_frontiers",
+                "has_map",
+                "has_scan",
+                "has_robot_pose",
+                "pose_frame",
+                "pose_source",
+                "astar_path_points",
+            )
+            if k in payload
+        }
+        if self._last_candidate_debug:
+            slim["candidate_debug"] = self._last_candidate_debug[:5]
+        return json.dumps(slim, ensure_ascii=False)
+
+    def _diagnostic_log_tick(self) -> None:
+        try:
+            self._log_sensor_milestones()
+            compact = self._format_compact_log()
+            status_changed = self._status_message != self._last_logged_status
+            if status_changed:
+                self._last_logged_status = self._status_message
+                detail = self._format_detail_log()
+                problem_statuses = {
+                    "no_valid_safe_candidates",
+                    "no_candidates_generated",
+                    "no_navigable_candidate",
+                    "waiting_map",
+                    "waiting_robot_pose",
+                    "current_goal_unsafe_cancel",
+                }
+                if self._status_message in problem_statuses:
+                    self.get_logger().warning(f"STATUS_CHANGE {compact} detail={detail}")
+                else:
+                    self.get_logger().info(f"STATUS_CHANGE {compact} detail={detail}")
+            else:
+                self.get_logger().info(compact)
+        except Exception as exc:
+            self.get_logger().error(f"diagnostic_log_tick failed: {exc!r}")
 
     def _on_semantic_map(self, msg: String) -> None:
         try:
@@ -356,7 +523,13 @@ class ExploreGoalSelector(Node):
             pass
 
     def _on_map(self, msg: OccupancyGrid) -> None:
+        first_map = self.latest_map is None
         self.latest_map = msg
+        if first_map:
+            self.get_logger().info(
+                f"map received frame={msg.header.frame_id} "
+                f"size={msg.info.width}x{msg.info.height} res={msg.info.resolution:.3f}"
+            )
 
     def _on_scan(self, msg: LaserScan) -> None:
         self.latest_scan = msg
@@ -441,19 +614,19 @@ class ExploreGoalSelector(Node):
             self.spawn_pose = pose
 
     def _update_robot_pose(self) -> bool:
-        map_frame = self._map_frame_id()
-        base_frame = self._base_frame or "base_link"
-
-        tf_msg = self._lookup_latest_transform(map_frame, base_frame, timeout_sec=0.2)
-        if tf_msg is not None:
-            x = float(tf_msg.transform.translation.x)
-            y = float(tf_msg.transform.translation.y)
-            q = tf_msg.transform.rotation
-            yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
-            self._note_robot_pose((x, y, yaw))
-            self._pose_frame = map_frame
-            self._pose_source = "tf_map_base"
-            return True
+        if self.latest_map is not None:
+            map_frame = self._map_frame_id()
+            base_frame = self._base_frame or "base_link"
+            tf_msg = self._lookup_latest_transform(map_frame, base_frame, timeout_sec=0.1)
+            if tf_msg is not None:
+                x = float(tf_msg.transform.translation.x)
+                y = float(tf_msg.transform.translation.y)
+                q = tf_msg.transform.rotation
+                yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
+                self._note_robot_pose((x, y, yaw))
+                self._pose_frame = map_frame
+                self._pose_source = "tf_map_base"
+                return True
 
         if self.latest_odom is not None:
             msg = self.latest_odom
@@ -848,6 +1021,8 @@ class ExploreGoalSelector(Node):
         raw_x, raw_y = raw_goal_xy
 
         for p in self._sample_projection_points(raw_goal_xy):
+            if sampled >= 64:
+                break
             sampled += 1
             cheap = self.validate_nav_goal(
                 p,
@@ -1095,8 +1270,14 @@ class ExploreGoalSelector(Node):
         debug_items: List[Dict[str, Any]] = []
 
         self._last_raw_count = len(raw_candidates)
+        ranked_raw = sorted(raw_candidates, key=lambda c: c.total_score, reverse=True)
+        budget = self.max_candidates_validate_per_tick
+        to_process = ranked_raw[:budget]
+        skipped = len(ranked_raw) - len(to_process)
+        if skipped > 0:
+            reject_stats["skipped_budget"] = skipped
 
-        for candidate in raw_candidates:
+        for idx, candidate in enumerate(to_process):
             ok = self._process_raw_candidate(candidate, robot_xy)
 
             item = self._candidate_summary(candidate, rank=0)
@@ -1333,8 +1514,10 @@ class ExploreGoalSelector(Node):
 
         if map_ok and plan_robot is not None and bool(self.frontier_cfg.get("enabled", True)):
             plan_xy = (plan_robot[0], plan_robot[1])
+            frontier_cfg_run = dict(self.frontier_cfg)
+            frontier_cfg_run["allow_unknown_neighbors"] = not self.unknown_as_obstacle
             frontiers = extract_frontiers(
-                self.latest_map, plan_xy, self.frontier_cfg, ranges, angles, plan_robot[2]
+                self.latest_map, plan_xy, frontier_cfg_run, ranges, angles, plan_robot[2]
             )
             self._last_frontiers = frontiers
             for fg in frontiers:
@@ -2315,6 +2498,20 @@ class ExploreGoalSelector(Node):
         self._publish_projection_debug_markers(robot_xy, selected, stamp)
 
     def _select_tick(self) -> None:
+        if self._select_busy:
+            return
+        self._select_busy = True
+        try:
+            self._select_tick_impl()
+        except Exception as exc:
+            self._status_message = "select_tick_error"
+            self._last_selection_explanation = repr(exc)
+            self.get_logger().error(f"select_tick failed: {exc!r}")
+        finally:
+            self._select_busy = False
+
+    def _select_tick_impl(self) -> None:
+        self._select_tick_count += 1
         if not self.explore_enabled:
             self._status_message = "semantic_explore.disabled"
             return
@@ -2376,10 +2573,22 @@ class ExploreGoalSelector(Node):
         ):
             self._status_message = "selected"
         self._publish_hint(selected, robot_xy)
-        self._publish_markers(robot_xy, raw_candidates, selected)
+        if self._select_tick_count % 2 == 0 or selected is not None:
+            self._publish_markers(robot_xy, raw_candidates, selected)
+        if selected is not None:
+            path_len = len(selected.source.get("planned_path") or self._last_path or [])
+            self.get_logger().info(
+                f"HINT_PUBLISH id={selected.candidate_id} mode={selected.mode} "
+                f"score={selected.total_score:.3f} goal=({selected.goal_xy[0]:.2f},{selected.goal_xy[1]:.2f}) "
+                f"path_len={path_len} projection={selected.projection_status or 'n/a'}"
+            )
+        elif self._select_tick_count % max(1, int(self.selector_hz)) == 0:
+            self.get_logger().info(
+                f"HINT_NONE status={self._status_message} explanation={self._last_selection_explanation}"
+            )
 
-    def _publish_state_tick(self) -> None:
-        payload = {
+    def _build_state_payload(self) -> Dict[str, Any]:
+        return {
             "state": "SEMANTIC_EXPLORE" if self._selected else "SEARCH",
             "status": self._status_message,
             "selection_explanation": self._last_selection_explanation,
@@ -2460,7 +2669,13 @@ class ExploreGoalSelector(Node):
                 "allow_unknown": self.planner_cfg.get("allow_unknown", False),
             },
         }
-        self.pub_state.publish(String(data=json.dumps(payload, ensure_ascii=False)))
+
+    def _publish_state_tick(self) -> None:
+        try:
+            payload = self._build_state_payload()
+            self.pub_state.publish(String(data=json.dumps(payload, ensure_ascii=False)))
+        except Exception as exc:
+            self.get_logger().error(f"publish_state_tick failed: {exc!r}")
 
 
 def main() -> None:
@@ -2474,9 +2689,12 @@ def main() -> None:
 
     rclpy.init()
     node = ExploreGoalSelector(cfg, instruction)
+    executor = MultiThreadedExecutor(num_threads=4)
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     finally:
+        executor.shutdown()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
