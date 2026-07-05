@@ -83,6 +83,49 @@ wait_topic_exists() {
   return 1
 }
 
+wait_tf_stable() {
+  local target="$1"
+  local source="$2"
+  local timeout_sec="${3:-20}"
+  local need_ok="${4:-3}"
+
+  echo "[WAIT] TF ${target} <- ${source}, need ${need_ok} consecutive OK"
+
+  local start=$(date +%s)
+  local ok_count=0
+
+  while true; do
+    timeout 6 ros2 run tf2_ros tf2_echo "$target" "$source" >/tmp/tf_wait_${target}_${source}.log 2>&1
+
+    if grep -q "Translation:" /tmp/tf_wait_${target}_${source}.log; then
+      ok_count=$((ok_count + 1))
+      echo "[WAIT] TF ${target} <- ${source}: OK ${ok_count}/${need_ok}"
+      if [ "$ok_count" -ge "$need_ok" ]; then
+        echo "[OK] TF ${target} <- ${source} stable"
+        return 0
+      fi
+    else
+      ok_count=0
+      echo "[WAIT] TF ${target} <- ${source}: not ready"
+    fi
+
+    local now=$(date +%s)
+    if [ $((now - start)) -ge "$timeout_sec" ]; then
+      echo "[ERROR] TF ${target} <- ${source} not stable after ${timeout_sec}s"
+      cat /tmp/tf_wait_${target}_${source}.log || true
+      return 1
+    fi
+
+    sleep 0.5
+  done
+}
+
+wait_tf_before_explore_nodes() {
+  wait_tf_stable map odom 60 2 || return 1
+  wait_tf_stable odom base_link 60 2 || return 1
+  wait_tf_stable map base_link 60 3 || return 1
+}
+
 ensure_foxglove_bridge() {
   local port="${FOXGLOVE_PORT:-8765}"
   if ! ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
@@ -122,6 +165,8 @@ timeout 1 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
 
 if [ "$NAV_ONLY" = "1" ]; then
   echo "[semantic_explore] NAV_ONLY=1: selector + semantic nav only"
+  echo "[semantic_explore] waiting for TF stable before explore nodes..."
+  wait_tf_before_explore_nodes || exit 1
   if [ "$SEMANTIC_EXPLORE_ENABLED" = "1" ]; then
     python3 "$PROJECT_DIR/src/planning/explore_goal_selector.py" \
       --config "$CONFIG" \
@@ -214,6 +259,8 @@ wait_topic_exists /semantic_map_json 60 || {
 }
 
 if [ "$SEMANTIC_EXPLORE_ENABLED" = "1" ]; then
+  echo "[semantic_explore] waiting for TF stable before explore nodes..."
+  wait_tf_before_explore_nodes || exit 1
   echo "[5/8] Start explore goal selector..."
   python3 "$PROJECT_DIR/src/planning/explore_goal_selector.py" \
     --config "$CONFIG" \
@@ -222,6 +269,8 @@ if [ "$SEMANTIC_EXPLORE_ENABLED" = "1" ]; then
   sleep 2
 else
   echo "[5/8] semantic_explore.enabled=false, skip selector"
+  echo "[semantic_explore] waiting for TF stable before explore nav..."
+  wait_tf_before_explore_nodes || exit 1
 fi
 
 echo "[6/8] Start semantic explore nav (no separate chassis; SLAM stack owns it)..."

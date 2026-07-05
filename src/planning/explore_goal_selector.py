@@ -48,9 +48,12 @@ from src.vlm.qwen_text_reasoner import QwenTextReasoner
 
 try:
     import tf2_ros
-    from tf_transformations import euler_from_quaternion
 except ImportError:
     tf2_ros = None
+
+try:
+    from tf_transformations import euler_from_quaternion
+except ImportError:
     euler_from_quaternion = None
 
 
@@ -285,6 +288,9 @@ class ExploreGoalSelector(Node):
         self._last_candidate_debug: List[Dict[str, Any]] = []
         self._last_raw_count = 0
         self._last_valid_count = 0
+        self._tf_debug: Dict[str, Any] = {}
+        self._last_tf_error = ""
+        self._pose_source = ""
 
         self.pub_hint = self.create_publisher(String, self.hint_topic, 10)
         self.pub_state = self.create_publisher(String, self.state_topic, 10)
@@ -435,25 +441,19 @@ class ExploreGoalSelector(Node):
             self.spawn_pose = pose
 
     def _update_robot_pose(self) -> bool:
-        base = self._base_frame
-        if self.tf_buffer is not None:
-            for frame_id in (self._frame_fixed, self._frame_fallback):
-                try:
-                    tf = self.tf_buffer.lookup_transform(
-                        frame_id,
-                        base,
-                        rclpy.time.Time(),
-                        timeout=rclpy.duration.Duration(seconds=0.2),
-                    )
-                    x = float(tf.transform.translation.x)
-                    y = float(tf.transform.translation.y)
-                    q = tf.transform.rotation
-                    yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
-                    self._note_robot_pose((x, y, yaw))
-                    self._pose_frame = frame_id
-                    return True
-                except Exception:
-                    continue
+        map_frame = self._map_frame_id()
+        base_frame = self._base_frame or "base_link"
+
+        tf_msg = self._lookup_latest_transform(map_frame, base_frame, timeout_sec=0.2)
+        if tf_msg is not None:
+            x = float(tf_msg.transform.translation.x)
+            y = float(tf_msg.transform.translation.y)
+            q = tf_msg.transform.rotation
+            yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
+            self._note_robot_pose((x, y, yaw))
+            self._pose_frame = map_frame
+            self._pose_source = "tf_map_base"
+            return True
 
         if self.latest_odom is not None:
             msg = self.latest_odom
@@ -464,31 +464,30 @@ class ExploreGoalSelector(Node):
                 float(msg.pose.pose.position.y),
                 yaw,
             ))
-            self._pose_frame = str(msg.header.frame_id or self._frame_fallback)
+            self._pose_frame = str(msg.header.frame_id or "odom")
+            self._pose_source = "odom_topic"
             return True
 
-        if self.latest_pose is not None:
-            msg = self.latest_pose
-            q = msg.pose.pose.orientation
-            yaw = _yaw_from_quaternion(q.x, q.y, q.z, q.w)
-            self._note_robot_pose((
-                float(msg.pose.pose.position.x),
-                float(msg.pose.pose.position.y),
-                yaw,
-            ))
-            self._pose_frame = str(msg.header.frame_id or self._frame_fixed)
-            return True
-
-        odom = self.semantic_map.get("robot_pose")
-        if isinstance(odom, dict):
-            self._note_robot_pose((
-                float(odom.get("x", 0.0)),
-                float(odom.get("y", 0.0)),
-                float(odom.get("yaw", 0.0)),
-            ))
-            self._pose_frame = str(odom.get("frame_id", self._frame_fixed))
-            return True
         return False
+
+    def _lookup_latest_transform(
+        self, target_frame: str, source_frame: str, timeout_sec: float = 0.2
+    ):
+        if not target_frame or not source_frame:
+            return None
+        if self.tf_buffer is None:
+            self._last_tf_error = f"{target_frame}<-{source_frame}: no tf_buffer"
+            return None
+        try:
+            return self.tf_buffer.lookup_transform(
+                target_frame,
+                source_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=timeout_sec),
+            )
+        except Exception as e:
+            self._last_tf_error = f"{target_frame}<-{source_frame}: {e}"
+            return None
 
     @staticmethod
     def _normalize_angle(angle: float) -> float:
@@ -1784,28 +1783,63 @@ class ExploreGoalSelector(Node):
         self._publish_astar_markers(robot_xy, selected, stamp)
 
     def _map_frame_id(self) -> str:
-        if self.latest_map is not None:
-            return str(self.latest_map.header.frame_id or self._frame_fixed)
-        return self._pose_frame
+        if self.latest_map is not None and self.latest_map.header.frame_id:
+            return str(self.latest_map.header.frame_id)
+        return self._frame_fixed or "map"
 
     def _map_coords_trusted(self) -> bool:
-        if self.latest_map is None or self.robot_pose is None:
+        self._tf_debug = {
+            "map_frame": "",
+            "base_frame": "",
+            "pose_frame": self._pose_frame or "",
+            "pose_source": getattr(self, "_pose_source", ""),
+            "tf_map_base_ok": False,
+            "tf_map_pose_ok": False,
+            "map_coords_trusted": False,
+            "last_tf_error": "",
+            "tf_buffer_ok": self.tf_buffer is not None,
+        }
+
+        if self.latest_map is None:
+            self._tf_debug["reason"] = "no_map"
             return False
+
         map_frame = self._map_frame_id()
-        if self._pose_frame == map_frame:
+        base_frame = self._base_frame or "base_link"
+
+        self._tf_debug["map_frame"] = map_frame
+        self._tf_debug["base_frame"] = base_frame
+        self._tf_debug["pose_frame"] = self._pose_frame or ""
+
+        tf_map_base = self._lookup_latest_transform(map_frame, base_frame, timeout_sec=0.2)
+        self._tf_debug["tf_map_base_ok"] = tf_map_base is not None
+
+        if tf_map_base is not None:
+            self._tf_debug["map_coords_trusted"] = True
+            self._tf_debug["pose_source"] = "tf_map_base"
+            self._tf_debug["last_tf_error"] = ""
             return True
-        if self.tf_buffer is None:
-            return False
-        try:
-            self.tf_buffer.lookup_transform(
-                map_frame,
-                self._pose_frame,
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.2),
+
+        if self._pose_frame:
+            tf_map_pose = self._lookup_latest_transform(
+                map_frame, self._pose_frame, timeout_sec=0.2
             )
+            self._tf_debug["tf_map_pose_ok"] = tf_map_pose is not None
+            if tf_map_pose is not None:
+                self._tf_debug["map_coords_trusted"] = True
+                self._tf_debug["pose_source"] = f"tf_map_{self._pose_frame}"
+                self._tf_debug["last_tf_error"] = ""
+                return True
+
+        if self._pose_frame == map_frame:
+            self._tf_debug["map_coords_trusted"] = True
+            self._tf_debug["pose_source"] = "pose_frame_equals_map"
+            self._tf_debug["last_tf_error"] = ""
             return True
-        except Exception:
-            return False
+
+        self._tf_debug["map_coords_trusted"] = False
+        self._tf_debug["last_tf_error"] = getattr(self, "_last_tf_error", "")
+        return False
 
     def _to_map_xy(self, x: float, y: float, source_frame: Optional[str] = None) -> Tuple[float, float]:
         src = source_frame or self._pose_frame
@@ -2356,10 +2390,12 @@ class ExploreGoalSelector(Node):
             "has_scan": self.latest_scan is not None,
             "has_robot_pose": self.robot_pose is not None,
             "pose_frame": self._pose_frame,
+            "pose_source": self._pose_source,
             "map_frame": str(self.latest_map.header.frame_id) if self.latest_map else None,
             "pose_map_aligned": self._pose_matches_map(),
             "viz_frame": self._viz_frame_id(),
             "map_coords_trusted": self._map_coords_trusted(),
+            "tf_debug": dict(self._tf_debug),
             "pick_stats": self._last_pick_stats,
             "valid_candidates_count": len(self._last_valid_candidates),
             "active_area_id": self.active_area_id,
