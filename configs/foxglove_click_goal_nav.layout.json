@@ -16,7 +16,7 @@
       "followTf": "map",
       "scene": {
         "enableStats": false,
-        "backgroundColor": "#1a1a1a"
+        "backgroundColor": "#e8e8e8"
       },
       "transforms": {
         "enable": false,
@@ -25,11 +25,18 @@
         "labelSize": 0.03
       },
       "topics": {
-        "/map": {
+        "/foxglove_map_viz": {
           "visible": true,
-          "colorMode": "costmap",
-          "minColor": "#000000",
-          "maxColor": "#ffffff"
+          "colorMode": "custom",
+          "minColor": "#d0e4ff",
+          "maxColor": "#1a1a1a",
+          "unknownColor": "#9a9a9a",
+          "frameLocked": true,
+          "drawBehind": true,
+          "alpha": 0.92
+        },
+        "/map": {
+          "visible": false
         },
         "/scan_filtered": {
           "visible": true,
@@ -72,7 +79,7 @@
     },
     "Text!click_nav_help": {
       "fontSize": 14,
-      "text": "Foxglove 点选导航\n\n必须设置：\n  Fixed frame = map\n  Display frame = map\n\n显示内容：\n  - 地图 /map（白=可通行）\n  - 激光 /scan_filtered（红点）\n  - 绿线规划路径 /foxglove_click_planned_path\n  - 红色移动轨迹 /foxglove_click_trajectory_dots\n  - 绿色起点 / 橙色终点\n\n操作：\n1. Layout -> Import layout -> foxglove_click_goal_nav.layout.json\n2. Publish -> 2D 点 -> /foxglove_goal_point\n3. 激光与地图墙对齐后再点击；不对齐先用 /initialpose\n\n注意：不要用 Image 面板看 /scan；必须在 3D 面板。"
+      "text": "Foxglove 点选导航\n\n地图话题: /foxglove_map_viz（不要用 /map）\n  浅蓝=可通行  深灰=墙壁\n必设: Fixed frame = map\n\n1. Import layout -> foxglove_click_goal_nav.layout.json\n2. 断开重连 ws://板子IP:8765\n3. Publish -> 2D 点 -> /foxglove_goal_point"
     }
   },
   "globalVariables": {},

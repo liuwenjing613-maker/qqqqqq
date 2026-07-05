@@ -76,6 +76,17 @@
             "astar_endpoints": { "visible": true }
           }
         },
+        "/explore_projection_markers": {
+          "visible": true,
+          "namespaces": {
+            "raw_goals": { "visible": true },
+            "projected_goals": { "visible": true },
+            "rejected_goals": { "visible": true },
+            "projection_links": { "visible": true },
+            "reject_labels": { "visible": true },
+            "projection_radius": { "visible": true }
+          }
+        },
         "/explore_path": {
           "visible": true,
           "lineWidth": 0.08,
@@ -170,6 +181,22 @@
       "showFullMessageForDiff": false,
       "expansion": { "data": "e" }
     },
+    "RawMessages!candidate_pipeline": {
+      "topicPath": "/explore_state_json",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    },
+    "RawMessages!candidate_debug": {
+      "topicPath": "/explore_state_json",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    },
     "RawMessages!nav_state": {
       "topicPath": "/nav_state",
       "diffEnabled": false,
@@ -212,11 +239,21 @@
           "first": "RawMessages!explore_state",
           "second": {
             "direction": "column",
-            "first": "RawMessages!explore_hint",
-            "second": "RawMessages!nav_state",
-            "splitPercentage": 50
+            "first": {
+              "direction": "row",
+              "first": "RawMessages!candidate_pipeline",
+              "second": "RawMessages!candidate_debug",
+              "splitPercentage": 50
+            },
+            "second": {
+              "direction": "column",
+              "first": "RawMessages!explore_hint",
+              "second": "RawMessages!nav_state",
+              "splitPercentage": 50
+            },
+            "splitPercentage": 45
           },
-          "splitPercentage": 34
+          "splitPercentage": 30
         },
         "second": {
           "direction": "column",

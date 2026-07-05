@@ -251,3 +251,97 @@
 [lifecycle_manager-11] [INFO] [1783226866.727235951] [lifecycle_manager_navigation]: Server velocity_smoother connected with bond.
 [lifecycle_manager-11] [INFO] [1783226866.727443492] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
 [lifecycle_manager-11] [INFO] [1783226866.727514283] [lifecycle_manager_navigation]: [34m[1mCreating bond timer...[0m[0m
+[lifecycle_manager-3] [INFO] [1783227419.212699960] [rclcpp]: signal_handler(signum=2)
+[controller_server-4] [INFO] [1783227419.212772252] [rclcpp]: signal_handler(signum=2)
+[controller_server-4] [INFO] [1783227419.214778380] [controller_server]: Running Nav2 LifecycleNode rcl preshutdown (controller_server)
+[waypoint_follower-9] [INFO] [1783227419.212863127] [rclcpp]: signal_handler(signum=2)
+[waypoint_follower-9] [INFO] [1783227419.213483545] [waypoint_follower]: Running Nav2 LifecycleNode rcl preshutdown (waypoint_follower)
+[waypoint_follower-9] [INFO] [1783227419.213780004] [waypoint_follower]: Deactivating
+[waypoint_follower-9] [INFO] [1783227419.213871504] [waypoint_follower]: Destroying bond (waypoint_follower) to lifecycle manager.
+[lifecycle_manager-3] [INFO] [1783227419.213815754] [lifecycle_manager_localization]: Running Nav2 LifecycleManager rcl preshutdown (lifecycle_manager_localization)
+[lifecycle_manager-3] [INFO] [1783227419.213960296] [lifecycle_manager_localization]: [34m[1mTerminating bond timer...[0m[0m
+[map_server-1] [INFO] [1783227419.212907044] [rclcpp]: signal_handler(signum=2)
+[map_server-1] [INFO] [1783227419.213739045] [map_server]: Running Nav2 LifecycleNode rcl preshutdown (map_server)
+[map_server-1] [INFO] [1783227419.213981046] [map_server]: Deactivating
+[map_server-1] [INFO] [1783227419.214055921] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[smoother_server-5] [INFO] [1783227419.213408212] [rclcpp]: signal_handler(signum=2)
+[planner_server-6] [INFO] [1783227419.213928504] [rclcpp]: signal_handler(signum=2)
+[planner_server-6] [INFO] [1783227419.214215671] [planner_server]: Running Nav2 LifecycleNode rcl preshutdown (planner_server)
+[planner_server-6] [INFO] [1783227419.214411630] [planner_server]: Deactivating
+[planner_server-6] [INFO] [1783227419.214556547] [global_costmap.global_costmap]: Deactivating
+[velocity_smoother-10] [INFO] [1783227419.213932754] [rclcpp]: signal_handler(signum=2)
+[velocity_smoother-10] [INFO] [1783227419.214234879] [velocity_smoother]: Running Nav2 LifecycleNode rcl preshutdown (velocity_smoother)
+[velocity_smoother-10] [INFO] [1783227419.214463463] [velocity_smoother]: Deactivating
+[velocity_smoother-10] [INFO] [1783227419.214580505] [velocity_smoother]: Destroying bond (velocity_smoother) to lifecycle manager.
+[behavior_server-7] [INFO] [1783227419.214972464] [rclcpp]: signal_handler(signum=2)
+[behavior_server-7] [INFO] [1783227419.215262714] [behavior_server]: Running Nav2 LifecycleNode rcl preshutdown (behavior_server)
+[lifecycle_manager-11] [INFO] [1783227419.215446381] [rclcpp]: signal_handler(signum=2)
+[lifecycle_manager-11] [INFO] [1783227419.217055842] [lifecycle_manager_navigation]: Running Nav2 LifecycleManager rcl preshutdown (lifecycle_manager_navigation)
+[lifecycle_manager-11] [INFO] [1783227419.217226176] [lifecycle_manager_navigation]: [34m[1mTerminating bond timer...[0m[0m
+[smoother_server-5] [INFO] [1783227419.217070592] [smoother_server]: Running Nav2 LifecycleNode rcl preshutdown (smoother_server)
+[smoother_server-5] [INFO] [1783227419.217339259] [smoother_server]: Deactivating
+[smoother_server-5] [INFO] [1783227419.217432301] [smoother_server]: Destroying bond (smoother_server) to lifecycle manager.
+[controller_server-4] [INFO] [1783227419.215192423] [controller_server]: Deactivating
+[controller_server-4] [INFO] [1783227419.218419844] [controller_server]: Deactivating controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-4] [INFO] [1783227419.218591803] [local_costmap.local_costmap]: Deactivating
+[behavior_server-7] [INFO] [1783227419.221674225] [behavior_server]: Deactivating
+[behavior_server-7] [INFO] [1783227419.221857433] [behavior_server]: Destroying bond (behavior_server) to lifecycle manager.
+[bt_navigator-8] [INFO] [1783227419.223948062] [rclcpp]: signal_handler(signum=2)
+[bt_navigator-8] [INFO] [1783227419.224343937] [bt_navigator]: Running Nav2 LifecycleNode rcl preshutdown (bt_navigator)
+[bt_navigator-8] [INFO] [1783227419.225548689] [bt_navigator]: Deactivating
+[bt_navigator-8] [INFO] [1783227419.225691773] [bt_navigator]: Destroying bond (bt_navigator) to lifecycle manager.
+[amcl-2] [INFO] [1783227419.223992103] [rclcpp]: signal_handler(signum=2)
+[amcl-2] [INFO] [1783227419.225751106] [amcl]: Running Nav2 LifecycleNode rcl preshutdown (amcl)
+[amcl-2] [INFO] [1783227419.225985690] [amcl]: Deactivating
+[amcl-2] [INFO] [1783227419.226085523] [amcl]: Destroying bond (amcl) to lifecycle manager.
+[velocity_smoother-10] [INFO] [1783227419.235835122] [velocity_smoother]: Cleaning up
+[velocity_smoother-10] [INFO] [1783227419.236039372] [velocity_smoother]: Destroying bond (velocity_smoother) to lifecycle manager.
+[waypoint_follower-9] [INFO] [1783227419.235836330] [waypoint_follower]: Cleaning up
+[map_server-1] [INFO] [1783227419.245717263] [map_server]: Cleaning up
+[map_server-1] [INFO] [1783227419.245930596] [map_server]: Destroying bond (map_server) to lifecycle manager.
+[smoother_server-5] [INFO] [1783227419.250299061] [smoother_server]: Cleaning up
+[behavior_server-7] [INFO] [1783227419.260434327] [behavior_server]: Cleaning up
+[bt_navigator-8] [INFO] [1783227419.274059349] [bt_navigator]: Cleaning up
+[velocity_smoother-10] [INFO] [1783227419.321031215] [velocity_smoother]: Destroying
+[amcl-2] [INFO] [1783227419.327060683] [amcl]: Cleaning up
+[lifecycle_manager-3] [INFO] [1783227419.377533513] [lifecycle_manager_localization]: Destroying lifecycle_manager_localization
+[controller_server-4] [INFO] [1783227419.378982765] [controller_server]: Destroying bond (controller_server) to lifecycle manager.
+[behavior_server-7] [INFO] [1783227419.410078439] [behavior_server]: Destroying bond (behavior_server) to lifecycle manager.
+[waypoint_follower-9] [INFO] [1783227419.413590736] [waypoint_follower]: Destroying bond (waypoint_follower) to lifecycle manager.
+[map_server-1] [INFO] [1783227419.424171170] [map_server]: Destroying
+[waypoint_follower-9] [INFO] [1783227419.438963151] [waypoint_follower]: Destroying
+[controller_server-4] [INFO] [1783227419.460015351] [controller_server]: Cleaning up
+[controller_server-4] [INFO] [1783227419.460142851] [controller_server]: Cleaning up controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-4] [INFO] [1783227419.460329727] [local_costmap.local_costmap]: Cleaning up
+[smoother_server-5] [INFO] [1783227419.491452151] [smoother_server]: Destroying bond (smoother_server) to lifecycle manager.
+[smoother_server-5] [INFO] [1783227419.557768547] [smoother_server]: Destroying
+[planner_server-6] [INFO] [1783227419.684229497] [planner_server]: Deactivating plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1783227419.684396539] [planner_server]: Destroying bond (planner_server) to lifecycle manager.
+[planner_server-6] [INFO] [1783227419.695427598] [planner_server]: Cleaning up
+[amcl-2] [INFO] [1783227419.723748268] [amcl]: Destroying bond (amcl) to lifecycle manager.
+[amcl-2] [INFO] [1783227419.789015371] [amcl]: Destroying
+[INFO] [velocity_smoother-10]: process has finished cleanly [pid 8822]
+[lifecycle_manager-11] [INFO] [1783227419.877189552] [lifecycle_manager_navigation]: Destroying lifecycle_manager_navigation
+[controller_server-4] [INFO] [1783227419.905332263] [controller_server]: Destroying bond (controller_server) to lifecycle manager.
+[controller_server-4] [INFO] [1783227419.926088379] [local_costmap.local_costmap]: Destroying
+[planner_server-6] [INFO] [1783227419.943333823] [global_costmap.global_costmap]: Cleaning up
+[INFO] [waypoint_follower-9]: process has finished cleanly [pid 8820]
+[INFO] [lifecycle_manager-3]: process has finished cleanly [pid 8807]
+[behavior_server-7] [INFO] [1783227420.021451572] [behavior_server]: Destroying
+[planner_server-6] [INFO] [1783227420.023392866] [planner_server]: Cleaning up plugin GridBased of type NavfnPlanner
+[planner_server-6] [INFO] [1783227420.023717075] [planner_server]: Destroying plugin GridBased of type NavfnPlanner
+[INFO] [smoother_server-5]: process has finished cleanly [pid 8811]
+[INFO] [map_server-1]: process has finished cleanly [pid 8803]
+[planner_server-6] [INFO] [1783227420.116727347] [planner_server]: Destroying bond (planner_server) to lifecycle manager.
+[planner_server-6] [INFO] [1783227420.130033992] [global_costmap.global_costmap]: Destroying
+[controller_server-4] [INFO] [1783227420.173505977] [controller_server]: Destroying
+[INFO] [amcl-2]: process has finished cleanly [pid 8805]
+[INFO] [lifecycle_manager-11]: process has finished cleanly [pid 8824]
+[planner_server-6] [INFO] [1783227422.347810175] [planner_server]: Destroying
+[INFO] [behavior_server-7]: process has finished cleanly [pid 8816]
+[INFO] [controller_server-4]: process has finished cleanly [pid 8809]
+[INFO] [planner_server-6]: process has finished cleanly [pid 8813]
+[bt_navigator-8] [INFO] [1783227422.631633867] [bt_navigator]: Completed Cleaning up
+[bt_navigator-8] [INFO] [1783227422.631927284] [bt_navigator]: Destroying bond (bt_navigator) to lifecycle manager.
+[bt_navigator-8] [INFO] [1783227422.728799643] [bt_navigator]: Destroying
+[INFO] [bt_navigator-8]: process has finished cleanly [pid 8818]
