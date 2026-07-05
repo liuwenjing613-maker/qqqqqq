@@ -61,6 +61,15 @@ def section(cfg: Dict[str, Any], key: str) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def explore_bearing_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """bearing_first lives under safe_goal_projection in nav yaml."""
+    projection = section(cfg, "safe_goal_projection")
+    bearing = section(projection, "bearing_first")
+    if bearing:
+        return bearing
+    return section(section(cfg, "planner"), "bearing_first")
+
+
 def topic(cfg: Dict[str, Any], key: str, flat_key: str, default: str) -> str:
     return str(section(cfg, "topics").get(key, cfg.get(flat_key, default)))
 
@@ -262,7 +271,7 @@ class SharedNavSemanticExplore(Node):
 
         explore_cfg = section(cfg, "semantic_explore")
         planner_cfg = section(cfg, "planner")
-        bearing_cfg = section(planner_cfg, "bearing_first")
+        bearing_cfg = explore_bearing_cfg(cfg)
         birth_raw = section(cfg, "birth_scan")
         self.semantic_explore_enabled = bool(explore_cfg.get("enabled", False))
         self.explore_hint_topic = str(explore_cfg.get("hint_topic", "/explore_goal_hint"))
@@ -287,6 +296,13 @@ class SharedNavSemanticExplore(Node):
         self.explore_observe_scan_deg = float(explore_cfg.get("observe_scan_deg", 90.0))
         self.explore_observe_scan_wz = float(explore_cfg.get("observe_scan_wz", 0.05))
         self.explore_blacklist_ttl_sec = float(explore_cfg.get("blacklist_ttl_sec", 180.0))
+        self.explore_blacklist_on_arrived = bool(explore_cfg.get("blacklist_on_arrived", False))
+        self.explore_min_travel_before_reach_m = float(
+            explore_cfg.get("min_travel_before_reach_m", 0.25)
+        )
+        self.explore_search_prefer_lidar_after_sec = float(
+            explore_cfg.get("search_prefer_lidar_after_sec", 5.0)
+        )
         self.explore_target_visible_interrupt = bool(explore_cfg.get("target_visible_interrupt", True))
         self.planner_mode = str(planner_cfg.get("mode", "bearing_first"))
         self.require_astar_path = bool(planner_cfg.get("require_astar_path", True))
@@ -297,6 +313,7 @@ class SharedNavSemanticExplore(Node):
             )
         )
         self.path_follow_lookahead_m = float(planner_cfg.get("path_follow_lookahead_m", 0.35))
+        self.follow_planned_path = bool(planner_cfg.get("follow_planned_path", False))
         self.bearing_max_vx = float(bearing_cfg.get("max_vx", 0.025))
         self.bearing_max_wz = float(bearing_cfg.get("max_wz", 0.05))
         self.bearing_turn_threshold = float(bearing_cfg.get("turn_in_place_threshold_rad", 0.35))
@@ -335,7 +352,13 @@ class SharedNavSemanticExplore(Node):
         mapping_frames = section(section(cfg, "semantic_mapping"), "frames")
         self.explore_map_frame = str(mapping_frames.get("fixed_frame", "map"))
         self.explore_odom_frame = str(mapping_frames.get("odom_frame", "odom"))
-        self.explore_control_frame = self.explore_odom_frame
+        self.explore_base_frame = str(mapping_frames.get("base_frame", "base_link"))
+        control_frame = explore_cfg.get("control_frame")
+        if control_frame:
+            self.explore_control_frame = str(control_frame)
+        else:
+            # Match goal selector / Foxglove map frame; avoids map->odom bearing drift.
+            self.explore_control_frame = self.explore_map_frame
         self.explore_tf_cache_ttl_sec = float(
             explore_cfg.get("tf_cache_ttl_sec", 0.25)
         )
@@ -405,6 +428,7 @@ class SharedNavSemanticExplore(Node):
         if self.semantic_explore_enabled:
             self.get_logger().info(
                 f"semantic_explore enabled hint={self.explore_hint_topic} planner={self.planner_mode} "
+                f"follow_planned_path={self.follow_planned_path} "
                 f"goal_frame={self.explore_map_frame} control_frame={self.explore_control_frame} "
                 f"tf_buffer={'ok' if self.tf_buffer is not None else 'missing'}"
             )
@@ -715,6 +739,21 @@ class SharedNavSemanticExplore(Node):
         return self._transform_xy_to_control(goal_xy[0], goal_xy[1], source_frame)
 
     def _robot_control_pose(self) -> Optional[Tuple[float, float, float]]:
+        if self.tf_buffer is not None and self.explore_base_frame:
+            transform = self._lookup_frame_transform(
+                self.explore_control_frame, self.explore_base_frame
+            )
+            if transform is not None:
+                x, y = transform.apply(0.0, 0.0)
+                yaw = math.atan2(transform.sin_yaw, transform.cos_yaw)
+                return x, y, yaw
+
+        if self.explore_control_frame != self.explore_odom_frame:
+            self._explore_geometry_error = (
+                f"map_pose_unavailable:{self.explore_control_frame}<-{self.explore_base_frame}"
+            )
+            return None
+
         if self.latest_odom_xy is None or self.latest_odom_yaw is None:
             return None
         if (
@@ -739,7 +778,9 @@ class SharedNavSemanticExplore(Node):
         self._explore_geometry_error = ""
 
         final_dist = self._final_goal_distance(hint)
-        raw_path = self.active_planned_path or self._planned_path_points(hint)
+        raw_path = [] if not self.follow_planned_path else (
+            self.active_planned_path or self._planned_path_points(hint)
+        )
         use_path = bool(raw_path) and (
             self._hint_has_planned_path(hint) or bool(self.active_planned_path)
         )
@@ -770,8 +811,17 @@ class SharedNavSemanticExplore(Node):
         if goal_xy is not None:
             gx, gy = goal_xy
             bearing = self._normalize_angle(math.atan2(gy - ry, gx - rx) - ryaw)
+            self.active_path_waypoint_idx = -1
             self._explore_geometry_trusted = True
             return bearing, final_dist
+
+        hint_bearing = hint.get("goal_bearing_rad")
+        hint_dist = hint.get("goal_distance_m")
+        if hint_bearing is not None and hint_dist is not None:
+            self.active_path_waypoint_idx = -1
+            self._explore_geometry_trusted = True
+            self._explore_geometry_error = "hint_bearing_fallback"
+            return float(hint_bearing), float(hint_dist)
 
         self._explore_geometry_error = self._explore_tf_last_error or "goal_transform_failed"
         return float(hint.get("goal_bearing_rad", 0.0)), 999.0
@@ -782,8 +832,17 @@ class SharedNavSemanticExplore(Node):
         if isinstance(goal_pose, (list, tuple)):
             self.explore_last_reject_goal_pose = list(goal_pose)
         cand_id = str(hint.get("candidate_id", ""))
-        if cand_id:
+        if reason == "arrived_but_no_target" and cand_id:
+            # Short blacklist so we don't immediately re-adopt the same nearby frontier.
+            ttl = min(self.explore_blacklist_ttl_sec, 45.0)
+            if self.explore_blacklist_on_arrived:
+                ttl = self.explore_blacklist_ttl_sec
+            self.rejected_candidate_ids[cand_id] = now + ttl
+        blacklist = reason != "arrived_but_no_target" or self.explore_blacklist_on_arrived
+        if cand_id and blacklist:
             self.rejected_candidate_ids[cand_id] = now + self.explore_blacklist_ttl_sec
+            self.last_explore_candidate_id = cand_id
+        elif cand_id:
             self.last_explore_candidate_id = cand_id
         self.failed_explore_goals.append(
             {
@@ -802,6 +861,9 @@ class SharedNavSemanticExplore(Node):
         self.explore_burst_start_xy = None
         self.explore_goal_traveled_m = 0.0
         self._clear_active_planned_path()
+        if reason in ("arrived_but_no_target", "goal_timeout"):
+            self.search_mem.search_turn_locked_until = 0.0
+            self.search_mem.search_mode = "init"
 
     def command_from_explore_hint(self, now: float) -> Optional[Tuple[ServoCommand, str]]:
         hint = self._locked_explore_hint(now)
@@ -849,7 +911,14 @@ class SharedNavSemanticExplore(Node):
                 ):
                     self._clear_active_planned_path()
         elif self.active_explore_goal is None:
-            return None
+            if self.latest_explore_hint and self.valid_explore_hint(now):
+                fresh = self.latest_explore_hint
+                self._begin_explore_goal(now)
+                self.active_explore_goal = dict(fresh)
+                if self._hint_has_planned_path(fresh):
+                    self._set_active_planned_path(fresh)
+            else:
+                return None
 
         active = self.active_explore_goal or hint
         distance = float(active.get("goal_distance_m", 999.0))
@@ -867,7 +936,10 @@ class SharedNavSemanticExplore(Node):
         if not self._explore_geometry_trusted:
             return ServoCommand(vx=0.0, wz=0.0), "semantic_explore_tf_wait"
 
-        if distance < self.explore_goal_reached_radius_m:
+        if (
+            distance < self.explore_goal_reached_radius_m
+            and self.explore_goal_traveled_m >= self.explore_min_travel_before_reach_m
+        ):
             if not self.observe_update_active:
                 self.observe_update_active = True
                 self.observe_update_start = now
@@ -1015,6 +1087,7 @@ class SharedNavSemanticExplore(Node):
             and self.explore_target_visible_interrupt
             and self.target_ok(target)
             and self.fsm.state in (NavState.SEARCH, NavState.LOST_RECOVERY)
+            and self.active_explore_goal is not None
         ):
             self.active_explore_goal = None
             self.observe_update_active = False
@@ -1045,8 +1118,8 @@ class SharedNavSemanticExplore(Node):
             # In-place align should not blacklist the explore goal when front
             # clearance is near stop_distance (~0.42m indoors).
             if reject_on_blocked and result.reason == "blocked":
-                if self.explore_phase in ("EXPLORE_ALIGN", "EXPLORE_BURST_PAUSE"):
-                    reject_on_blocked = False
+                # Near-field blocked during align/step is common indoors; retreat, don't blacklist.
+                reject_on_blocked = False
             if reject_on_blocked:
                 self._reject_candidate(self.active_explore_goal, now, "blocked")
         if self.target_ok(target):
@@ -1215,6 +1288,15 @@ class SharedNavSemanticExplore(Node):
 
     def resolve_search_spin_cmd(self, now: float) -> Tuple[ServoCommand, str]:
         def pick() -> Tuple[float, str]:
+            # Semantic explore: never spin toward stale YOLO memory (major spin-loop source).
+            if self.semantic_explore_enabled:
+                turn_dir, side = self.pick_clearance_turn()
+                return turn_dir, f"lidar_clearance_{side}"
+            if (
+                self.loss_age(now) >= self.explore_search_prefer_lidar_after_sec
+            ):
+                turn_dir, side = self.pick_clearance_turn()
+                return turn_dir, f"lidar_clearance_{side}"
             if self.search_mem.last_target_ex is not None:
                 return self.pick_memory_turn()
             turn_dir, side = self.pick_clearance_turn()
@@ -1278,10 +1360,20 @@ class SharedNavSemanticExplore(Node):
                     return explore_cmd
                 hint = self.latest_explore_hint or {}
                 hint_age = now - float(self.latest_explore_hint_time or 0.0)
+                if self.valid_explore_hint(now):
+                    return ServoCommand(), "semantic_explore_waiting_adopt"
                 if hint_age < 4.0 and str(hint.get("mode", "")) == "none":
                     return ServoCommand(), "semantic_explore_waiting_candidate"
             return self.resolve_search_cmd(now)
         if state == NavState.CANDIDATE_LOCK:
+            if (
+                self.semantic_explore_enabled
+                and not self.explore_target_visible_interrupt
+                and (self.active_explore_goal is not None or self.valid_explore_hint(now))
+            ):
+                explore_cmd = self.command_from_explore_hint(now)
+                if explore_cmd is not None:
+                    return explore_cmd
             if self.target_ok(target):
                 lidar_dist = self.effective_lidar_distance(target)
                 result = self.servo.compute_cmd(target.to_dict())
@@ -1289,6 +1381,14 @@ class SharedNavSemanticExplore(Node):
                 return cmd, f"candidate_{result.state.lower()}"
             return ServoCommand(), "candidate_lock_stop"
         if state == NavState.TRACK:
+            if (
+                self.semantic_explore_enabled
+                and not self.explore_target_visible_interrupt
+                and (self.active_explore_goal is not None or self.valid_explore_hint(now))
+            ):
+                explore_cmd = self.command_from_explore_hint(now)
+                if explore_cmd is not None:
+                    return explore_cmd
             lidar_dist = self.effective_lidar_distance(target)
             if not self.target_ok(target):
                 if self.loss_age(now) <= self.lost_target_servo_sec and self.target_ok(self.last_good_target):
@@ -1512,6 +1612,46 @@ class SharedNavSemanticExplore(Node):
         }
         self.point_pub.publish(String(data=json.dumps(data, ensure_ascii=False)))
 
+    def _build_action_explanation(self, mode: str, reason: str, safety: Dict[str, Any]) -> str:
+        """Generate human-readable explanation for Foxglove display."""
+        parts: list[str] = []
+        if mode:
+            parts.append(f"mode={mode}")
+        if reason:
+            parts.append(f"reason={reason}")
+
+        safety_reason = str(safety.get("safety_reason", ""))
+        if safety_reason and safety_reason != "pass_through":
+            parts.append(f"safety={safety_reason}")
+
+        if self.blocked_retreat_active:
+            parts.append("blocked_retreat_active")
+
+        if self.explore_phase and self.explore_phase != "EXPLORE_SELECT":
+            parts.append(f"explore_phase={self.explore_phase}")
+
+        if self.search_mem.search_mode and self.search_mem.search_mode != "init":
+            parts.append(f"search_mode={self.search_mem.search_mode}")
+
+        if self.desired_cmd.linear.x != 0 or self.desired_cmd.angular.z != 0:
+            vx = float(self.desired_cmd.linear.x)
+            wz = float(self.desired_cmd.angular.z)
+            action = []
+            if abs(vx) > 0.01:
+                action.append(f"vx={vx:+.3f}")
+            if abs(wz) > 0.01:
+                action.append(f"wz={wz:+.3f}")
+            if action:
+                parts.append("cmd=" + ",".join(action))
+        else:
+            parts.append("cmd=stop")
+
+        front = safety.get("front_min_distance")
+        if front is not None:
+            parts.append(f"front={front:.2f}m")
+
+        return " | ".join(parts)
+
     def publish_state(self, mode: str, from_control: bool = False, **kwargs: Any) -> None:
         result = self.last_fsm_result
         target = self.last_target
@@ -1523,6 +1663,7 @@ class SharedNavSemanticExplore(Node):
             safety["target_distance"] = target_dist
         if lidar_dist is not None:
             safety["front_distance"] = lidar_dist
+        action_explanation = self._build_action_explanation(mode, self.desired_reason, safety)
         data = {
             "step": self.step_count,
             "mode": mode,
@@ -1536,6 +1677,7 @@ class SharedNavSemanticExplore(Node):
             "target_distance": target_dist,
             "front_distance": lidar_dist,
             "desired_reason": self.desired_reason,
+            "action_explanation": action_explanation,
             "raw_cmd_vx": float(self.desired_cmd.linear.x),
             "raw_cmd_wz": float(self.desired_cmd.angular.z),
             "safe_cmd_vx": float(self.last_safety.get("safe_cmd_vx", self.last_cmd.linear.x)),

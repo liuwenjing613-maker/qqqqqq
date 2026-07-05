@@ -132,10 +132,10 @@ controller_server:
       max_linear_accel: 0.10
       max_linear_decel: 0.10
       # Longer lookahead: track a farther carrot, fewer micro heading corrections.
-      lookahead_dist: 0.8
-      min_lookahead_dist: 0.8
-      max_lookahead_dist: 0.8
-      lookahead_time: 2.5
+      lookahead_dist: 0.6
+      min_lookahead_dist: 0.6
+      max_lookahead_dist: 0.6
+      lookahead_time: 1.5
       rotate_to_heading_angular_vel: 0.05
       transform_tolerance: 0.25
       use_velocity_scaled_lookahead_dist: false
@@ -150,7 +150,7 @@ controller_server:
       use_rotate_to_heading: false
       rotate_to_heading_min_angle: 0.5
       allow_reversing: false
-      max_angular_accel: 0.02
+      max_angular_accel: 0.03
       max_robot_pose_search_dist: 8.0
       use_interpolation: true
       use_collision_detection: false

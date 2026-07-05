@@ -121,9 +121,19 @@ wait_tf_stable() {
 }
 
 wait_tf_before_explore_nodes() {
-  wait_tf_stable map odom 60 2 || return 1
-  wait_tf_stable odom base_link 60 2 || return 1
-  wait_tf_stable map base_link 60 3 || return 1
+  echo "[semantic_explore] waiting for TF chain (map<-odom, odom<-base_link, map<-base_link)..."
+  if python3 "$PROJECT_DIR/scripts/nav/wait_tf_chain.py" \
+    --map-frame map \
+    --odom-frame odom \
+    --base-frame base_link \
+    --timeout 90 \
+    --need-ok 3 \
+    --poll 0.5; then
+    return 0
+  fi
+  echo "[semantic_explore] ERROR: TF chain not ready; check logs/slam_live/slam_toolbox.log"
+  echo "[semantic_explore] HINT: ensure slam_toolbox is running and /scan_filtered is publishing"
+  return 1
 }
 
 wait_map_topic_ready() {
@@ -355,6 +365,9 @@ echo "  tail -f logs/semantic_explore_selector.log"
 echo "  ros2 topic echo /explore_goal_hint"
 echo "  ros2 topic echo /explore_state_json"
 echo "  ros2 topic echo /nav_state"
+echo "  Foxglove Raw Messages panels (detailed behavior reasons):"
+echo "    RawMessages!nav_action  (action_explanation: why turning/walking/stopping)"
+echo "    RawMessages!nav_state   (full state snapshot)"
 echo "  Foxglove 3D topics:"
 echo "    /explore_candidate_goals  (yellow/orange/green candidates + rank labels)"
 echo "    /explore_selected_goal    (green selected + look-at arrow)"
