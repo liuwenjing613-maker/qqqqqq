@@ -256,6 +256,7 @@ class ExploreGoalSelector(Node):
         self._last_direction_reason: str = "initializing"
         self._last_valid_candidates: List[ExploreCandidate] = []
         self._last_scan_robot_yaw: float = 0.0  # yaw of robot when last scan was received (map frame)
+        self._logged_waiting_for_spawn = False
 
         self.visited_goal_reject_radius_m = float(memory_cfg.get("visited_goal_reject_radius_m", 0.45))
         self.visited_goal_penalty_radius_m = float(memory_cfg.get("visited_goal_penalty_radius_m", 0.90))
