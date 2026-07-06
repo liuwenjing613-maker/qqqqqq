@@ -176,6 +176,27 @@ class VisitedGoal:
     expire_time: float
 
 
+@dataclass
+class SectorState:
+    sector_id: str
+    status: str = "pending"  # pending / active / exhausted
+    no_candidate_cycles: int = 0
+    visited_goals: int = 0
+    failed_goals: int = 0
+    last_update_time: float = 0.0
+
+
+@dataclass
+class SectorScanStats:
+    sector_id: str
+    free_angle_sum_rad: float = 0.0
+    # List of (start_angle, end_angle) relative to spawn_yaw, in [-pi, pi]
+    free_angle_intervals: List[Tuple[float, float]] = field(default_factory=list)
+    min_range: float = 999.0
+    max_range: float = 0.0
+    last_update_time: float = 0.0
+
+
 class ExploreGoalSelector(Node):
     def __init__(self, cfg: Dict[str, Any], instruction: str):
         super().__init__("explore_goal_selector")
@@ -203,6 +224,38 @@ class ExploreGoalSelector(Node):
         self.trajectory_points: List[TrajectoryPoint] = []
 
         self.visited_goals: List[VisitedGoal] = []
+
+        # Direction lock configuration (plan section 8.3)
+        self.direction_cfg = direction_cfg
+        self.direction_lock_enabled = bool(direction_cfg.get("enabled", False))
+        self.direction_sector_count = max(4, int(direction_cfg.get("sector_count", 8)))
+
+        self.direction_initial_policy = str(direction_cfg.get("initial_policy", "best_front_sector"))
+        self.direction_front_angle_rad = math.radians(float(direction_cfg.get("front_sector_angle_deg", 90.0)))
+
+        self.direction_hard_filter = bool(direction_cfg.get("hard_filter_active_sector", True))
+        self.direction_allow_neighbor = bool(direction_cfg.get("allow_neighbor_when_empty", True))
+        self.direction_neighbor_order = str(direction_cfg.get("neighbor_order", "alternating"))
+
+        self.active_sector_bonus = float(direction_cfg.get("active_sector_bonus", 0.35))
+        self.inactive_sector_penalty = float(direction_cfg.get("inactive_sector_penalty", 0.45))
+
+        self.exhaust_no_candidate_cycles = int(direction_cfg.get("exhaust_no_candidate_cycles", 3))
+        self.exhaust_failed_goals = int(direction_cfg.get("exhaust_failed_goals", 2))
+        self.exhaust_visited_goals = int(direction_cfg.get("exhaust_visited_goals", 3))
+        self.reset_when_all_exhausted = bool(direction_cfg.get("reset_when_all_exhausted", True))
+
+        self.sector_states: Dict[str, SectorState] = {
+            f"sector_{i:02d}": SectorState(sector_id=f"sector_{i:02d}")
+            for i in range(self.direction_sector_count)
+        }
+        self.sector_scan_stats: Dict[str, SectorScanStats] = {
+            f"sector_{i:02d}": SectorScanStats(sector_id=f"sector_{i:02d}")
+            for i in range(self.direction_sector_count)
+        }
+        self._last_direction_reason: str = "initializing"
+        self._last_valid_candidates: List[ExploreCandidate] = []
+        self._last_scan_robot_yaw: float = 0.0  # yaw of robot when last scan was received (map frame)
 
         self.visited_goal_reject_radius_m = float(memory_cfg.get("visited_goal_reject_radius_m", 0.45))
         self.visited_goal_penalty_radius_m = float(memory_cfg.get("visited_goal_penalty_radius_m", 0.90))
@@ -453,6 +506,10 @@ class ExploreGoalSelector(Node):
         )
         self.get_logger().info(f"explore_goal_selector ready instruction={self.instruction!r}")
         self._log_startup_config()
+        # 每次启动都保证是干净状态：轨迹、visited goal、黑名单全部清空
+        self.get_logger().info(
+            "EXPLORE MEMORY RESET: trajectory_points, visited_goals, blacklist_regions cleared on fresh start"
+        )
 
     def _log_startup_config(self) -> None:
         self.get_logger().info(
@@ -591,6 +648,10 @@ class ExploreGoalSelector(Node):
 
     def _on_scan(self, msg: LaserScan) -> None:
         self.latest_scan = msg
+        # Record the robot yaw at scan time for accurate angle bucketing relative to spawn
+        if self.robot_pose is not None:
+            self._last_scan_robot_yaw = self.robot_pose[2]
+        self._update_sector_scan_stats()
 
     def _on_bbox(self, msg: String) -> None:
         try:
@@ -664,6 +725,16 @@ class ExploreGoalSelector(Node):
             gp = state.get("explore_last_reject_goal_pose")
             if isinstance(gp, (list, tuple)) and len(gp) >= 2:
                 goal_xy = (float(gp[0]), float(gp[1]))
+        # Update sector stats for direction lock (plan 8.8)
+        if goal_xy is not None:
+            sector_id = self._sector_id_for_goal(goal_xy)
+            st = self.sector_states.get(sector_id)
+            if st is not None:
+                st.last_update_time = now
+                if reject_reason == "arrived_but_no_target":
+                    st.visited_goals += 1
+                else:
+                    st.failed_goals += 1
         self._blacklist_nav_failure(cand_id, goal_xy, reject_reason or "nav_observe_failed", now)
 
     def _note_robot_pose(self, pose: Tuple[float, float, float]) -> None:
@@ -717,9 +788,133 @@ class ExploreGoalSelector(Node):
 
         self.pub_explore_trajectory.publish(msg)
 
+    def _travel_cost_penalty(self, dist: float) -> float:
+        """Direction lock 开启时大幅降低距离惩罚，让机器人愿意去更远的点（plan 方向锁增强）"""
+        if getattr(self, "direction_lock_enabled", False):
+            # 15m 才到 0.15，强烈鼓励在 active sector 内探索更远
+            return min(0.15, dist / 15.0)
+        return min(0.5, dist / 4.0)
+
     def _publish_memory_markers(self) -> None:
         if not self.explore_memory_enabled:
             return
+        if self.spawn_pose is None:
+            return
+
+        stamp = self.get_clock().now().to_msg()
+        arr = MarkerArray()
+        sx, sy, syaw = self.spawn_pose
+        r = 4.0  # visualization radius for sectors
+
+        # Draw 8 sector boundaries and wedges
+        for i in range(self.direction_sector_count):
+            angle_start = syaw + (i - 0.5) * (2 * math.pi / self.direction_sector_count)
+            angle_end = syaw + (i + 0.5) * (2 * math.pi / self.direction_sector_count)
+            sector_id = f"sector_{i:02d}"
+            is_active = (sector_id == self.active_area_id)
+
+            # Boundary lines (two rays from spawn)
+            for ang, ns_suffix in [(angle_start, "start"), (angle_end, "end")]:
+                m = Marker()
+                m.header.stamp = stamp
+                m.header.frame_id = self._fixed_frame
+                m.ns = f"sector_bounds_{i}"
+                m.id = 0 if ns_suffix == "start" else 1
+                m.type = Marker.LINE_STRIP
+                m.action = Marker.ADD
+                m.scale.x = 0.08 if is_active else 0.03
+                m.color.r = 1.0 if is_active else 0.2
+                m.color.g = 0.8 if is_active else 0.6
+                m.color.b = 0.0
+                m.color.a = 0.9
+                p0 = Point(x=sx, y=sy, z=0.05)
+                p1 = Point(x=sx + r * math.cos(ang), y=sy + r * math.sin(ang), z=0.05)
+                m.points = [p0, p1]
+                arr.markers.append(m)
+
+            # Text label at sector center
+            mid_ang = (angle_start + angle_end) / 2
+            label = Marker()
+            label.header.stamp = stamp
+            label.header.frame_id = self._fixed_frame
+            label.ns = "sector_labels"
+            label.id = i
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.scale.z = 0.35
+            label.color.r = 1.0 if is_active else 0.9
+            label.color.g = 1.0 if is_active else 0.9
+            label.color.b = 0.0 if is_active else 0.9
+            label.color.a = 1.0
+            label.pose.position.x = sx + (r * 0.65) * math.cos(mid_ang)
+            label.pose.position.y = sy + (r * 0.65) * math.sin(mid_ang)
+            label.pose.position.z = 0.3
+            label.text = f"{sector_id}\n{'ACTIVE' if is_active else ''}"
+            arr.markers.append(label)
+
+        # Draw visited goals as small red spheres
+        for j, vg in enumerate(self.visited_goals[-20:]):
+            m = Marker()
+            m.header.stamp = stamp
+            m.header.frame_id = self._fixed_frame
+            m.ns = "visited_goals"
+            m.id = j
+            m.type = Marker.SPHERE
+            m.action = Marker.ADD
+            m.scale.x = m.scale.y = m.scale.z = 0.25
+            m.color.r = 1.0
+            m.color.g = 0.2
+            m.color.b = 0.2
+            m.color.a = 0.8
+            m.pose.position.x = vg.x
+            m.pose.position.y = vg.y
+            m.pose.position.z = 0.1
+            arr.markers.append(m)
+
+        # Decision reason text (visible in Foxglove)
+        if self.active_area_id:
+            reason_marker = Marker()
+            reason_marker.header.stamp = stamp
+            reason_marker.header.frame_id = self._fixed_frame
+            reason_marker.ns = "direction_decision"
+            reason_marker.id = 0
+            reason_marker.type = Marker.TEXT_VIEW_FACING
+            reason_marker.action = Marker.ADD
+            reason_marker.scale.z = 0.4
+            reason_marker.color.r = 1.0
+            reason_marker.color.g = 1.0
+            reason_marker.color.b = 0.0
+            reason_marker.color.a = 1.0
+            reason_marker.pose.position.x = sx
+            reason_marker.pose.position.y = sy + 5.5
+            reason_marker.pose.position.z = 1.2
+
+            active_st = self.sector_states.get(self.active_area_id)
+            exhaust_info = ""
+            if active_st:
+                exhaust_info = (
+                    f"no_cand={active_st.no_candidate_cycles}/{self.exhaust_no_candidate_cycles} "
+                    f"failed={active_st.failed_goals}/{self.exhaust_failed_goals} "
+                    f"visited={active_st.visited_goals}/{self.exhaust_visited_goals}"
+                )
+            # 显示最终选中点的扇区和距离，便于立即发现 active 与实际选择不一致的问题
+            sel_sector = self._selected.sector_id if self._selected else "none"
+            sel_dist = ""
+            if self._selected and self.robot_pose:
+                d = math.hypot(
+                    self._selected.goal_xy[0] - self.robot_pose[0],
+                    self._selected.goal_xy[1] - self.robot_pose[1],
+                )
+                sel_dist = f" | sel_dist={d:.1f}m"
+            reason_marker.text = (
+                f"ACTIVE: {self.active_area_id}\n"
+                f"REASON: {self._last_direction_reason}\n"
+                f"EXHAUST: {exhaust_info}\n"
+                f"SELECTED: {sel_sector}{sel_dist}"
+            )
+            arr.markers.append(reason_marker)
+
+        self.pub_memory_markers.publish(arr)
 
     def _update_robot_pose(self) -> bool:
         if self.latest_map is not None:
@@ -781,23 +976,351 @@ class ExploreGoalSelector(Node):
         dx = goal_xy[0] - sx
         dy = goal_xy[1] - sy
         ang = self._normalize_angle(math.atan2(dy, dx) - syaw)
-        sector_count = 8
+        sector_count = max(4, int(getattr(self, "direction_sector_count", 8)))
         idx = int(((ang + math.pi) / (2.0 * math.pi)) * sector_count) % sector_count
         return f"sector_{idx:02d}"
+
+    # --- Direction lock helpers (plan sections 8.5-8.8) ---
+
+    def _sector_index(self, sector_id: str) -> int:
+        try:
+            return int(str(sector_id).split("_")[-1])
+        except Exception:
+            return 0
+
+    def _candidate_bearing_from_robot(self, cand: ExploreCandidate) -> float:
+        if self.robot_pose is None:
+            return 0.0
+        rx, ry, ryaw = self.robot_pose
+        gx, gy = cand.goal_xy
+        return self._normalize_angle(math.atan2(gy - ry, gx - rx) - ryaw)
+
+    def _candidate_bearing_from_spawn(self, cand: ExploreCandidate) -> float:
+        """相对于出生点朝向的角度（与 sector_id / 可视化基准完全一致）"""
+        if self.spawn_pose is None:
+            return 0.0
+        sx, sy, syaw = self.spawn_pose
+        gx, gy = cand.goal_xy
+        return self._normalize_angle(math.atan2(gy - sy, gx - sx) - syaw)
+
+    def _neighbor_sector_order(self, center_sector_id: str) -> List[str]:
+        n = max(4, int(self.direction_sector_count))
+        center = self._sector_index(center_sector_id) % n
+        offsets = [0]
+        for k in range(1, n // 2 + 1):
+            offsets.append(k)
+            offsets.append(-k)
+        out: List[str] = []
+        for off in offsets:
+            idx = (center + off) % n
+            sid = f"sector_{idx:02d}"
+            if sid not in out:
+                out.append(sid)
+        return out
+
+    def _update_sector_scan_stats(self) -> None:
+        """将 LaserScan 按 spawn_pose yaw 划分到 8 个 sector，计算动态可通行角度区间。
+        必须使用 spawn 坐标系作为基准，否则 sector_id 和 scan 区间对不上。
+        """
+        if self.latest_scan is None or self.spawn_pose is None:
+            return
+        ranges = [float(r) for r in self.latest_scan.ranges]
+        if not ranges:
+            return
+        angle_min = float(self.latest_scan.angle_min)
+        angle_inc = float(self.latest_scan.angle_increment)
+        robot_yaw = self._last_scan_robot_yaw
+        sx, sy, syaw = self.spawn_pose
+        n = self.direction_sector_count
+        sector_width = 2.0 * math.pi / n
+
+        # 重置
+        for stats in self.sector_scan_stats.values():
+            stats.free_angle_sum_rad = 0.0
+            stats.free_angle_intervals = []
+            stats.min_range = 999.0
+            stats.max_range = 0.0
+
+        current_interval_start: Optional[float] = None
+        current_sector_id: Optional[str] = None
+
+        for i, r in enumerate(ranges):
+            if math.isinf(r) or r <= 0.05:
+                # 障碍或无效 → 结束当前区间
+                if current_interval_start is not None and current_sector_id is not None:
+                    end_ang = self._normalize_angle(robot_yaw + angle_min + (i-1) * angle_inc - syaw)
+                    self._close_free_interval(current_sector_id, current_interval_start, end_ang)
+                    current_interval_start = None
+                continue
+
+            # 该激光射线的绝对 yaw（map 系）
+            ray_abs_yaw = robot_yaw + angle_min + i * angle_inc
+            # 相对 spawn yaw 的角度（与 sector_id 计算基准一致）
+            ang_rel_spawn = self._normalize_angle(ray_abs_yaw - syaw)
+            # 属于哪个 sector
+            idx = int(((ang_rel_spawn + math.pi) / (2.0 * math.pi)) * n) % n
+            sid = f"sector_{idx:02d}"
+
+            stats = self.sector_scan_stats[sid]
+            stats.min_range = min(stats.min_range, r)
+            stats.max_range = max(stats.max_range, r)
+
+            if current_sector_id != sid:
+                # 切换 sector，结束上一个区间
+                if current_interval_start is not None and current_sector_id is not None:
+                    end_ang = self._normalize_angle(robot_yaw + angle_min + (i-1) * angle_inc - syaw)
+                    self._close_free_interval(current_sector_id, current_interval_start, end_ang)
+                current_sector_id = sid
+                current_interval_start = ang_rel_spawn
+
+        # 收尾最后一个区间
+        if current_interval_start is not None and current_sector_id is not None:
+            end_ang = self._normalize_angle(robot_yaw + angle_min + (len(ranges)-1) * angle_inc - syaw)
+            self._close_free_interval(current_sector_id, current_interval_start, end_ang)
+
+        for stats in self.sector_scan_stats.values():
+            stats.last_update_time = time.time()
+
+    def _close_free_interval(self, sid: str, start_ang: float, end_ang: float) -> None:
+        """把当前连续可通行区间加入对应 sector（简化版，end_ang 由调用者计算）"""
+        stats = self.sector_scan_stats.get(sid)
+        if stats is None:
+            return
+        if stats.free_angle_intervals and abs(stats.free_angle_intervals[-1][1] - start_ang) < 0.08:
+            prev_start, _ = stats.free_angle_intervals.pop()
+            stats.free_angle_intervals.append((prev_start, end_ang))
+        else:
+            stats.free_angle_intervals.append((start_ang, end_ang))
+        stats.free_angle_sum_rad += abs(self._normalize_angle(end_ang - start_ang))
+
+    def _sector_is_exhausted(self, sector_id: str) -> bool:
+        st = self.sector_states.get(sector_id)
+        if st is None:
+            return False
+
+        # 基础 exhaustion 条件
+        base_exhausted = (
+            st.no_candidate_cycles >= self.exhaust_no_candidate_cycles
+            or st.failed_goals >= self.exhaust_failed_goals
+            or st.visited_goals >= self.exhaust_visited_goals
+        )
+        if base_exhausted:
+            return True
+
+        # 新增：scan 可通行面积连续很小也触发 exhaustion（用户需求：探索差不多了再换区域）
+        scan_stats = self.sector_scan_stats.get(sector_id)
+        if scan_stats is not None:
+            # 如果 free_angle_sum_rad 连续多次低于阈值（例如 < 0.3 rad ≈ 17°），也认为该方向快被堵死
+            if scan_stats.free_angle_sum_rad < 0.3 and st.no_candidate_cycles >= 2:
+                return True
+
+        return False
+
+    def _goal_in_active_scan_free_area(self, goal_xy: Tuple[float, float]) -> bool:
+        """严格检查目标点是否落在 active sector 当前可通行的动态角度区间内（含边缘）。
+        坐标基准必须与 sector_id 一致（spawn yaw）。
+        """
+        if not self.direction_lock_enabled or self.active_area_id is None:
+            return True
+        if self.spawn_pose is None or not self.sector_scan_stats:
+            return True  # 无 scan 数据时放行（避免启动时全拒）
+
+        stats = self.sector_scan_stats.get(self.active_area_id)
+        if stats is None or not stats.free_angle_intervals:
+            # 没有 scan 信息时，允许（后续 exhaustion 会处理）
+            return True
+
+        sx, sy, syaw = self.spawn_pose
+        dx = goal_xy[0] - sx
+        dy = goal_xy[1] - sy
+        ang = self._normalize_angle(math.atan2(dy, dx) - syaw)
+
+        def _angle_in_interval(a: float, start: float, end: float) -> bool:
+            # 正确处理可能跨越 ±pi 的区间
+            if start <= end:
+                return start - 0.09 <= a <= end + 0.09
+            else:
+                # 区间跨越 -pi/pi，例如 [-2.8, 2.8]
+                return a >= start - 0.09 or a <= end + 0.09
+
+        for (a0, a1) in stats.free_angle_intervals:
+            if _angle_in_interval(ang, a0, a1):
+                return True
+        return False
+
+    def _choose_initial_active_sector(self, valid_candidates: List[ExploreCandidate]) -> Optional[str]:
+        if not valid_candidates:
+            return None
+        grouped: Dict[str, List[ExploreCandidate]] = {}
+        for c in valid_candidates:
+            grouped.setdefault(c.sector_id, []).append(c)
+
+        def group_score(cands: List[ExploreCandidate]) -> float:
+            return max((c.total_score for c in cands), default=0.0) + 0.15 * len(cands)
+
+        if self.direction_initial_policy == "best_front_sector":
+            # 根本修复：使用 spawn_pose yaw 计算 bearing，与 sector_id 和可视化完全一致
+            # 之前用 robot_pose yaw 导致 active sector 和实际点在视觉上“相反”
+            front_grouped: Dict[str, List[ExploreCandidate]] = {}
+            for c in valid_candidates:
+                bearing = abs(self._candidate_bearing_from_spawn(c))
+                if bearing <= self.direction_front_angle_rad:
+                    front_grouped.setdefault(c.sector_id, []).append(c)
+            if front_grouped:
+                return max(front_grouped.items(), key=lambda kv: group_score(kv[1]))[0]
+
+        return max(grouped.items(), key=lambda kv: group_score(kv[1]))[0]
+
+    def _mark_sector_active(self, sector_id: str, reason: str) -> None:
+        for st in self.sector_states.values():
+            st.status = "pending"
+        st = self.sector_states.get(sector_id)
+        if st:
+            st.status = "active"
+            st.last_update_time = time.time()
+        self.active_area_id = sector_id
+        self._last_direction_reason = reason
+
+    def _switch_to_next_sector(self, exhausted_sector: str, reason: str) -> Optional[str]:
+        order = self._neighbor_sector_order(exhausted_sector)
+        for sid in order:
+            if sid == exhausted_sector:
+                continue
+            if not self._sector_is_exhausted(sid):
+                self._mark_sector_active(sid, f"switch from {exhausted_sector}: {reason}")
+                return sid
+        if self.reset_when_all_exhausted:
+            for st in self.sector_states.values():
+                st.no_candidate_cycles = 0
+                st.failed_goals = 0
+                st.visited_goals = 0
+                st.status = "pending"
+            best = self._choose_initial_active_sector(self._last_valid_candidates or [])
+            if best:
+                self._mark_sector_active(best, "reset_all_exhausted: new round")
+                return best
+        return None
 
     def _filter_by_active_area(
         self, valid_candidates: List[ExploreCandidate]
     ) -> List[ExploreCandidate]:
-        # Area lock runs only after projection/validation (valid_candidates).
         if not valid_candidates:
+            if self.direction_lock_enabled and self.active_area_id:
+                st = self.sector_states.get(self.active_area_id)
+                if st:
+                    st.no_candidate_cycles += 1
+                    st.last_update_time = time.time()
             return []
-        if self.active_area_id is None:
-            self.active_area_id = valid_candidates[0].sector_id
-        in_area = [c for c in valid_candidates if c.sector_id == self.active_area_id]
-        if in_area:
-            return in_area
-        self.active_area_id = valid_candidates[0].sector_id
-        return [c for c in valid_candidates if c.sector_id == self.active_area_id]
+
+        if not self.direction_lock_enabled:
+            return valid_candidates
+
+        # 清理 exhausted 状态：如果全部 exhausted，就重新来一轮
+        non_empty_sector_ids = sorted({c.sector_id for c in valid_candidates})
+        available_sector_ids = [
+            sid for sid in non_empty_sector_ids
+            if not self._sector_is_exhausted(sid)
+        ]
+
+        if not available_sector_ids and self.reset_when_all_exhausted:
+            for st in self.sector_states.values():
+                st.status = "pending"
+                st.no_candidate_cycles = 0
+                st.failed_goals = 0
+                st.visited_goals = 0
+            available_sector_ids = non_empty_sector_ids
+            self.active_area_id = None
+
+        # 初始化 active sector
+        # 根本性修复：初始选择只基于 candidate（保证至少有可去点），scan 只负责后续过滤 + exhaustion
+        if self.active_area_id is None or self._sector_is_exhausted(self.active_area_id):
+            initial = self._choose_initial_active_sector([
+                c for c in valid_candidates
+                if c.sector_id in available_sector_ids
+            ])
+            # 兜底：如果 candidate 逻辑返回 None，强制从有候选点的 sector 中选一个（保证 active_area_id 永远有值）
+            if initial is None and available_sector_ids:
+                # 选候选点最多的 sector
+                count_per_sector = {}
+                for c in valid_candidates:
+                    if c.sector_id in available_sector_ids:
+                        count_per_sector[c.sector_id] = count_per_sector.get(c.sector_id, 0) + 1
+                if count_per_sector:
+                    initial = max(count_per_sector.items(), key=lambda kv: kv[1])[0]
+            self.active_area_id = initial
+            if initial and initial in self.sector_states:
+                self.sector_states[initial].status = "active"
+                self.sector_states[initial].no_candidate_cycles = 0
+                self._last_direction_reason = "candidate_score"
+
+        # active sector 内有候选，直接返回（必须经过 scan 可通行过滤）
+        # 用户明确要求：每次必须在选定的区域中选出来一个，不满足 scan 过滤也要选出分数最高的那个
+        in_active = [c for c in valid_candidates if c.sector_id == self.active_area_id]
+        filtered = [c for c in in_active if self._goal_in_active_scan_free_area(c.goal_xy)]
+        if filtered:
+            st = self.sector_states.get(self.active_area_id)
+            if st:
+                st.status = "active"
+                st.no_candidate_cycles = 0
+                st.last_update_time = time.time()
+            return filtered
+
+        # 严格过滤后为空，但必须从已选区域中选出一个（取分数最高的）
+        if in_active:
+            best = max(in_active, key=lambda c: c.total_score)
+            self._last_direction_reason = (self._last_direction_reason or "") + " (forced highest in active, scan filter bypassed)"
+            st = self.sector_states.get(self.active_area_id)
+            if st:
+                st.status = "active"
+                st.no_candidate_cycles = 0
+                st.last_update_time = time.time()
+            return [best]
+
+        # active sector 没候选
+        if self.active_area_id:
+            st = self.sector_states.get(self.active_area_id)
+            if st:
+                st.no_candidate_cycles += 1
+                st.last_update_time = time.time()
+
+        # 没达到耗尽阈值时，继续等待当前 sector
+        if self.active_area_id and not self._sector_is_exhausted(self.active_area_id):
+            return []
+
+        # 切换到邻近 sector
+        if self.direction_allow_neighbor and self.active_area_id:
+            for sid in self._neighbor_sector_order(self.active_area_id):
+                if sid not in available_sector_ids:
+                    continue
+                cands = [c for c in valid_candidates if c.sector_id == sid]
+                if cands:
+                    old = self.active_area_id
+                    if old in self.sector_states:
+                        self.sector_states[old].status = "exhausted"
+                    self.active_area_id = sid
+                    self.sector_states[sid].status = "active"
+                    self.sector_states[sid].no_candidate_cycles = 0
+                    return cands
+
+        # 兜底：选当前有效 sector 中最高分那个（必须调用 mark 以保持 reason 一致）
+        fallback = self._choose_initial_active_sector(valid_candidates)
+        if fallback:
+            self._mark_sector_active(fallback, "fallback: active sector had no valid candidates after projection")
+        else:
+            self.active_area_id = fallback
+        result = [c for c in valid_candidates if c.sector_id == fallback]
+        # 严格 scan 可通行过滤（动态边缘）—— 兜底路径也必须保证
+        filtered = [c for c in result if self._goal_in_active_scan_free_area(c.goal_xy)]
+        if filtered:
+            return filtered
+
+        # 用户要求：即使 scan 过滤后为空，也必须从已选区域（fallback）中选出分数最高的那个
+        if result:
+            best = max(result, key=lambda c: c.total_score)
+            self._last_direction_reason = (self._last_direction_reason or "") + " (forced highest in fallback sector)"
+            return [best]
+
+        return []
 
     def _pose_matches_map(self) -> bool:
         if self.latest_map is None:
@@ -1438,6 +1961,12 @@ class ExploreGoalSelector(Node):
         if not ranked:
             return None, []
         best = ranked[0]
+        # 最终一致性保证：如果 best 的扇区与当前 active 不同，立即更新 active + reason
+        if best.sector_id != self.active_area_id:
+            self._mark_sector_active(
+                best.sector_id,
+                f"final pick outside active (was {self.active_area_id})"
+            )
         path = best.source.get("planned_path")
         if not isinstance(path, list) or len(path) < 2:
             path = self._plan_candidate_path(robot_xy, best.goal_xy)
@@ -1510,7 +2039,7 @@ class ExploreGoalSelector(Node):
                 reachability=0.85,
                 novelty=0.35 if is_edge else 0.2,
                 safety_margin=min(1.0, self._front_clearance() / 2.0),
-                travel_cost_penalty=min(0.5, dist / 4.0),
+                travel_cost_penalty=self._travel_cost_penalty(dist),
                 reason="scanned frontier edge" if is_edge else "scanned known-free cell",
                 source={"type": "scanned_free", "is_frontier_edge": is_edge},
                 target_class=target_class,
@@ -1614,7 +2143,7 @@ class ExploreGoalSelector(Node):
                     reachability=0.75,
                     novelty=self._novelty_at(gx, gy),
                     safety_margin=min(1.0, self._front_clearance() / 2.0),
-                    travel_cost_penalty=min(0.5, dist / 4.0),
+                    travel_cost_penalty=self._travel_cost_penalty(dist),
                     reason=f"near {cls}, partially unexplored",
                     source={"type": "semantic_context", "landmark_id": lm.get("landmark_id"), "class_name": cls},
                     target_class=target_class,
@@ -1646,7 +2175,7 @@ class ExploreGoalSelector(Node):
                     reachability=fg.reachability,
                     novelty=0.7,
                     safety_margin=min(1.0, fg.reachability),
-                    travel_cost_penalty=min(0.5, fg.distance_m / 4.0),
+                    travel_cost_penalty=self._travel_cost_penalty(fg.distance_m),
                     reason="frontier scanned edge",
                     source={"type": "frontier", "frontier_id": fg.frontier_id},
                     target_class=target_class,

@@ -132,13 +132,15 @@ controller_server:
       max_linear_accel: 0.10
       max_linear_decel: 0.10
       # Longer lookahead: track a farther carrot, fewer micro heading corrections.
-      lookahead_dist: 0.6
-      min_lookahead_dist: 0.6
-      max_lookahead_dist: 0.6
+      lookahead_dist: 0.5
+      min_lookahead_dist: 0.45
+      max_lookahead_dist: 0.55
       lookahead_time: 1.5
-      rotate_to_heading_angular_vel: 0.05
+      # In-place align before follow; 0.12 rad/s (~7 deg/s), above PWM wz deadband (~0.05).
+      # Walking turns still use RPP + max_angular_accel; not governed by this param.
+      rotate_to_heading_angular_vel: 0.12
       transform_tolerance: 0.25
-      use_velocity_scaled_lookahead_dist: false
+      use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.04
       approach_velocity_scaling_dist: 0.45
       use_regulated_linear_velocity_scaling: true
@@ -146,11 +148,11 @@ controller_server:
       use_cost_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 1.20
       regulated_linear_scaling_min_speed: 0.04
-      # Prefer arc-forward over stop-and-spin; only large heading error would spin.
-      use_rotate_to_heading: false
-      rotate_to_heading_min_angle: 0.5
+      # Stop-and-spin only when badly misaligned (~69 deg); mid-path still arc-follow.
+      use_rotate_to_heading: true
+      rotate_to_heading_min_angle: 1.2
       allow_reversing: false
-      max_angular_accel: 0.03
+      max_angular_accel: 0.04
       max_robot_pose_search_dist: 8.0
       use_interpolation: true
       use_collision_detection: false

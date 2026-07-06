@@ -8,7 +8,7 @@ export CHASSIS_DEV="${CHASSIS_DEV:-/dev/rosmaster}"
 # ===== 底盘控制参数（影响真实小车运动）=====
 # mvp_tune 实测：vx>=0.055 才能稳定克服静摩擦；建图手柄对齐 run_joy_mapping_all
 export CHASSIS_MAX_VX=0.06
-export CHASSIS_MAX_WZ=0.24
+export CHASSIS_MAX_WZ=0.20
 
 export CHASSIS_VX_PWM_DEADBAND=10.0
 export CHASSIS_VX_PWM_GAIN=200.0
