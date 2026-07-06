@@ -800,6 +800,11 @@ class ExploreGoalSelector(Node):
         if not self.explore_memory_enabled:
             return
         if self.spawn_pose is None:
+            if not self._logged_waiting_for_spawn:
+                self.get_logger().info(
+                    "等待首次稳定位姿以设置 spawn_pose，方向锁扇区可视化及区域选择暂不启动"
+                )
+                self._logged_waiting_for_spawn = True
             return
 
         stamp = self.get_clock().now().to_msg()
