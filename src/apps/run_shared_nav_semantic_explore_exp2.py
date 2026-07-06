@@ -344,6 +344,9 @@ class SharedNavSemanticExplore(Node):
         self.explore_last_reject_reason: Optional[str] = None
         self.explore_last_reject_goal_pose: Optional[list] = None
         self.blocked_retreat_active = False
+        self.get_logger().info(
+            "EXPLORE NAV RESET: rejected_candidate_ids, failed_explore_goals, explore_last_reject_reason cleared on fresh start"
+        )
         self.blocked_retreat_start_time = 0.0
         self.blocked_retreat_clearance_target = 0.0
         self.active_planned_path: list = []

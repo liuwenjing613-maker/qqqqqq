@@ -219,11 +219,16 @@ ensure_foxglove_bridge() {
 }
 
 stop_explore_nav_nodes() {
+  # 必须同时杀原版和 exp2 版，否则旧 exp2 进程的 trajectory_points / visited_goals 会残留
   pkill -TERM -f run_shared_nav_semantic_explore.py 2>/dev/null || true
   pkill -TERM -f explore_goal_selector.py 2>/dev/null || true
+  pkill -TERM -f run_shared_nav_semantic_explore_exp2.py 2>/dev/null || true
+  pkill -TERM -f explore_goal_selector_exp2.py 2>/dev/null || true
   sleep 1
   pkill -KILL -f run_shared_nav_semantic_explore.py 2>/dev/null || true
   pkill -KILL -f explore_goal_selector.py 2>/dev/null || true
+  pkill -KILL -f run_shared_nav_semantic_explore_exp2.py 2>/dev/null || true
+  pkill -KILL -f explore_goal_selector_exp2.py 2>/dev/null || true
   sleep 0.5
 }
 
