@@ -276,7 +276,8 @@ class SharedNavSemanticExplore(Node):
         birth_raw = section(cfg, "birth_scan")
         self.semantic_explore_enabled = bool(explore_cfg.get("enabled", False))
         self.explore_hint_topic = str(explore_cfg.get("hint_topic", "/explore_goal_hint"))
-        self.explore_max_hint_age_sec = float(explore_cfg.get("max_hint_age_sec", 1.5))
+        # 默认 5.0s（selector 3Hz + TF/调度延迟容忍），yaml 中可配置为 15.0
+        self.explore_max_hint_age_sec = float(explore_cfg.get("max_hint_age_sec", 5.0))
         self.explore_min_hint_score = float(explore_cfg.get("min_hint_score", 0.42))
         self.explore_goal_hold_sec = float(explore_cfg.get("goal_hold_sec", 8.0))
         self.explore_goal_switch_max_distance_m = float(
@@ -537,8 +538,14 @@ class SharedNavSemanticExplore(Node):
         try:
             self.latest_explore_hint = json.loads(msg.data)
             self.latest_explore_hint_time = time.time()
+            cid = str(self.latest_explore_hint.get("candidate_id", "")) if isinstance(self.latest_explore_hint, dict) else ""
+            score = float(self.latest_explore_hint.get("score", 0.0)) if isinstance(self.latest_explore_hint, dict) else 0.0
+            self.get_logger().debug(
+                f"explore_hint received: id={cid} score={score:.3f} mode={self.latest_explore_hint.get('mode', '') if isinstance(self.latest_explore_hint, dict) else ''}"
+            )
         except json.JSONDecodeError:
             self.latest_explore_hint = None
+            self.get_logger().debug("explore_hint JSON decode error")
 
     def _prune_rejected_candidates(self, now: float) -> None:
         expired = [k for k, t in self.rejected_candidate_ids.items() if t <= now]
@@ -559,22 +566,40 @@ class SharedNavSemanticExplore(Node):
         return bool(hint.get("astar_fallback"))
 
     def _hint_is_actionable(self, hint: Dict[str, Any], now: float) -> bool:
-        if str(hint.get("mode", "")) == "none":
+        cid = str(hint.get("candidate_id", ""))
+        mode = str(hint.get("mode", ""))
+        score = float(hint.get("score", 0.0))
+
+        if mode == "none":
+            self.get_logger().debug(f"explore_hint rejected: id={cid} reason=mode_none")
             return False
+
         if self.require_astar_path and not self._hint_has_planned_path(hint):
             if not self._hint_uses_bearing_fallback(hint):
+                self.get_logger().debug(f"explore_hint rejected: id={cid} reason=no_astar_path_and_no_fallback")
                 return False
             if self._goal_pose_xy(hint) is None:
+                self.get_logger().debug(f"explore_hint rejected: id={cid} reason=no_goal_pose_xy")
                 return False
+
         age = now - float(self.latest_explore_hint_time or 0.0)
         if age > self.explore_max_hint_age_sec:
+            self.get_logger().debug(
+                f"explore_hint rejected: id={cid} reason=age_exceeded age={age:.2f}s > max={self.explore_max_hint_age_sec:.1f}s"
+            )
             return False
-        if float(hint.get("score", 0.0)) < self.explore_min_hint_score:
+
+        if score < self.explore_min_hint_score:
+            self.get_logger().debug(
+                f"explore_hint rejected: id={cid} reason=low_score score={score:.3f} < min={self.explore_min_hint_score:.2f}"
+            )
             return False
-        cand_id = str(hint.get("candidate_id", ""))
-        if cand_id and cand_id in self.rejected_candidate_ids:
-            if self.rejected_candidate_ids[cand_id] > now:
+
+        if cid and cid in self.rejected_candidate_ids:
+            if self.rejected_candidate_ids[cid] > now:
+                self.get_logger().debug(f"explore_hint rejected: id={cid} reason=blacklisted")
                 return False
+
         return True
 
     def valid_explore_hint(self, now: float) -> bool:
