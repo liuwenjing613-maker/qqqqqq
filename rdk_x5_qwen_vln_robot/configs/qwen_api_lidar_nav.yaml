@@ -1,0 +1,153 @@
+# Qwen cloud API + LiDAR navigation
+# Visual servo / chassis / lidar aligned with:
+#   /root/rdk_x5_vln_robot/configs/nav_yolo_lidar_semantic_explore.yaml
+
+image_topic: /image_raw
+scan_topic: /scan
+cmd_topic: /cmd_vel
+qwen_json_topic: /qwen_api_json
+state_topic: /qwen_api_state
+
+image_width: 1280
+image_height: 720
+
+# --- Qwen API ---
+# Min seconds between photo uploads (measured from submit time, not API return).
+qwen:
+  qwen_interval_sec: 1.0
+  qwen_timeout_sec: 15.0
+  qwen_resize_width: 640
+  qwen_jpeg_quality: 80
+  qwen_max_tokens: 80
+  min_confidence: 0.60
+  timeout_backoff_sec: 8.0
+
+# Flat aliases (backward compat for scripts reading top-level keys)
+qwen_interval_sec: 1.0
+qwen_timeout_sec: 15.0
+qwen_resize_width: 640
+qwen_jpeg_quality: 80
+qwen_max_tokens: 80
+min_confidence: 0.60
+timeout_backoff_sec: 8.0
+
+# --- Rates (same as semantic_explore) ---
+rates:
+  control_hz: 20
+  decision_hz: 5
+
+max_steps: 0
+lost_scan_max: 8
+save_debug: true
+debug_dir: data/images/qwen_api_lidar_debug
+# After each Qwen result: keep latest.jpg + prev.jpg only.
+
+# --- LiDAR (freshness + safety) ---
+require_lidar: true
+max_scan_age_sec: 1.0
+lidar_wait_backoff_sec: 1.0
+lidar_min_range: 0.08
+lidar_max_range: 12.0
+lidar_front_deg: 30.0
+lidar_target_window_deg: 8.0
+camera_hfov_deg: 70.0
+camera_lidar_yaw_offset_deg: -170.0
+
+# --- Point visual servo ---
+# center_deadband: 中间距（归一化）。|ex| 在此范围内只直走 wz=0，超出才开始转向。
+#   1280 宽时 0.10 ≈ 目标 u 在 512~768（±128px）内保持直行。
+# straight_hysteresis: 滞后，防止在边界附近因 Qwen 抖动来回切换直走/转向。
+servo:
+  creep_mode: true
+  creep_vx: 0.04
+  # creep/scan wz: 0.04 ≈ wz_pwm 14.8 (M1 movable minimum; YOLO track often uses kp*ex << 0.05)
+  creep_wz: 0.00005
+  creep_turn_vx: 0.0
+  max_vx: 0.06
+  steer_vx: 0.06
+  max_wz: 0.05
+  kp_turn: 0.1
+  center_deadband: 0.10
+  straight_hysteresis: 0.02
+  turn_only_threshold: 0.4
+  turn_only_vx: 0.0
+  cmd_wz_deadband: 0.006
+  allow_track_without_depth: true
+  forward_vx_no_depth: 0.06
+
+# Flat aliases (backward compat)
+kp_turn: 0.1
+max_wz: 0.05
+center_deadband: 0.10
+straight_hysteresis: 0.02
+cmd_wz_deadband: 0.006
+turn_only_threshold: 0.4
+max_vx: 0.06
+steer_vx: 0.06
+turn_only_vx: 0.0
+
+# --- Safety distances (safety block) ---
+emergency_stop_distance: 0.28
+hard_stop_distance: 0.42
+slow_distance: 0.65
+
+# --- Arrive: stop when LiDAR range to Qwen target direction <= distance ---
+success:
+  lidar_target_arrive_distance: 0.6
+  arrive_frames: 2
+
+lidar_target_arrive_distance: 0.6
+arrive_frames: 2
+
+# --- Lost-target search ---
+search:
+  scan_wz: 0.04
+  lost_stop_sec: 1.2
+  scan_flip_interval_sec: 5.0
+  search_resume_sec: 3.0
+
+scan_wz: 0.04
+
+# --- Target u smoothing ---
+target_filter:
+  enabled: true
+  smooth_alpha: 0.25
+  max_u_jump_px: 280
+  hold_last_target_sec: 1.2
+
+# --- cmd_vel hold while waiting for cloud API ---
+cmd_hold:
+  active_hold_sec: 1.0
+  stale_slow_sec: 2.0
+  stale_vx_scale: 1.0
+  stale_wz_scale: 1.0
+  stale_max_wz: 0.04
+  stop_after_sec: 2.0
+
+# --- Camera gimbal (before chassis bridge; shares M1 serial port) ---
+gimbal:
+  enabled: true
+  port: /dev/rosmaster
+  yaw_id: 2
+  pitch_id: 3
+  yaw_angle: 80
+  pitch_angle: 40
+
+# --- Chassis bridge (identical to semantic_explore chassis block) ---
+chassis:
+  bridge: pwm
+  port: /dev/rosmaster
+  max_vx: 0.07
+  max_wz: 0.05
+  watchdog_timeout: 0.5
+  control_rate_hz: 20.0
+  wheel_layout: fl-rl-fr-rr
+  motor_signs: "1,1,1,1"
+  vx_pwm_deadband: 6.0
+  wz_pwm_deadband: 10.0
+  pwm_max: 40.0
+  vx_pwm_gain: 220.0
+  wz_pwm_gain: 120.0
+  pwm_smooth_alpha: 0.35
+  max_pwm_delta: 10.0
+  debug: true

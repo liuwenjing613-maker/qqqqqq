@@ -248,6 +248,13 @@ main() {
   cd "$PROJECT_DIR"
   mkdir -p "$LOG_DIR" "$STATE_DIR"
 
+  if pgrep -f "run_nav2_foxglove_click_goal.sh|run_nav2_saved_map.sh|controller_server" >/dev/null 2>&1; then
+    log "preflight: stopping stale click-nav processes..."
+    cleanup_click_nav_stack_processes "CLICK_NAV2" log
+    timeout 5 ros2 daemon stop >/dev/null 2>&1 || true
+    sleep 2
+  fi
+
   log "PROJECT_DIR=$PROJECT_DIR"
   log "MAP_YAML=$MAP_YAML"
   log "GOAL_POINT_TOPIC=$GOAL_POINT_TOPIC"
