@@ -1,0 +1,124 @@
+[INFO] [1783316543.876763220] [foxglove_click_goal_bridge]: Foxglove click goal bridge started.
+[INFO] [1783316543.903064085] [foxglove_click_goal_bridge]: Listening point click topic:
+[INFO] [1783316543.910241916] [foxglove_click_goal_bridge]:   /foxglove_goal_point
+[INFO] [1783316543.914394831] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PointStamped
+[INFO] [1783316543.929808825] [foxglove_click_goal_bridge]: Listening pose click topic:
+[INFO] [1783316543.949401984] [foxglove_click_goal_bridge]:   /foxglove_goal_pose
+[INFO] [1783316543.959707271] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PoseStamped
+[INFO] [1783316543.963827145] [foxglove_click_goal_bridge]: Recommended Foxglove tool:
+[INFO] [1783316543.983684595] [foxglove_click_goal_bridge]:   Publish -> 2D point -> /foxglove_goal_point
+[INFO] [1783316543.987422552] [foxglove_click_goal_bridge]: Visual path topic: /foxglove_click_planned_path
+[INFO] [1783316543.991214009] [foxglove_click_goal_bridge]: Visual trajectory: /foxglove_click_trajectory_dots (red dots)
+[INFO] [1783316544.002050588] [foxglove_click_goal_bridge]: Visual start marker: /foxglove_click_start_marker
+[INFO] [1783316544.035753950] [foxglove_click_goal_bridge]: Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label
+[INFO] [1783316544.059690941] [foxglove_click_goal_bridge]: Foxglove map viz: /foxglove_map_viz (use in 3D panel instead of /map)
+[INFO] [1783316546.572314628] [foxglove_click_goal_bridge]: >>> CLICK READY: Foxglove 可以单击地图白色区域发送导航目标。 Topic=/foxglove_goal_point, frame=map。 若 scan 与地图错位，请先用 /initialpose 校正。导航进行中会忽略新点击。
+[INFO] [1783316567.102281486] [foxglove_click_goal_bridge]: Transformed click from base_link (-0.568, 3.293) -> map (0.282, -0.068)
+[INFO] [1783316567.131010350] [foxglove_click_goal_bridge]: Goal marker published at (0.282, -0.068) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783316567.138033056] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=base_link, x=0.282, y=-0.068, goal_yaw=-2.141
+[INFO] [1783316567.142724971] [foxglove_click_goal_bridge]: Goal footprint OK: (0.282, -0.068) -> ok (radius=0.11m)
+[INFO] [1783316567.171554876] [foxglove_click_goal_bridge]: [1] Start marker at (-2.798, 1.230) -> /foxglove_click_start_marker
+[INFO] [1783316567.186626120] [foxglove_click_goal_bridge]: Goal marker published at (0.282, -0.068) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783316567.191868826] [foxglove_click_goal_bridge]: [1] Accepted goal: frame=map, x=0.282, y=-0.068
+[INFO] [1783316567.346268474] [foxglove_click_goal_bridge]: [1] Planned path published: 136 poses -> /foxglove_click_planned_path
+[INFO] [1783316567.372976214] [foxglove_click_goal_bridge]: [1] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783316567.396262580] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.000 m, recoveries=0
+[INFO] [1783316569.401951879] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316571.402973805] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316573.420926807] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316575.424189106] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316577.426368198] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316579.427621581] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316581.440466168] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316583.469558831] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316585.475158920] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316587.495476837] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316589.501996551] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316591.519660176] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316593.523523140] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316595.534716852] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316597.537584608] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316599.537234864] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316601.538431329] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316603.557555245] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316605.564447248] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316607.579901540] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316609.580629212] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316611.597324545] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=0
+[INFO] [1783316613.599999716] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316615.617093673] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316617.634859629] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316619.634628051] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316621.642319636] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316623.662027341] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316625.667696927] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316627.680724509] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316629.697927298] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316631.723566167] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316633.720743921] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316635.775329403] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316637.763704120] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316639.851571671] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316641.864651836] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316643.987449248] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316645.966763967] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316647.978933840] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316649.974315094] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316652.008872832] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316654.024143453] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316656.039557990] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316658.059930442] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=4
+[INFO] [1783316660.079087061] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316662.075445480] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316664.078777021] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316666.101721846] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316668.101981096] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316670.123605005] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316672.135506292] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316674.142053164] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316676.162908531] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316678.179330982] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316680.182134772] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316682.199081639] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316684.207542135] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316686.212037716] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316688.220465794] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316690.233256954] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316692.244580323] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316694.288870345] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316696.276308682] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316698.281032636] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316700.290655296] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316702.305401079] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=5
+[INFO] [1783316704.331196983] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316706.339724352] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316708.377119334] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316710.384574327] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316712.386748615] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316714.405218687] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316716.417992386] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316718.425123171] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316720.437201537] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316722.463400772] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316724.483832509] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316726.488153711] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316728.507750782] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316730.527011769] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316732.542540007] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316734.535973796] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316736.536647290] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316738.542954407] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316740.559580185] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316742.567676718] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316744.579573331] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316746.583330907] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316748.598534686] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=8
+[INFO] [1783316750.602303427] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[INFO] [1783316752.616004123] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[INFO] [1783316754.624835987] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[INFO] [1783316756.644262972] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[INFO] [1783316758.662469415] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[INFO] [1783316760.679137484] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[INFO] [1783316762.689693305] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[INFO] [1783316764.694492628] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.401 m, recoveries=9
+[ERROR] [1783316765.520992214] [foxglove_click_goal_bridge]: [1] Navigation ended. status=6, error_code=None, error_msg=

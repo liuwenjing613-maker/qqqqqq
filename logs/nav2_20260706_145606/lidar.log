@@ -1,0 +1,9 @@
+============================================================
+ Start YDLidar T-MINI PLUS driver -> /scan
+============================================================
+PARAMS_FILE = /root/rdk_x5_vln_robot/lidar/config/tmini_plus.yaml
+LOG_FILE    = /root/rdk_x5_vln_robot/logs/lidar_driver.log
+============================================================
+Driver started. Check:
+  ros2 topic hz /scan
+  tail -f /root/rdk_x5_vln_robot/logs/lidar_driver.log

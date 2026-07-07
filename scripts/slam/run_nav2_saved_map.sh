@@ -19,9 +19,9 @@ if [ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]; then
   # shellcheck source=scripts/lib/slam_calibrated_env.sh
   source "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh"
 fi
-# Nav-only PWM smoothing: gentler motor steps, no change to odom signs/offsets.
-export CHASSIS_PWM_SMOOTH_ALPHA="${CHASSIS_NAV_PWM_SMOOTH_ALPHA:-0.50}"
-export CHASSIS_MAX_PWM_DELTA="${CHASSIS_NAV_MAX_PWM_DELTA:-2.0}"
+# Nav-only PWM smoothing: more responsive steps for closed-loop follow.
+export CHASSIS_PWM_SMOOTH_ALPHA="${CHASSIS_NAV_PWM_SMOOTH_ALPHA:-0.35}"
+export CHASSIS_MAX_PWM_DELTA="${CHASSIS_NAV_MAX_PWM_DELTA:-3.0}"
 # Use calibrated PWM (mvp_tune breakaway ~0.055 m/s at vx_db=10 gain=200).
 export CHASSIS_NAV_VX_PWM_DEADBAND="${CHASSIS_NAV_VX_PWM_DEADBAND:-${CHASSIS_VX_PWM_DEADBAND:-10.0}}"
 export CHASSIS_NAV_WZ_PWM_DEADBAND="${CHASSIS_NAV_WZ_PWM_DEADBAND:-${CHASSIS_WZ_PWM_DEADBAND:-10.0}}"
@@ -157,11 +157,15 @@ if slam_toolbox_running; then
 fi
 
 if [ "$NAV2_STOP_CONFLICTS" = "1" ]; then
-  log "NAV2_STOP_CONFLICTS=1: stopping mapping/joystick conflicts..."
+  log "NAV2_STOP_CONFLICTS=1: stopping mapping/joystick/semantic conflicts..."
   pkill -f "teleop_twist_joy|joy_node|run_joy_mapping_all|run_joy_mapping_calibrated|run_corridor_mapping_live_foxglove|run_slam_calibrated" 2>/dev/null || true
+  pkill -f "run_shared_nav_semantic_explore|semantic_mapper_node|explore_goal_selector" 2>/dev/null || true
+  sleep 1
+  pkill -9 -f "run_shared_nav_semantic_explore|semantic_mapper_node|explore_goal_selector" 2>/dev/null || true
   cleanup_stale_nav2_processes
   cleanup_lidar_slam_nav_processes
   cleanup_ros2_fastrtps_shm
+  timeout 5 ros2 daemon stop >/dev/null 2>&1 || true
   sleep 2
 else
   log "NAV2_STOP_CONFLICTS=0: skip external pkill; reuse sensors when already running"

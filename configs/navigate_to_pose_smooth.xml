@@ -1,14 +1,18 @@
 <!--
-  Smooth click-nav BT: replan + follow path.
+  Smooth click-nav BT: replan + smooth + follow path.
+  ComputePathToPose -> SmoothPath (simple_smoother) -> FollowPath.
   Recovery = clear costmaps + short wait only (no spin/backup wobble).
 -->
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
     <RecoveryNode number_of_retries="2" name="NavigateRecovery">
       <PipelineSequence name="NavigateWithReplanning">
-        <RateController hz="0.05">
+        <RateController hz="0.02">
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
-            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            <Sequence name="ComputeAndSmoothPath">
+              <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+              <SmoothPath unsmoothed_path="{path}" smoothed_path="{path}" smoother_id="simple_smoother" max_smoothing_duration="2.0"/>
+            </Sequence>
             <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
           </RecoveryNode>
         </RateController>
@@ -22,7 +26,7 @@
         <Sequence name="ClearingActions">
           <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
           <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
-          <Wait wait_duration="1"/>
+          <Wait wait_duration="0.5"/>
         </Sequence>
       </ReactiveFallback>
     </RecoveryNode>

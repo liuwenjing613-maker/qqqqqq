@@ -975,16 +975,25 @@ class ExploreGoalSelector(Node):
     def _normalize_angle(angle: float) -> float:
         return (angle + math.pi) % (2 * math.pi) - math.pi
 
+    def _sector_id_from_relative_angle(self, rel_angle: float) -> str:
+        """sector_00 centered at rel_angle=0, sector index increases CCW.
+        This matches the marker visualization (sector_00 = forward).
+        """
+        sector_count = max(4, int(getattr(self, "direction_sector_count", 8)))
+        width = 2.0 * math.pi / sector_count
+        a = self._normalize_angle(rel_angle)
+        # 加半个扇区宽度，使 rel=0 落到 sector_00
+        idx = int(math.floor((a + 0.5 * width) / width)) % sector_count
+        return f"sector_{idx:02d}"
+
     def _sector_id_for_goal(self, goal_xy: Tuple[float, float]) -> str:
         if self.spawn_pose is None:
             return "sector_unknown"
         sx, sy, syaw = self.spawn_pose
         dx = goal_xy[0] - sx
         dy = goal_xy[1] - sy
-        ang = self._normalize_angle(math.atan2(dy, dx) - syaw)
-        sector_count = max(4, int(getattr(self, "direction_sector_count", 8)))
-        idx = int(((ang + math.pi) / (2.0 * math.pi)) * sector_count) % sector_count
-        return f"sector_{idx:02d}"
+        rel = self._normalize_angle(math.atan2(dy, dx) - syaw)
+        return self._sector_id_from_relative_angle(rel)
 
     # --- Direction lock helpers (plan sections 8.5-8.8) ---
 

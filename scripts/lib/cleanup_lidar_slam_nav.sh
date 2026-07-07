@@ -163,7 +163,11 @@ cleanup_click_nav_stack_processes() {
     "local_costmap" \
     "slam_toolbox" \
     "teleop_twist_joy" \
-    "joy_node"
+    "joy_node" \
+    "run_shared_nav_semantic_explore" \
+    "semantic_mapper_node" \
+    "explore_goal_selector" \
+    "nav2_s_diagnose.py"
   do
     if pgrep -f "$pattern" >/dev/null 2>&1; then
       "$log_fn" "[$label] stop: $pattern"

@@ -1,0 +1,43 @@
+[INFO] [1783320390.745290914] [foxglove_click_goal_bridge]: Foxglove click goal bridge started.
+[INFO] [1783320390.749035329] [foxglove_click_goal_bridge]: Listening point click topic:
+[INFO] [1783320390.755123200] [foxglove_click_goal_bridge]:   /foxglove_goal_point
+[INFO] [1783320390.759507365] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PointStamped
+[INFO] [1783320390.763593529] [foxglove_click_goal_bridge]: Listening pose click topic:
+[INFO] [1783320390.768579818] [foxglove_click_goal_bridge]:   /foxglove_goal_pose
+[INFO] [1783320390.780815936] [foxglove_click_goal_bridge]:   geometry_msgs/msg/PoseStamped
+[INFO] [1783320390.785241851] [foxglove_click_goal_bridge]: Recommended Foxglove tool:
+[INFO] [1783320390.791716430] [foxglove_click_goal_bridge]:   Publish -> 2D point -> /foxglove_goal_point
+[INFO] [1783320390.800063801] [foxglove_click_goal_bridge]: Visual path topic: /foxglove_click_planned_path
+[INFO] [1783320390.804968840] [foxglove_click_goal_bridge]: Visual trajectory: /foxglove_click_trajectory_dots (red dots)
+[INFO] [1783320390.810928420] [foxglove_click_goal_bridge]: Visual start marker: /foxglove_click_start_marker
+[INFO] [1783320390.815529917] [foxglove_click_goal_bridge]: Visual goal marker: /foxglove_click_goal_marker + /foxglove_click_goal_label
+[INFO] [1783320390.820483831] [foxglove_click_goal_bridge]: Foxglove map viz: /foxglove_map_viz (use in 3D panel instead of /map)
+[INFO] [1783320391.533264777] [foxglove_click_goal_bridge]: >>> CLICK READY: Foxglove 可以单击地图白色区域发送导航目标。 Topic=/foxglove_goal_point, frame=map。 若 scan 与地图错位，请先用 /initialpose 校正。导航进行中会忽略新点击。
+[INFO] [1783320410.308185689] [foxglove_click_goal_bridge]: Transformed click from base_link (2.390, 1.063) -> map (0.205, -0.401)
+[INFO] [1783320410.341453379] [foxglove_click_goal_bridge]: Goal marker published at (0.205, -0.401) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783320410.349671333] [foxglove_click_goal_bridge]: Received Foxglove clicked point: frame_id=base_link, x=0.205, y=-0.401, goal_yaw=-0.312
+[INFO] [1783320410.354912830] [foxglove_click_goal_bridge]: Goal footprint OK: (0.205, -0.401) -> ok (radius=0.11m)
+[INFO] [1783320410.382993440] [foxglove_click_goal_bridge]: [1] Start marker at (-2.396, -0.678) -> /foxglove_click_start_marker
+[INFO] [1783320410.396709433] [foxglove_click_goal_bridge]: Goal marker published at (0.205, -0.401) -> /foxglove_click_goal_marker /foxglove_click_goal_label
+[INFO] [1783320410.401175389] [foxglove_click_goal_bridge]: [1] Accepted goal: frame=map, x=0.205, y=-0.401
+[INFO] [1783320410.531282652] [foxglove_click_goal_bridge]: [1] Planned path published: 122 poses -> /foxglove_click_planned_path
+[INFO] [1783320410.560791553] [foxglove_click_goal_bridge]: [1] NavigateToPose goal accepted. Robot should start planning/following.
+[INFO] [1783320410.573174254] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.000 m, recoveries=0
+[INFO] [1783320412.577525716] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=3.081 m, recoveries=0
+[INFO] [1783320414.583202429] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=2.768 m, recoveries=0
+[INFO] [1783320416.579973022] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=2.493 m, recoveries=0
+[INFO] [1783320418.585286154] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=2.243 m, recoveries=0
+[INFO] [1783320420.598204241] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=2.118 m, recoveries=0
+[INFO] [1783320422.605895332] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.939 m, recoveries=0
+[INFO] [1783320424.603105554] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.739 m, recoveries=0
+[INFO] [1783320426.618165060] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.640 m, recoveries=0
+[INFO] [1783320428.639940230] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.393 m, recoveries=0
+[INFO] [1783320430.637856872] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.243 m, recoveries=0
+[INFO] [1783320432.643541137] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.289 m, recoveries=0
+[INFO] [1783320434.662623103] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=1.039 m, recoveries=0
+[INFO] [1783320436.676579240] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.843 m, recoveries=0
+[INFO] [1783320438.678013885] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.618 m, recoveries=0
+[INFO] [1783320440.682390029] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.493 m, recoveries=0
+[INFO] [1783320442.704568540] [foxglove_click_goal_bridge]: [1] navigating: distance_remaining=0.293 m, recoveries=0
+[INFO] [1783320443.752205943] [foxglove_click_goal_bridge]: [1] Navigation succeeded. status=4
+[INFO] [1783320443.757639940] [foxglove_click_goal_bridge]: Navigation succeeded. Current pose will be updated by pose_memory_node.
