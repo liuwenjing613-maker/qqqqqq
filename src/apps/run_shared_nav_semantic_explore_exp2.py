@@ -215,7 +215,8 @@ class SharedNavSemanticExplore(Node):
             )
         )
 
-        self.scan_wz = float(search.get("scan_wz", 0.04))
+        self.scan_wz = float(search.get("scan_wz", 0.06))
+        self.scan_wz_with_vx = float(search.get("scan_wz_with_vx", 0.04))
         self.search_arc_vx = float(search.get("search_arc_vx", 0.02))
         self.pulse_sec = float(search.get("pulse_sec", 0.20))
         self.observe_sec = float(search.get("observe_sec", 0.60))
@@ -1307,7 +1308,9 @@ class SharedNavSemanticExplore(Node):
 
         turn_dir, mode = self.resolve_locked_turn(now, pick)
         vx = self._search_arc_vx()
-        return ServoCommand(vx=vx, wz=turn_dir * abs(self.scan_wz)), f"{mode}_scan"
+        # 单独自转用 0.06，有 vx 时用 0.04（用户需求）
+        wz_scale = self.scan_wz_with_vx if vx > 0.0 else self.scan_wz
+        return ServoCommand(vx=vx, wz=turn_dir * abs(wz_scale)), f"{mode}_scan"
 
     def _search_arc_vx(self) -> float:
         """Slow forward while turning during search; zero when too close to obstacles."""

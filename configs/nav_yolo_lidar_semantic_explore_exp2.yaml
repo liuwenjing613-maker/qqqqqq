@@ -151,7 +151,9 @@ safety:
     max_duration_sec: 5.0
     fsm_unblock_buffer_m: 0.02
 search:
-  scan_wz: 0.05
+  # 单独自转（无 vx）wz=0.06；有 vx 时 wz=0.04，避免边走边快速自转
+  scan_wz: 0.06
+  scan_wz_with_vx: 0.04
   search_arc_vx: 0.04
   pulse_sec: 0.35
   observe_sec: 0.1

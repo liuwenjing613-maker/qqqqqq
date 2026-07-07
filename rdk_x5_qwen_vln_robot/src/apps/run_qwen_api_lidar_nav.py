@@ -26,12 +26,12 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import String
 
-PROJECT_ROOT = os.path.expanduser("~/rdk_x5_qwen_vln_robot")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from src.vlm.qwen_dashscope_client import QwenDashScopeClient
-from src.perception.lidar_depth import LidarDepthEstimator
+from src.perception.lidar_depth import LidarDepthEstimator, fuse_target_distance, resolve_arrive_distance
 from src.control.qwen_lidar_point_servo import QwenLidarPointServo, clamp, turn_dir_from_ex
 
 DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "configs/qwen_api_lidar_nav.yaml")
@@ -52,6 +52,16 @@ _TRACK_HOLD_REASONS = frozenset({
     "FORWARD_STEER",
     "TURN_ONLY",
     "SEARCH_SCAN",
+    "INFERRED_FORWARD",
+    "INFERRED_FORWARD_STEER",
+    "INFERRED_TURN_ONLY",
+})
+
+_ANGLE_TRACK_REASONS = frozenset({
+    "FORWARD_STEER",
+    "TURN_ONLY",
+    "INFERRED_FORWARD_STEER",
+    "INFERRED_TURN_ONLY",
 })
 
 
@@ -93,6 +103,10 @@ class RunQwenApiLidarNav(Node):
         self.decision_hz = float(rates.get("decision_hz", 5.0))
         self.qwen_interval_sec = float(_nested_get(cfg, "qwen", "qwen_interval_sec", 1.0))
         self.timeout_backoff_sec = float(_nested_get(cfg, "qwen", "timeout_backoff_sec", 8.0))
+        self.qwen_default_mode = str(_nested_get(cfg, "qwen", "default_mode", "track")).strip().lower()
+        self.min_inferred_confidence = float(_nested_get(cfg, "qwen", "min_inferred_confidence", 0.20))
+        self.inferred_vx_scale = float(_nested_get(cfg, "qwen", "inferred_vx_scale", 0.85))
+        self.qwen_first_request_sent = False
         self.lidar_wait_backoff_sec = float(cfg.get("lidar_wait_backoff_sec", 1.0))
         self.scan_wz = float(_nested_get(cfg, "search", "scan_wz", cfg.get("scan_wz", 0.05)))
         self.lost_stop_sec = float(_nested_get(cfg, "search", "lost_stop_sec", 1.2))
@@ -112,7 +126,33 @@ class RunQwenApiLidarNav(Node):
         self.target_filter_enabled = bool(_nested_get(cfg, "target_filter", "enabled", False))
         self.target_smooth_alpha = float(_nested_get(cfg, "target_filter", "smooth_alpha", 0.25))
         self.max_u_jump_px = float(_nested_get(cfg, "target_filter", "max_u_jump_px", 280.0))
-        self.hold_last_target_sec = float(_nested_get(cfg, "target_filter", "hold_last_target_sec", 1.2))
+        self.hold_last_target_sec = float(_nested_get(cfg, "target_filter", "hold_last_target_sec", 3.0))
+        self.hold_max_miss_frames = int(_nested_get(cfg, "target_filter", "hold_max_miss_frames", 3))
+
+        self.target_dist_filter_enabled = bool(
+            _nested_get(cfg, "target_distance_filter", "enabled", True)
+        )
+        self.target_dist_smooth_alpha = float(
+            _nested_get(cfg, "target_distance_filter", "smooth_alpha", 0.35)
+        )
+        self.max_target_dist_jump_m = float(
+            _nested_get(cfg, "target_distance_filter", "max_jump_m", 1.5)
+        )
+        self.arrive_fuse_front_when_centered = bool(
+            _nested_get(cfg, "target_distance_filter", "fuse_front_when_centered", True)
+        )
+        self.arrive_fuse_min_always = bool(
+            _nested_get(cfg, "target_distance_filter", "fuse_min_always", True)
+        )
+        self.arrive_front_margin_m = float(
+            _nested_get(cfg, "target_distance_filter", "arrive_front_margin_m", 0.3)
+        )
+        self.arrive_ray_far_invalid_m = float(
+            _nested_get(cfg, "target_distance_filter", "arrive_ray_far_invalid_m", 3.0)
+        )
+        self.arrive_center_deadband = float(
+            _nested_get(cfg, "target_distance_filter", "fuse_center_deadband", _nested_get(cfg, "servo", "center_deadband", 0.10))
+        )
 
         self.active_hold_sec = float(_nested_get(cfg, "cmd_hold", "active_hold_sec", 0.35))
         self.stale_slow_sec = float(_nested_get(cfg, "cmd_hold", "stale_slow_sec", 0.9))
@@ -148,10 +188,15 @@ class RunQwenApiLidarNav(Node):
         self.last_fresh_cmd_time = 0.0
         self.success = False
         self.arrive_frame_count = 0
+        self.arrived_locked = False
 
         self.filtered_u: Optional[float] = None
         self.last_raw_u: Optional[float] = None
         self.last_target_ex: Optional[float] = None
+        self.last_target_seen_time: Optional[float] = None
+        self.last_held_target: Optional[Dict[str, Any]] = None
+        self.consecutive_miss_count = 0
+        self.filtered_target_distance: Optional[float] = None
 
         self.qwen = QwenDashScopeClient(
             timeout=float(_nested_get(cfg, "qwen", "qwen_timeout_sec", 15.0)),
@@ -167,6 +212,8 @@ class RunQwenApiLidarNav(Node):
             target_window_deg=float(cfg.get("lidar_target_window_deg", 6.0)),
             camera_hfov_deg=float(cfg.get("camera_hfov_deg", 70.0)),
             camera_lidar_yaw_offset_deg=float(cfg.get("camera_lidar_yaw_offset_deg", 0.0)),
+            target_distance_method=str(cfg.get("lidar_target_distance_method", "min")),
+            front_distance_method=str(cfg.get("lidar_front_distance_method", "min")),
         )
         self.servo = QwenLidarPointServo(
             image_width=self.image_width,
@@ -192,7 +239,19 @@ class RunQwenApiLidarNav(Node):
             hard_stop_distance=self.hard_stop_distance,
             slow_distance=float(cfg.get("slow_distance", 0.65)),
             arrive_distance=self.arrive_distance,
+            angle_servo_enabled=bool(_nested_get(cfg, "servo", "angle_servo_enabled", _nested_get(cfg, "angle_servo", "enabled", False))),
+            angle_gain=float(_nested_get(cfg, "angle_servo", "gain", 120.0)),
+            angle_power=float(_nested_get(cfg, "angle_servo", "power", 0.85)),
+            angle_max_turn_deg=float(_nested_get(cfg, "angle_servo", "max_turn_deg", 30.0)),
+            angle_turn_wz=float(_nested_get(cfg, "angle_servo", "turn_wz", 0.04)),
+            angle_complete_tol_deg=float(_nested_get(cfg, "angle_servo", "complete_tol_deg", 0.5)),
+            angle_max_pending_deg=float(_nested_get(cfg, "angle_servo", "max_pending_deg", 45.0)),
+            angle_skip_while_turning=bool(_nested_get(cfg, "angle_servo", "skip_while_turning", True)),
+            angle_wait_turn_complete=bool(_nested_get(cfg, "angle_servo", "wait_turn_complete", True)),
+            angle_absolute_cap_deg=float(_nested_get(cfg, "angle_servo", "absolute_cap_deg", 1.0)),
         )
+        self._last_control_time: Optional[float] = None
+        self._turn_was_busy = False
 
         self.create_subscription(Image, self.image_topic, self.image_callback, qos_profile_sensor_data)
         self.create_subscription(LaserScan, self.scan_topic, self.scan_callback, qos_profile_sensor_data)
@@ -208,7 +267,8 @@ class RunQwenApiLidarNav(Node):
             f"control_hz={self.control_hz} decision_hz={self.decision_hz} "
             f"qwen_interval_sec={self.qwen_interval_sec} scan_wz={self.scan_wz} "
             f"straight_band={self.servo.center_deadband}±{self.servo.straight_hysteresis} "
-            f"arrive_dist={self.arrive_distance}m creep={self.servo.creep_mode}"
+            f"arrive_dist={self.arrive_distance}m creep={self.servo.creep_mode} "
+            f"angle_servo={self.servo.angle_servo_enabled}"
         )
 
     def image_callback(self, msg: Image):
@@ -232,6 +292,7 @@ class RunQwenApiLidarNav(Node):
             self.last_fresh_cmd_time = time.time()
 
     def publish_stop(self) -> None:
+        self.servo.clear_remaining()
         self._set_desired(Twist(), "stop", fresh=True)
 
     def _cmd_age(self) -> float:
@@ -280,10 +341,31 @@ class RunQwenApiLidarNav(Node):
         return Twist(), "zero_cmd"
 
     def control_timer_cb(self) -> None:
+        if self.arrived_locked or self.success:
+            self.cmd_pub.publish(Twist())
+            return
         if self._lidar_requires_stop():
+            self.servo.clear_remaining()
             self.cmd_pub.publish(Twist())
             return
         cmd, _mode = self._cmd_with_hold()
+        turn_busy = self.servo.angle_servo_enabled and self.servo.is_turn_busy()
+        if turn_busy and self.desired_reason == "TURN_ONLY":
+            cmd.linear.x = 0.0
+        if self.servo.angle_servo_enabled and (
+            self.desired_reason in _ANGLE_TRACK_REASONS or turn_busy
+        ):
+            now = time.time()
+            if self._last_control_time is None:
+                dt = 1.0 / max(self.control_hz, 1e-3)
+            else:
+                dt = clamp(now - self._last_control_time, 0.001, 0.2)
+            self._last_control_time = now
+            ex_for_step = None if self.servo.angle_wait_turn_complete else self.last_target_ex
+            cmd.angular.z = self.servo.step_remaining(dt, ex=ex_for_step)
+        if self._turn_was_busy and not turn_busy:
+            self.next_query_time = 0.0
+        self._turn_was_busy = turn_busy
         self.cmd_pub.publish(cmd)
 
     def _scan_is_fresh(self) -> bool:
@@ -298,12 +380,18 @@ class RunQwenApiLidarNav(Node):
             self.image_height = int(h)
             self.servo.update_image_width(w)
 
-    def _save_latest_debug_frame(self, frame, target: Dict[str, Any]) -> None:
+    def _save_latest_debug_frame(self, frame, target: Dict[str, Any], result: Optional[Dict[str, Any]] = None) -> None:
         """After Qwen result: rotate latest->prev, save new latest; drop older files."""
         vis = frame.copy()
         u, v = target.get("u"), target.get("v")
         if u is not None and v is not None:
-            cv2.drawMarker(vis, (int(u), int(v)), (0, 0, 255), cv2.MARKER_CROSS, 24, 2)
+            point_kind = target.get("point_kind")
+            if point_kind is None and result is not None:
+                point_kind = "locked" if result.get("usable") else (
+                    "inferred" if result.get("direction_valid") and result.get("status") == "inferred" else "none"
+                )
+            color = (0, 165, 255) if point_kind == "inferred" else (0, 0, 255)
+            cv2.drawMarker(vis, (int(u), int(v)), color, cv2.MARKER_CROSS, 24, 2)
         raw_u = target.get("raw_u")
         if raw_u is not None and u is not None and abs(float(raw_u) - float(u)) > 1.0:
             cv2.drawMarker(vis, (int(raw_u), int(v)), (255, 0, 0), cv2.MARKER_CROSS, 16, 2)
@@ -322,15 +410,99 @@ class RunQwenApiLidarNav(Node):
                     pass
         cv2.imwrite(self.debug_latest_path, vis)
 
-    def _parse_qwen_point(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        usable = bool(result.get("usable", result.get("_point_valid", False)))
-        u, v = result.get("u"), result.get("v")
-        if usable and u is not None and v is not None:
-            return {"visible": True, "u": float(u), "v": float(v), "cx": float(u), "raw_u": float(u)}
-        return {"visible": False, "u": u, "v": v, "reason": result.get("_coord_reason", "no_valid_uv")}
+    def _resolve_qwen_mode(self) -> str:
+        """Escalate prompt mode when target stays lost: track -> search -> scan."""
+        if self.lost_since_time is None:
+            return self.qwen_default_mode if self.qwen_default_mode in ("track", "search", "scan") else "track"
+        lost_dur = self._lost_duration()
+        if lost_dur < self.lost_stop_sec:
+            return "track"
+        if self.lost_scan_count <= self.lost_scan_max:
+            return "search"
+        return "scan"
 
-    def _filter_target_u(self, raw_u: float) -> Tuple[float, float]:
-        if not self.target_filter_enabled:
+    def _parse_qwen_point(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        status = str(result.get("status", "searching")).strip().lower()
+        u, v = result.get("u"), result.get("v")
+        confidence = float(result.get("confidence", 0.0) or 0.0)
+
+        if bool(result.get("usable", result.get("_point_valid", False))) and u is not None and v is not None:
+            return {
+                "visible": True,
+                "point_kind": "locked",
+                "u": float(u),
+                "v": float(v),
+                "cx": float(u),
+                "raw_u": float(u),
+                "confidence": confidence,
+            }
+
+        direction_valid = bool(result.get("direction_valid", False))
+        if (
+            direction_valid
+            and status == "inferred"
+            and u is not None
+            and v is not None
+            and confidence >= self.min_inferred_confidence
+        ):
+            return {
+                "visible": True,
+                "point_kind": "inferred",
+                "u": float(u),
+                "v": float(v),
+                "cx": float(u),
+                "raw_u": float(u),
+                "confidence": confidence,
+                "inferred_confidence": confidence,
+                "reason": result.get("_coord_reason", "inferred_waypoint"),
+            }
+
+        return {
+            "visible": False,
+            "point_kind": "none",
+            "u": u,
+            "v": v,
+            "reason": result.get("_coord_reason", "no_valid_uv"),
+        }
+
+    def _hold_window_sec(self) -> float:
+        # Cover qwen_interval + API latency so a single dropped frame still holds.
+        return max(self.hold_last_target_sec, self.qwen_interval_sec * 2.0 + 0.5)
+
+    def _maybe_hold_last_target(self, target: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
+        """Brief Qwen dropout: keep tracking with last locked u (never hold inferred)."""
+        if target.get("point_kind") == "inferred":
+            return target, False
+        if target.get("visible", False):
+            return target, False
+        if self.hold_last_target_sec <= 0.0 or self.last_held_target is None:
+            return target, False
+        if self.last_held_target.get("point_kind") != "locked":
+            return target, False
+        if self.last_target_seen_time is None:
+            return target, False
+        age = time.time() - self.last_target_seen_time
+        within_time = age <= self._hold_window_sec()
+        within_miss_budget = self.consecutive_miss_count < self.hold_max_miss_frames
+        if not (within_time or within_miss_budget):
+            return target, False
+        u = self.filtered_u if self.filtered_u is not None else self.last_held_target.get("u")
+        if u is None:
+            return target, False
+        held = {
+            "visible": True,
+            "point_kind": "locked",
+            "u": float(u),
+            "v": self.last_held_target.get("v"),
+            "cx": float(u),
+            "raw_u": float(u),
+            "held": True,
+            "reason": "hold_last_target",
+        }
+        return held, True
+
+    def _filter_target_u(self, raw_u: float, *, snap: bool = False) -> Tuple[float, float]:
+        if not self.target_filter_enabled or snap:
             self.filtered_u = raw_u
             self.last_raw_u = raw_u
             return raw_u, raw_u
@@ -354,18 +526,60 @@ class RunQwenApiLidarNav(Node):
         self.last_raw_u = raw_u
         return raw_u, self.filtered_u
 
-    def _apply_target_filter(self, target: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_target_filter(self, target: Dict[str, Any], *, snap: bool = False) -> Dict[str, Any]:
         if not target.get("visible", False):
             return target
         raw_u = target.get("u")
         if raw_u is None:
             return target
-        raw_u_val, filtered_u_val = self._filter_target_u(float(raw_u))
+        raw_u_val, filtered_u_val = self._filter_target_u(float(raw_u), snap=snap)
         out = dict(target)
         out["raw_u"] = raw_u_val
         out["u"] = filtered_u_val
         out["cx"] = filtered_u_val
         return out
+
+    def _filter_target_distance(self, raw_dist: Optional[float]) -> Optional[float]:
+        if raw_dist is None:
+            return self.filtered_target_distance
+        raw = float(raw_dist)
+        if not self.target_dist_filter_enabled:
+            self.filtered_target_distance = raw
+            return raw
+        if self.filtered_target_distance is None:
+            self.filtered_target_distance = raw
+            return raw
+        if abs(raw - self.filtered_target_distance) > self.max_target_dist_jump_m:
+            return self.filtered_target_distance
+        alpha = self.target_dist_smooth_alpha
+        self.filtered_target_distance = alpha * raw + (1.0 - alpha) * self.filtered_target_distance
+        return self.filtered_target_distance
+
+    def _resolve_target_distance(
+        self,
+        depth_state,
+        center_error: Optional[float],
+    ) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+        raw_ray = depth_state.target_distance_raw
+        if raw_ray is None:
+            raw_ray = depth_state.target_distance
+        filtered_ray = self._filter_target_distance(raw_ray)
+        safety_fused = fuse_target_distance(
+            depth_state.front_distance,
+            filtered_ray,
+            center_error,
+            center_deadband=self.arrive_center_deadband,
+            fuse_when_centered=self.arrive_fuse_front_when_centered,
+            fuse_min_always=self.arrive_fuse_min_always,
+        )
+        arrive_dist = resolve_arrive_distance(
+            depth_state.front_distance,
+            filtered_ray,
+            arrive_threshold=self.arrive_distance,
+            front_margin_m=self.arrive_front_margin_m,
+            ray_far_invalid_m=self.arrive_ray_far_invalid_m,
+        )
+        return raw_ray, filtered_ray, safety_fused, arrive_dist
 
     def _lost_duration(self) -> float:
         if self.lost_since_time is None:
@@ -403,10 +617,21 @@ class RunQwenApiLidarNav(Node):
             return
         self.step_count += 1
         self.future_frame = frame
-        self.future = self.query_executor.submit(self.qwen.infer_navigation, frame, self.instruction)
+        qwen_mode = self._resolve_qwen_mode()
+        first_request = not self.qwen_first_request_sent
+        self.qwen_first_request_sent = True
+        self.future = self.query_executor.submit(
+            self.qwen.infer_navigation,
+            frame,
+            self.instruction,
+            mode=qwen_mode,
+            first_request=first_request,
+        )
         # Interval is from submit time so a 1s setting ≈ 1Hz when API latency < 1s.
         self.next_query_time = time.time() + self.qwen_interval_sec
-        self.get_logger().info(f"submitted cloud Qwen infer step={self.step_count}")
+        self.get_logger().info(
+            f"submitted cloud Qwen infer step={self.step_count} mode={qwen_mode} first={first_request}"
+        )
 
     def _poll_future(self) -> bool:
         if self.future is None:
@@ -429,19 +654,38 @@ class RunQwenApiLidarNav(Node):
         return True
 
     def _handle_result(self, result, frame):
+        if self.arrived_locked:
+            self.publish_stop()
+            depth_state = self.lidar.estimate_for_point(self.filtered_u, self.image_width)
+            self.get_logger().info(
+                f"step={self.step_count} state=ARRIVED locked "
+                f"front={depth_state.front_distance} target_dist={self.filtered_target_distance}"
+            )
+            return
+
         target = self._parse_qwen_point(result)
+        target, held_target = self._maybe_hold_last_target(target)
         raw_u_log = result.get("u")
         filtered_u_log: Optional[float] = None
         center_error: Optional[float] = None
         wz_out = 0.0
+        turn_angle_deg = 0.0
+        remaining_yaw_deg = 0.0
+        target_dist_raw_log: Optional[float] = None
+        target_dist_fused_log: Optional[float] = None
+        target_dist_arrive_log: Optional[float] = None
         search_direction = self.scan_direction
         lost_duration = self._lost_duration()
+        hold_reason = "hold_last_target" if held_target else ""
 
+        point_kind = target.get("point_kind", "none")
         depth_state = self.lidar.estimate_for_point(target.get("u"), self.image_width)
         action, cmd, servo_state, reason = "STOP_OBSERVE", Twist(), "STOP", ""
 
-        if target.get("visible", False):
-            target = self._apply_target_filter(target)
+        if target.get("visible", False) and point_kind == "locked":
+            if not held_target:
+                snap_u = self.servo.angle_servo_enabled and self.servo.angle_wait_turn_complete
+                target = self._apply_target_filter(target, snap=snap_u)
             raw_u_log = target.get("raw_u", raw_u_log)
             filtered_u_log = target.get("u")
             if filtered_u_log is not None:
@@ -451,41 +695,100 @@ class RunQwenApiLidarNav(Node):
             self.lost_since_time = None
             self.lost_stop_since = None
             self.last_scan_flip_time = None
-            self.last_target_seen_time = time.time()
+            if not held_target:
+                self.last_target_seen_time = time.time()
+                self.last_held_target = dict(target)
+                self.consecutive_miss_count = 0
+            else:
+                self.consecutive_miss_count += 1
 
             depth_state = self.lidar.estimate_for_point(target.get("u"), self.image_width)
-            servo_res = self.servo.compute_cmd(target, depth_state.front_distance, depth_state.target_distance)
+            target_dist_raw_log, target_dist_filtered, target_dist_fused, target_dist_arrive = (
+                self._resolve_target_distance(depth_state, center_error)
+            )
+            target_dist_fused_log = target_dist_fused
+            target_dist_arrive_log = target_dist_arrive
+            servo_res = self.servo.compute_cmd(
+                target,
+                depth_state.front_distance,
+                target_dist_fused,
+                arrive_distance=target_dist_arrive,
+            )
             cmd, servo_state, reason = servo_res.cmd, servo_res.state, servo_res.reason
+            if held_target:
+                reason = hold_reason
             wz_out = servo_res.wz
+            turn_angle_deg = servo_res.turn_angle_deg
+            remaining_yaw_deg = servo_res.remaining_yaw_deg
             if servo_state == "ARRIVED":
+                self.arrived_locked = True
                 self.arrive_frame_count += 1
                 self.publish_stop()
                 self._set_desired(cmd, "ARRIVED", fresh=True)
                 action = "ARRIVED"
-                if self.arrive_frame_count >= self.arrive_frames_required:
-                    self.success = True
-                    self.get_logger().info(
-                        f"ARRIVED: target_distance={depth_state.target_distance:.3f}m "
-                        f"<={self.arrive_distance:.3f}m (frames={self.arrive_frame_count})"
-                    )
+                self.success = True
+                self.get_logger().info(
+                    f"ARRIVED: arrive_dist={target_dist_arrive_log:.3f}m "
+                    f"front={depth_state.front_distance:.3f}m "
+                    f"<={self.arrive_distance:.3f}m (locked)"
+                )
             else:
                 self.arrive_frame_count = 0
                 self._set_desired(cmd, servo_state, fresh=True)
-                action = servo_res.state
+                action = "HOLD_TRACK" if held_target else servo_res.state
             self.lost_scan_count = 0
+        elif target.get("visible", False) and point_kind == "inferred":
+            snap_u = self.servo.angle_servo_enabled and self.servo.angle_wait_turn_complete
+            target = self._apply_target_filter(target, snap=snap_u)
+            raw_u_log = target.get("raw_u", result.get("u"))
+            filtered_u_log = target.get("u")
+            if filtered_u_log is not None:
+                center_error = (float(filtered_u_log) - self.image_width / 2.0) / max(1.0, float(self.image_width))
+                self.last_target_ex = float(center_error)
+
+            self.lost_since_time = None
+            self.lost_stop_since = None
+            self.last_scan_flip_time = None
+            self.last_target_seen_time = None
+            self.last_held_target = None
+            self.consecutive_miss_count = 0
+            self.filtered_target_distance = None
+            self.lost_scan_count = 0
+
+            depth_state = self.lidar.estimate_for_point(target.get("u"), self.image_width)
+            servo_res = self.servo.compute_cmd(
+                target,
+                depth_state.front_distance,
+                None,
+                arrive_distance=None,
+                point_kind="inferred",
+                inferred_confidence=target.get("inferred_confidence"),
+                inferred_vx_scale=self.inferred_vx_scale,
+            )
+            cmd, servo_state, reason = servo_res.cmd, servo_res.state, servo_res.reason
+            wz_out = servo_res.wz
+            turn_angle_deg = servo_res.turn_angle_deg
+            remaining_yaw_deg = servo_res.remaining_yaw_deg
+            self.arrive_frame_count = 0
+            self._set_desired(cmd, servo_state, fresh=True)
+            action = "INFERRED_NAV"
         elif self.require_lidar and not self._scan_is_fresh():
+            self.filtered_target_distance = None
             self.publish_stop()
             action, reason = "WAIT_SCAN_STALE", "scan_stale_no_target"
             self.lost_scan_count += 1
             if self.lost_since_time is None:
                 self.lost_since_time = time.time()
         else:
+            self.consecutive_miss_count += 1
+            self.filtered_target_distance = None
             if self.lost_since_time is None:
                 self.lost_since_time = time.time()
             lost_duration = self._lost_duration()
             self.lost_scan_count += 1
 
             if lost_duration < self.lost_stop_sec:
+                self.servo.clear_remaining()
                 cmd = Twist()
                 self._set_desired(cmd, "LOST_HOLD", fresh=True)
                 action, servo_state, reason = "LOST_HOLD", "LOST_HOLD", "lost_wait_reacquire"
@@ -499,6 +802,7 @@ class RunQwenApiLidarNav(Node):
                     self.lost_since_time = now
                     lost_duration = 0.0
                     cmd = self._scan_cmd()
+                    self.servo.clear_remaining()
                     search_direction = self.scan_direction
                     wz_out = float(cmd.angular.z)
                     self._set_desired(cmd, "SEARCH_SCAN", fresh=True)
@@ -513,6 +817,7 @@ class RunQwenApiLidarNav(Node):
             else:
                 self.lost_stop_since = None
                 cmd = self._scan_cmd()
+                self.servo.clear_remaining()
                 search_direction = self.scan_direction
                 wz_out = float(cmd.angular.z)
                 self._set_desired(cmd, "SEARCH_SCAN", fresh=True)
@@ -523,7 +828,10 @@ class RunQwenApiLidarNav(Node):
 
         lidar_payload = {
             "front_distance": depth_state.front_distance,
-            "target_distance": depth_state.target_distance,
+            "target_distance": target_dist_fused_log if target_dist_fused_log is not None else depth_state.target_distance,
+            "target_distance_raw": target_dist_raw_log if target_dist_raw_log is not None else depth_state.target_distance_raw,
+            "target_distance_fused": target_dist_fused_log,
+            "target_distance_arrive": target_dist_arrive_log,
             "target_angle_deg": depth_state.target_angle_deg,
             "lidar_valid": depth_state.valid,
             "lidar_reason": depth_state.reason,
@@ -534,38 +842,52 @@ class RunQwenApiLidarNav(Node):
             "raw_u": raw_u_log,
             "filtered_u": filtered_u_log,
             "raw_v": result.get("_raw_v"),
-            "usable": bool(result.get("usable", False)), "status": result.get("status"),
+            "usable": bool(result.get("usable", False)),
+            "direction_valid": bool(result.get("direction_valid", False)),
+            "point_kind": point_kind,
+            "status": result.get("status"),
+            "qwen_mode": result.get("_qwen_mode"),
+            "first_request": bool(result.get("_first_request", False)),
             "confidence": result.get("confidence"), "reason": result.get("reason"),
             "coord_reason": result.get("_coord_reason"), "state": action,
             "latency_sec": result.get("_latency_sec"), **lidar_payload,
         }, ensure_ascii=False)))
         self.state_pub.publish(String(data=json.dumps({
             "step": self.step_count, "action": action, "servo_state": servo_state,
+            "point_kind": point_kind,
             "reason": reason, "cmd_vx": float(cmd.linear.x), "cmd_wz": float(cmd.angular.z),
             "raw_u": raw_u_log, "filtered_u": filtered_u_log,
             "center_error": center_error, "cmd_age": cmd_age, "cmd_mode": publish_mode,
             "cmd_wz": wz_out, "last_target_ex": self.last_target_ex,
+            "turn_angle_deg": turn_angle_deg, "remaining_yaw_deg": remaining_yaw_deg,
             "search_direction": search_direction, "lost_duration": lost_duration,
             "lost_scan_count": self.lost_scan_count, **lidar_payload,
         }, ensure_ascii=False)))
         self.get_logger().info(
-            f"step={self.step_count} state={action} raw_u={raw_u_log} filtered_u={filtered_u_log} "
+            f"step={self.step_count} state={action} kind={point_kind} raw_u={raw_u_log} filtered_u={filtered_u_log} "
             f"ex={center_error if center_error is not None else 'n/a'} "
             f"vx={cmd.linear.x:.3f} cmd_wz={cmd.angular.z:+.3f} servo_wz={wz_out:+.3f} "
+            f"turn_deg={turn_angle_deg:.1f} rem_yaw_deg={remaining_yaw_deg:.1f} "
             f"cmd_age={cmd_age:.2f} {publish_mode} "
             f"search_dir={search_direction:+.0f} lost_dur={lost_duration:.2f} "
-            f"front={depth_state.front_distance} target_dist={depth_state.target_distance} "
+            f"front={depth_state.front_distance} target_dist={target_dist_fused_log if target_dist_fused_log is not None else depth_state.target_distance} "
+            f"arrive_dist={target_dist_arrive_log} "
+            f"target_raw={target_dist_raw_log} "
             f"conf={result.get('confidence')} "
             f"latency={result.get('_latency_sec')}"
         )
         if self.save_debug and frame is not None:
-            self._save_latest_debug_frame(frame, target if target.get("visible") else {"u": None, "v": None})
+            debug_target = target if target.get("visible") else {"u": None, "v": None, "point_kind": point_kind}
+            self._save_latest_debug_frame(frame, debug_target, result)
 
     def decision_timer_cb(self):
-        if self.success or self.latest_frame is None:
+        if self.success or self.arrived_locked or self.latest_frame is None:
             return
         if self._poll_future():
             return
+        if self.servo.angle_servo_enabled and self.servo.angle_wait_turn_complete:
+            if self.servo.is_turn_busy():
+                return
         now = time.time()
         if now < self.next_query_time:
             return
