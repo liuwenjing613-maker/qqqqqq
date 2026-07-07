@@ -114,6 +114,7 @@ class ExploreCandidate:
     reject_reason: str = ""
     validation: Dict[str, Any] = field(default_factory=dict)
     sector_id: str = ""
+    forced_pick: bool = False  # 标记是否来自 active sector 强制 pick（scan 过滤失败时）
 
     @property
     def total_score(self) -> float:
@@ -251,14 +252,6 @@ class ExploreGoalSelector(Node):
         self.exhaust_visited_goals = int(direction_cfg.get("exhaust_visited_goals", 3))
         self.reset_when_all_exhausted = bool(direction_cfg.get("reset_when_all_exhausted", True))
 
-        # 少候选切换策略：当前 active sector 候选点少于该阈值时，切换到候选点最多的区域
-        self.active_sector_min_candidates = max(
-            1, int(direction_cfg.get("active_sector_min_candidates", 2))
-        )
-        self.min_too_few_switch_interval_sec = float(
-            direction_cfg.get("min_too_few_switch_interval_sec", 3.0)
-        )
-
         self.sector_states: Dict[str, SectorState] = {
             f"sector_{i:02d}": SectorState(sector_id=f"sector_{i:02d}")
             for i in range(self.direction_sector_count)
@@ -361,7 +354,6 @@ class ExploreGoalSelector(Node):
         self.active_area_started_at: float = 0.0
         self.active_area_switch_count: int = 0
         self._last_counted_nav_event_key: str = ""
-        self._last_too_few_switch_time: float = 0.0
 
         self.switch_score_margin = float(explore.get("switch_score_margin", 0.20))
         self.switch_confirm_count = max(1, int(explore.get("switch_confirm_count", 2)))
@@ -1296,53 +1288,6 @@ class ExploreGoalSelector(Node):
             return self._force_neighbor_sector_switch(old_sector, reason)
         return None
 
-    def _maybe_switch_if_active_sector_too_few(
-        self,
-        valid_candidates: List[ExploreCandidate],
-        available_sector_ids: List[str],
-    ) -> None:
-        """如果当前 active sector 候选点过少（<=1），直接切换到候选点最多的区域。"""
-        if not self.direction_lock_enabled:
-            return
-        if self.active_area_id is None:
-            return
-        now = time.time()
-        if now - self._last_too_few_switch_time < self.min_too_few_switch_interval_sec:
-            return
-
-        grouped = self._group_candidates_by_sector(valid_candidates)
-        active_count = len(grouped.get(self.active_area_id, []))
-        if active_count >= self.active_sector_min_candidates:
-            return
-
-        best_sid: Optional[str] = None
-        best_count = -1
-        for sid, cands in grouped.items():
-            if sid == self.active_area_id:
-                continue
-            if sid not in available_sector_ids:
-                continue
-            cnt = len(cands)
-            if cnt > best_count:
-                best_count = cnt
-                best_sid = sid
-            elif cnt == best_count and (best_sid is None or sid < best_sid):
-                best_sid = sid
-
-        if best_sid is None or best_count <= active_count:
-            return
-
-        old = self.active_area_id
-        reason = (
-            f"too_few_candidates: {old} has {active_count} (< {self.active_sector_min_candidates}), "
-            f"switch to {best_sid} with {best_count}"
-        )
-        self._mark_sector_exhausted(old, reason, now)
-        self._activate_sector(best_sid, reason)
-        self._clear_current_selection_for_sector_switch(reason)
-        self._last_too_few_switch_time = now
-        self._last_direction_reason = reason
-
     def _maybe_init_or_switch_active_sector(
         self,
         valid_candidates: List[ExploreCandidate],
@@ -1631,15 +1576,6 @@ class ExploreGoalSelector(Node):
         # 统一 sector 选择：初始化 / 耗尽 / 超时 → 全部按候选点数量（在 in_active 服务之前）
         self._maybe_init_or_switch_active_sector(valid_candidates, available_sector_ids)
 
-        # 新增策略：当前 active sector 候选点过少（0 或 1 个）时，直接切换到候选点最多的区域
-        self._maybe_switch_if_active_sector_too_few(valid_candidates, available_sector_ids)
-
-        # 可能已切换 active sector，重新计算可用集合，避免后续 retry 使用 stale 列表
-        available_sector_ids = [
-            sid for sid in non_empty_sector_ids
-            if not self._sector_is_exhausted(sid)
-        ]
-
         # active sector 内有候选，直接返回（必须经过 scan 可通行过滤）
         # 用户明确要求：每次必须在选定的区域中选出来一个，不满足 scan 过滤也要选出分数最高的那个
         in_active = [c for c in valid_candidates if c.sector_id == self.active_area_id]
@@ -1656,6 +1592,8 @@ class ExploreGoalSelector(Node):
         if in_active:
             ranked = sorted(in_active, key=lambda c: c.total_score, reverse=True)
             top_k = ranked[: self.active_sector_max_return]
+            for c in top_k:
+                c.forced_pick = True
             self._last_direction_reason = (self._last_direction_reason or "") + f" (forced top {len(top_k)} in active, scan filter bypassed)"
             st = self.sector_states.get(self.active_area_id)
             if st:
@@ -1694,6 +1632,8 @@ class ExploreGoalSelector(Node):
                 if filtered_retry:
                     return filtered_retry
                 ranked = sorted(in_active_retry, key=lambda c: c.total_score, reverse=True)
+                for c in ranked[: self.active_sector_max_return]:
+                    c.forced_pick = True
                 return ranked[: self.active_sector_max_return]
 
         return []
@@ -2353,13 +2293,8 @@ class ExploreGoalSelector(Node):
                 reject_stats[reason] = reject_stats.get(reason, 0) + 1
                 continue
 
-            if candidate.total_score < self.min_hint_score:
-                candidate.reject_reason = "score_below_min_hint"
-                reject_stats[candidate.reject_reason] = (
-                    reject_stats.get(candidate.reject_reason, 0) + 1
-                )
-                continue
-
+            # 验证阶段不再按 min_hint_score 过滤（score 检查移至最终 pick 阶段）
+            # forced_pick 候选（active sector 强制 pick）在 _pick_best_valid_candidate 中绕过该限制
             valid.append(candidate)
 
         merged_valid = self._merge_valid_candidate_cache(valid)
@@ -2394,6 +2329,12 @@ class ExploreGoalSelector(Node):
                 best.sector_id,
                 f"final pick outside active (was {self.active_area_id})"
             )
+        # forced pick 路径绕过 min_hint_score 检查（用户需求：active sector 有候选时必须出点）
+        if best.total_score < self.min_hint_score and not best.forced_pick:
+            self._last_selection_explanation = (
+                f"best score {best.total_score:.3f} < min_hint_score {self.min_hint_score}"
+            )
+            return None, []
         path = best.source.get("planned_path")
         if not isinstance(path, list) or len(path) < 2:
             path = self._plan_candidate_path(robot_xy, best.goal_xy)
@@ -3756,8 +3697,6 @@ class ExploreGoalSelector(Node):
                 "exhausted_cooldown_sec": self.exhausted_cooldown_sec,
                 "non_exhaust_reasons": sorted(list(self.sector_non_exhaust_reasons)),
                 "visited_reasons": sorted(list(self.sector_visited_reasons)),
-                "active_sector_min_candidates": self.active_sector_min_candidates,
-                "min_too_few_switch_interval_sec": self.min_too_few_switch_interval_sec,
             },
         }
 

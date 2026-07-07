@@ -125,11 +125,11 @@ servo:
   max_vx: 0.06
   steer_vx: 0.05
   max_wz: 0.05
-  kp_turn: 0.1
-  center_deadband: 0.06
+  kp_turn: 0.075
+  center_deadband: 0.10
   turn_only_threshold: 0.4
   turn_only_vx: 0.0
-  cmd_wz_deadband: 0.006
+  cmd_wz_deadband: 0.010
 safety:
   require_lidar: true
   emergency_stop_distance: 0.28
@@ -181,7 +181,7 @@ rates:
   selector_log_hz: 1
 chassis:
   bridge: pwm
-  port: /dev/ttyUSB0
+  port: /dev/ttyUSB2
   max_vx: 0.06
   max_wz: 0.05
   watchdog_timeout: 0.5
@@ -324,10 +324,10 @@ semantic_explore:
   control_frame: map
   use_in_search_only: true
   max_hint_age_sec: 15.0
-  min_hint_score: 0.05
+  min_hint_score: 0.03
   goal_hold_sec: 30.0
   max_goal_select_distance_m: 3.5
-  min_goal_select_distance_m: 0.3
+  min_goal_select_distance_m: 0.65
   goal_switch_max_distance_m: 0.45
   goal_switch_min_dist_m: 0.45
   blocked_reject_reasons:
@@ -342,13 +342,13 @@ semantic_explore:
   search_prefer_lidar_after_sec: 5.0
   max_goal_age_sec: 20.0
   reselect_interval_sec: 4.0
-  max_candidates_validate_per_tick: 4
-  max_validate_sec_per_tick: 0.35
+  max_candidates_validate_per_tick: 10
+  max_validate_sec_per_tick: 0.55
   keep_goal_min_sec: 8.0
   switch_score_margin: 0.35
   switch_confirm_count: 3
-  step_goal_distance_m: 0.5
-  goal_reached_radius_m: 0.22
+  step_goal_distance_m: 0.45
+  goal_reached_radius_m: 0.28
   goal_timeout_sec: 60.0
   tf_cache_ttl_sec: 0.25
   tf_lookup_timeout_sec: 0.12
@@ -413,8 +413,8 @@ frontier:
   free_threshold: 20
   occupied_threshold: 65
   inflation_radius_m: 0.22
-  min_distance_m: 0.20
-  max_distance_m: 3.0
+  min_distance_m: 0.55
+  max_distance_m: 3.5
   observation_standoff_m: 0.8
   unknown_gain_radius_m: 0.6
   require_goal_on_known_free: true
@@ -443,15 +443,15 @@ goal_validation:
   min_astar_path_points: 2
 safe_goal_projection:
   enabled: true
-  max_projection_radius_m: 1.0
+  max_projection_radius_m: 1.2
   projection_step_m: 0.15
   projection_max_samples: 16
   prefer_nearest: true
   require_unknown_gain: false
   min_unknown_gain_cells: 1
-  frontier_standoff_m: 0.35
-  landmark_view_min_radius_m: 0.45
-  landmark_view_max_radius_m: 1.0
+  frontier_standoff_m: 0.6
+  landmark_view_min_radius_m: 0.65
+  landmark_view_max_radius_m: 1.2
   bearing_first:
     max_vx: 0.05
     max_wz: 0.05
@@ -544,8 +544,8 @@ direction_lock:
   active_sector_bonus: 0.35
   inactive_sector_penalty: 0.45
 
-  exhaust_no_candidate_cycles: 3
+  exhaust_no_candidate_cycles: 10
   exhaust_failed_goals: 2
-  exhaust_visited_goals: 3
+  exhaust_visited_goals: 2
 
   reset_when_all_exhausted: true
