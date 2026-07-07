@@ -119,6 +119,15 @@ band = float(s.get("center_deadband", 0.10))
 hyst = float(s.get("straight_hysteresis", 0.02))
 w = int(cfg.get("image_width", 1280))
 px = int(band * w)
+a = cfg.get("angle_servo") or {}
+angle_on = bool(s.get("angle_servo_enabled", a.get("enabled", False)))
+if angle_on:
+    cap = a.get("absolute_cap_deg", 1)
+    wait = a.get("wait_turn_complete", True)
+    print(
+        f"[servo] angle_servo one-shot: θ<=min({a.get('max_turn_deg',30)},{cap})° "
+        f"turn_wz={a.get('turn_wz',0.04)} wait_turn_complete={wait}"
+    )
 print(f"[servo] straight_band: |u-center|<={px}px (deadband={band}, hysteresis={hyst}) -> forward only, no turn")
 PY
 python3 "$PROJECT_DIR/src/apps/run_qwen_api_lidar_nav.py" \

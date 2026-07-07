@@ -27,7 +27,7 @@ source_stage10_env() {
 
 source_ros_env
 
-CONFIG="${1:-configs/nav_yolo_lidar_semantic_explore.yaml}"
+CONFIG="${1:-configs/nav_yolo_lidar_semantic_explore_exp2.yaml}"
 USER_INSTRUCTION="${2:-}"
 NAV_ONLY="${NAV_ONLY:-0}"
 QWEN_TEXT_ENABLED="${QWEN_TEXT_ENABLED:-}"

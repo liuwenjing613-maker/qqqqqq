@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Stop all processes started by start_qwen_api_lidar_nav.sh and zero the chassis.
 
+# Resolve PROJECT_DIR and RDK_ORIGINAL_ROOT relative to this script's location.
+# This ensures correct paths even if the qwen project folder was moved.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_dir.sh"
+
 stop_qwen_stack() {
   if [ "${_QWEN_STACK_CLEANUP_DONE:-0}" = "1" ]; then
     return 0

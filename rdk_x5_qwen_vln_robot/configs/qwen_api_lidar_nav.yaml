@@ -20,6 +20,9 @@ qwen:
   qwen_jpeg_quality: 80
   qwen_max_tokens: 80
   min_confidence: 0.60
+  min_inferred_confidence: 0.20
+  inferred_vx_scale: 0.85
+  default_mode: track
   timeout_backoff_sec: 8.0
 
 # Flat aliases (backward compat for scripts reading top-level keys)
@@ -29,6 +32,9 @@ qwen_resize_width: 640
 qwen_jpeg_quality: 80
 qwen_max_tokens: 80
 min_confidence: 0.60
+min_inferred_confidence: 0.20
+inferred_vx_scale: 0.85
+default_mode: track
 timeout_backoff_sec: 8.0
 
 # --- Rates (same as semantic_explore) ---
@@ -49,19 +55,34 @@ lidar_wait_backoff_sec: 1.0
 lidar_min_range: 0.08
 lidar_max_range: 12.0
 lidar_front_deg: 30.0
-lidar_target_window_deg: 8.0
+lidar_target_window_deg: 6.0
+# Target ray: min = closest hit in window (YOLO default, better for bottle approach).
+lidar_target_distance_method: min
+lidar_front_distance_method: min
 camera_hfov_deg: 70.0
 camera_lidar_yaw_offset_deg: -170.0
+
+# Smooth LiDAR range to Qwen target; reject 7m->0.6m single-frame jumps.
+target_distance_filter:
+  enabled: true
+  smooth_alpha: 0.35
+  max_jump_m: 1.5
+  # Safety/slowdown: min(front, ray). Arrive uses resolve_arrive_distance (see lidar_depth.py).
+  fuse_min_always: true
+  fuse_front_when_centered: true
+  fuse_center_deadband: 0.10
+  arrive_front_margin_m: 0.3
+  arrive_ray_far_invalid_m: 3.0
 
 # --- Point visual servo ---
 # center_deadband: 中间距（归一化）。|ex| 在此范围内只直走 wz=0，超出才开始转向。
 #   1280 宽时 0.10 ≈ 目标 u 在 512~768（±128px）内保持直行。
 # straight_hysteresis: 滞后，防止在边界附近因 Qwen 抖动来回切换直走/转向。
+# angle_servo (scheme B): θ = clamp(0, gain × e^power, max_turn_deg), e = max(0, |ex|-deadband)
+#   每帧千问只设定本帧转角（替换上一帧未转完的预算，不累加）；控制环以 turn_wz 消化 remaining_yaw。
 servo:
   creep_mode: true
-  creep_vx: 0.04
-  # creep/scan wz: 0.04 ≈ wz_pwm 14.8 (M1 movable minimum; YOLO track often uses kp*ex << 0.05)
-  creep_wz: 0.00005
+  creep_vx: 0.06
   creep_turn_vx: 0.0
   max_vx: 0.06
   steer_vx: 0.06
@@ -74,6 +95,20 @@ servo:
   cmd_wz_deadband: 0.006
   allow_track_without_depth: true
   forward_vx_no_depth: 0.06
+  angle_servo_enabled: true
+
+angle_servo:
+  enabled: true
+  # One-shot: each Qwen frame issues at most one turn (<=1°); finish before next infer.
+  gain: 50
+  power: 0.85
+  max_turn_deg: 1
+  absolute_cap_deg: 1
+  turn_wz: 0.04
+  complete_tol_deg: 0.5
+  max_pending_deg: 1
+  skip_while_turning: true
+  wait_turn_complete: true
 
 # Flat aliases (backward compat)
 kp_turn: 0.1
@@ -101,28 +136,41 @@ arrive_frames: 2
 
 # --- Lost-target search ---
 search:
-  scan_wz: 0.04
+  scan_wz: 0.01
   lost_stop_sec: 1.2
   scan_flip_interval_sec: 5.0
   search_resume_sec: 3.0
 
 scan_wz: 0.04
 
+# --- Foxglove visualization (start_qwen_api_lidar_foxglove_viz.sh) ---
+foxglove_viz:
+  markers_topic: /qwen_api_viz/markers
+  debug_compressed_topic: /qwen_api_viz/image/compressed
+  hud_topic: /qwen_api_viz/hud
+  frame_id: laser
+  viz_rate_hz: 5
+  viz_image_max_fps: 8
+  viz_image_max_width: 960
+  viz_jpeg_quality: 80
+
 # --- Target u smoothing ---
 target_filter:
   enabled: true
   smooth_alpha: 0.25
-  max_u_jump_px: 280
-  hold_last_target_sec: 1.2
+  max_u_jump_px: 120
+  # Hold last u across brief Qwen dropouts (window >= 2*qwen_interval + API latency).
+  hold_last_target_sec: 3.0
+  hold_max_miss_frames: 3
 
 # --- cmd_vel hold while waiting for cloud API ---
 cmd_hold:
-  active_hold_sec: 1.0
-  stale_slow_sec: 2.0
+  active_hold_sec: 2.5
+  stale_slow_sec: 3.5
   stale_vx_scale: 1.0
   stale_wz_scale: 1.0
   stale_max_wz: 0.04
-  stop_after_sec: 2.0
+  stop_after_sec: 4.0
 
 # --- Camera gimbal (before chassis bridge; shares M1 serial port) ---
 gimbal:
@@ -136,7 +184,7 @@ gimbal:
 # --- Chassis bridge (identical to semantic_explore chassis block) ---
 chassis:
   bridge: pwm
-  port: /dev/rosmaster
+  port: /dev/ttyUSB2
   max_vx: 0.07
   max_wz: 0.05
   watchdog_timeout: 0.5
