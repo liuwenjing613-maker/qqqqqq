@@ -346,6 +346,7 @@ class SharedNavSemanticExplore(Node):
         self.explore_last_reject_reason: Optional[str] = None
         self.explore_last_reject_goal_pose: Optional[list] = None
         self.blocked_retreat_active = False
+        self._last_logged_nav_line: Optional[str] = None
         self.get_logger().info(
             "EXPLORE NAV RESET: rejected_candidate_ids, failed_explore_goals, explore_last_reject_reason cleared on fresh start"
         )
@@ -1762,7 +1763,14 @@ class SharedNavSemanticExplore(Node):
         payload = json.dumps(data, ensure_ascii=False)
         self.state_pub.publish(String(data=payload))
         if not from_control:
-            self.get_logger().info(payload)
+            # 完整 JSON 仅进 /nav_state 话题；日志只留聚焦的动作行，且仅在变化时打印
+            line = (
+                f"[NAV] step={self.step_count} mode={mode} fsm={self.fsm.state.value} "
+                f"phase={self.explore_phase} {action_explanation}"
+            )
+            if line != getattr(self, "_last_logged_nav_line", None):
+                self._last_logged_nav_line = line
+                self.get_logger().info(line)
 
     def publish_zero_cmd(self) -> None:
         zero = Twist()

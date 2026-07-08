@@ -54,6 +54,24 @@ for key, env_name in kick_map.items():
     if isinstance(val, bool):
         val = "1" if val else "0"
     print(f"export {env_name}={shlex.quote(str(val))}")
+odom = ch.get("odom") or {}
+odom_map = {
+    "vx_scale": "CHASSIS_ODOM_VX_SCALE",
+    "wz_scale": "CHASSIS_ODOM_WZ_SCALE",
+    "vy_scale": "CHASSIS_ODOM_VY_SCALE",
+    "vxy_deadzone": "CHASSIS_ODOM_VXY_DEADZONE",
+    "wz_deadzone": "CHASSIS_ODOM_WZ_DEADZONE",
+    "xy_yaw_offset": "CHASSIS_ODOM_XY_YAW_OFFSET",
+    "base_yaw_offset": "CHASSIS_BASE_YAW_OFFSET",
+    "use_vy": "CHASSIS_ODOM_USE_VY",
+}
+for key, env_name in odom_map.items():
+    if key not in odom:
+        continue
+    val = odom[key]
+    if isinstance(val, bool):
+        val = "1" if val else "0"
+    print(f"export {env_name}={shlex.quote(str(val))}")
 PY
 )"
 }

@@ -5,6 +5,7 @@
 image_topic: /image_raw
 scan_topic: /scan
 cmd_topic: /cmd_vel
+odom_topic: /odom
 qwen_json_topic: /qwen_api_json
 state_topic: /qwen_api_state
 
@@ -204,20 +205,31 @@ chassis:
   pwm_smooth_alpha: 0.35
   max_pwm_delta: 10.0
   debug: true
-  # Short breakaway pulse when cmd_vel transitions from stop -> move (cold start).
+  # Short breakaway pulse: max(target_cmd, kick_*) for kick_duration (must be >= cruise).
   kick_start:
     enable: true
-    kick_vx: 0.055
+    kick_vx: 0.07
     kick_wz: 0.24
     kick_duration: 0.05
     kick_cooldown: 0.55
+  # Odom calibration (same as scripts/lib/slam_calibrated_env.sh used during mapping).
+  odom:
+    vx_scale: 0.68
+    wz_scale: -0.58
+    vy_scale: 1.0
+    vxy_deadzone: 0.003
+    wz_deadzone: 0.015
+    xy_yaw_offset: 3.141592653589793
+    base_yaw_offset: 0.0
+    use_vy: false
 
 # --- Explore loop: 360° target scan -> path waypoint -> forward -> rescan ---
 explore:
   enable: true
 
-  # Full 360° scan: complete by integrated yaw (not open-loop time estimate).
-  # Match chassis.max_wz so software yaw matches physical rotation.
+  # Full 360° scan: complete by accumulated /odom yaw (same method as mapping birth scan).
+  full_scan_use_odom_yaw: true
+  full_scan_odom_stale_sec: 0.5
   full_scan_wz: 0.02
   full_scan_turns: 1.0
   full_scan_margin: 1.08
@@ -232,7 +244,7 @@ explore:
   path_kp_turn: 0.02
 
   # Explore forward
-  explore_distance_m: 2.5
+  explore_distance_m: 1.5
   explore_vx: 0.06
   explore_max_sec: 40.0
 

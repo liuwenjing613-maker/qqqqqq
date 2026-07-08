@@ -295,6 +295,22 @@ class SharedNavSemanticExplore(Node):
         self.explore_observe_after_reach_sec = float(explore_cfg.get("observe_after_reach_sec", 1.2))
         self.explore_observe_scan_deg = float(explore_cfg.get("observe_scan_deg", 90.0))
         self.explore_observe_scan_wz = float(explore_cfg.get("observe_scan_wz", 0.05))
+        self.wall_recovery_enabled = bool(explore_cfg.get("wall_recovery_enabled", True))
+        self.wall_recovery_turn_deg = float(explore_cfg.get("wall_recovery_turn_deg", 90.0))
+        self.wall_recovery_wz = float(explore_cfg.get("wall_recovery_wz", 0.08))
+        self.wall_recovery_max_sec = float(explore_cfg.get("wall_recovery_max_sec", 15.0))
+        self.wall_recovery_cooldown_sec = float(explore_cfg.get("wall_recovery_cooldown_sec", 1.0))
+        self.wall_recovery_reason_keywords = [
+            str(x).lower()
+            for x in explore_cfg.get(
+                "wall_recovery_reason_keywords",
+                ["wall_like", "no_floor", "no_traversable_path", "blocked_view"],
+            )
+        ]
+        self.qwen_path_json_topic = str(
+            explore_cfg.get("qwen_path_json_topic", "/qwen_nav_json")
+        ).strip()
+        self.qwen_path_max_age_sec = float(explore_cfg.get("qwen_path_max_age_sec", 8.0))
         self.explore_blacklist_ttl_sec = float(explore_cfg.get("blacklist_ttl_sec", 180.0))
         self.explore_blacklist_on_arrived = bool(explore_cfg.get("blacklist_on_arrived", False))
         self.explore_min_travel_before_reach_m = float(
@@ -304,6 +320,12 @@ class SharedNavSemanticExplore(Node):
             explore_cfg.get("search_prefer_lidar_after_sec", 5.0)
         )
         self.explore_target_visible_interrupt = bool(explore_cfg.get("target_visible_interrupt", True))
+        self.explore_lock_goal_while_moving = bool(
+            explore_cfg.get("lock_goal_while_moving", True)
+        )
+        self.explore_allow_goal_switch_only_when_near = bool(
+            explore_cfg.get("allow_goal_switch_only_when_near", True)
+        )
         self.planner_mode = str(planner_cfg.get("mode", "bearing_first"))
         self.require_astar_path = bool(planner_cfg.get("require_astar_path", True))
         self.astar_fallback_bearing = bool(
@@ -343,6 +365,15 @@ class SharedNavSemanticExplore(Node):
         self.explore_goal_traveled_m = 0.0
         self.explore_last_reject_reason: Optional[str] = None
         self.explore_last_reject_goal_pose: Optional[list] = None
+        self.wall_recovery_active = False
+        self.wall_recovery_start_time = 0.0
+        self.wall_recovery_start_yaw: Optional[float] = None
+        self.wall_recovery_target_rad = math.radians(self.wall_recovery_turn_deg)
+        self.wall_recovery_turn_dir = 1.0
+        self.wall_recovery_last_done_time = 0.0
+        self.last_qwen_path_reason = ""
+        self.last_qwen_path_mode = ""
+        self.last_qwen_path_time = 0.0
         self.blocked_retreat_active = False
         self.blocked_retreat_start_time = 0.0
         self.blocked_retreat_clearance_target = 0.0
@@ -414,6 +445,10 @@ class SharedNavSemanticExplore(Node):
             self.create_subscription(String, self.bbox_topic, self.bbox_cb, 10)
         if self.semantic_explore_enabled:
             self.create_subscription(String, self.explore_hint_topic, self.on_explore_goal_hint, 10)
+            if self.wall_recovery_enabled and self.qwen_path_json_topic:
+                self.create_subscription(
+                    String, self.qwen_path_json_topic, self.on_qwen_path_json, 10
+                )
 
         decision_hz = float(rates.get("decision_hz", 10.0))
         control_hz = float(rates.get("control_hz", 20.0))
@@ -430,7 +465,9 @@ class SharedNavSemanticExplore(Node):
                 f"semantic_explore enabled hint={self.explore_hint_topic} planner={self.planner_mode} "
                 f"follow_planned_path={self.follow_planned_path} "
                 f"goal_frame={self.explore_map_frame} control_frame={self.explore_control_frame} "
-                f"tf_buffer={'ok' if self.tf_buffer is not None else 'missing'}"
+                f"tf_buffer={'ok' if self.tf_buffer is not None else 'missing'} "
+                f"wall_recovery={self.wall_recovery_enabled} "
+                f"qwen_path_topic={self.qwen_path_json_topic or 'disabled'}"
             )
         self.get_logger().info(f"topics image={self.image_topic} scan={self.scan_topic} cmd={self.cmd_topic}")
         if voter_cfg["enabled"]:
@@ -536,6 +573,132 @@ class SharedNavSemanticExplore(Node):
         except json.JSONDecodeError:
             self.latest_explore_hint = None
 
+    def on_qwen_path_json(self, msg: String) -> None:
+        try:
+            result = json.loads(msg.data)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(result, dict):
+            return
+        mode = str(result.get("mode", "")).upper()
+        reason = str(result.get("reason", ""))
+        self.last_qwen_path_mode = mode
+        self.last_qwen_path_reason = reason
+        self.last_qwen_path_time = time.time()
+        if (
+            self.wall_recovery_enabled
+            and mode == "NONE"
+            and self._is_wall_like_no_path_reason(reason)
+            and not self.wall_recovery_active
+        ):
+            self._start_wall_recovery_turn(reason=reason)
+
+    @property
+    def current_yaw(self) -> Optional[float]:
+        return self.latest_odom_yaw
+
+    @staticmethod
+    def _angle_diff(a: float, b: float) -> float:
+        return math.atan2(math.sin(a - b), math.cos(a - b))
+
+    def _is_wall_like_no_path_reason(self, reason: str) -> bool:
+        text = str(reason or "").lower()
+        if not text:
+            return False
+        return any(k in text for k in self.wall_recovery_reason_keywords)
+
+    def _qwen_path_result_fresh(self, now: float) -> bool:
+        if self.last_qwen_path_time <= 0.0:
+            return False
+        return (now - self.last_qwen_path_time) <= self.qwen_path_max_age_sec
+
+    def _start_wall_recovery_turn(self, reason: str = "") -> None:
+        if not self.wall_recovery_enabled:
+            return
+
+        now = time.time()
+        if now - self.wall_recovery_last_done_time < self.wall_recovery_cooldown_sec:
+            return
+
+        self.wall_recovery_active = True
+        self.wall_recovery_start_time = now
+        self.wall_recovery_start_yaw = self.current_yaw
+        self.wall_recovery_target_rad = math.radians(abs(self.wall_recovery_turn_deg))
+        self.wall_recovery_turn_dir = (
+            1.0 if float(getattr(self, "birth_scan_turn_dir", 1.0)) >= 0.0 else -1.0
+        )
+        self.active_explore_goal = None
+        self.observe_update_active = False
+        self.latest_explore_hint = None
+        self._clear_active_planned_path()
+        self.explore_phase = "WALL_ROTATE_90"
+        self.explore_phase_start = now
+        cmd = Twist()
+        cmd.angular.z = self.wall_recovery_turn_dir * abs(self.wall_recovery_wz)
+        self.desired_cmd = cmd
+        self.desired_reason = "wall_rotate_90"
+        self.get_logger().info(f"[EXPLORE] start WALL_ROTATE_90 reason={reason}")
+
+    def _wall_recovery_cmd(self, now: float) -> Twist:
+        cmd = Twist()
+        elapsed = now - self.wall_recovery_start_time
+
+        done_by_yaw = False
+        if self.wall_recovery_start_yaw is not None and self.current_yaw is not None:
+            dyaw = self._angle_diff(self.current_yaw, self.wall_recovery_start_yaw)
+            done_by_yaw = abs(dyaw) >= self.wall_recovery_target_rad
+        elif elapsed > 0.0:
+            wz = abs(self.wall_recovery_wz)
+            done_by_yaw = (wz * elapsed) >= self.wall_recovery_target_rad
+
+        done_by_time = elapsed >= self.wall_recovery_max_sec
+
+        if done_by_yaw or done_by_time:
+            self.wall_recovery_active = False
+            self.wall_recovery_last_done_time = now
+            self.explore_phase = "EXPLORE_SELECT"
+            self.explore_phase_start = now
+            self.observe_update_active = False
+            self.active_explore_goal = None
+            self.latest_explore_hint = None
+            self.get_logger().info(
+                f"[EXPLORE] finish WALL_ROTATE_90 done_by_yaw={done_by_yaw} "
+                f"done_by_time={done_by_time}"
+            )
+            return cmd
+
+        cmd.linear.x = 0.0
+        cmd.angular.z = self.wall_recovery_turn_dir * abs(self.wall_recovery_wz)
+        return cmd
+
+    def _maybe_start_wall_recovery(self, now: float, front_min: Optional[float]) -> bool:
+        if not self.wall_recovery_enabled or self.wall_recovery_active:
+            return False
+
+        if (
+            self.last_qwen_path_mode == "NONE"
+            and self._qwen_path_result_fresh(now)
+            and self._is_wall_like_no_path_reason(self.last_qwen_path_reason)
+        ):
+            self._start_wall_recovery_turn(reason=self.last_qwen_path_reason)
+            return True
+
+        hint = self.latest_explore_hint or {}
+        no_actionable_hint = not self._hint_is_actionable(hint, now) if hint else True
+        front_close = (
+            front_min is not None
+            and front_min < self.safety_stop_distance + 0.10
+        )
+        qwen_wall_recent = (
+            self._qwen_path_result_fresh(now)
+            and self.last_qwen_path_mode == "NONE"
+            and self._is_wall_like_no_path_reason(self.last_qwen_path_reason)
+        )
+        if no_actionable_hint and front_close and qwen_wall_recent:
+            self._start_wall_recovery_turn(reason="no_actionable_hint_front_close")
+            return True
+        return False
+
     def _prune_rejected_candidates(self, now: float) -> None:
         expired = [k for k, t in self.rejected_candidate_ids.items() if t <= now]
         for k in expired:
@@ -625,7 +788,42 @@ class SharedNavSemanticExplore(Node):
             return True
         if self._is_same_goal_pose(prev, fresh):
             return False
-        return live_distance <= self.explore_goal_switch_max_distance_m
+        if self.explore_allow_goal_switch_only_when_near:
+            return live_distance <= self.explore_goal_switch_max_distance_m
+        return True
+
+    def _is_explore_moving_phase(self) -> bool:
+        return self.explore_phase in (
+            "EXPLORE_ALIGN",
+            "EXPLORE_STEP",
+            "EXPLORE_BURST_PAUSE",
+        )
+
+    def _interrupt_explore_for_target(self, log_msg: str = "target visible, interrupt explore goal") -> None:
+        self.get_logger().info(f"[EXPLORE] {log_msg}")
+        self.active_explore_goal = None
+        self.observe_update_active = False
+        self.explore_phase = "EXPLORE_SELECT"
+        self.explore_phase_start = time.time()
+        self._clear_active_planned_path()
+
+    def _merge_same_candidate_goal(self, prev: Dict[str, Any], fresh: Dict[str, Any]) -> None:
+        locked = dict(prev)
+        locked["score"] = fresh.get("score", locked.get("score"))
+        locked["planned_path"] = fresh.get("planned_path", locked.get("planned_path"))
+        locked["goal_pose"] = fresh.get("goal_pose", locked.get("goal_pose"))
+        locked["goal_frame"] = fresh.get("goal_frame", locked.get("goal_frame"))
+        locked["nav_planner"] = fresh.get("nav_planner", locked.get("nav_planner"))
+        locked["astar_fallback"] = fresh.get("astar_fallback", locked.get("astar_fallback"))
+        locked["look_at"] = fresh.get("look_at", locked.get("look_at"))
+        locked["selection_explanation"] = fresh.get(
+            "selection_explanation", locked.get("selection_explanation")
+        )
+        self.active_explore_goal = locked
+        if self._hint_has_planned_path(fresh):
+            self._set_active_planned_path(fresh)
+        elif str(fresh.get("nav_planner", "")) == "bearing_first" or fresh.get("astar_fallback"):
+            self._clear_active_planned_path()
 
     def _odom_travel_since(self, start_xy: Optional[Tuple[float, float]]) -> float:
         if start_xy is None or self.latest_odom_xy is None:
@@ -869,47 +1067,67 @@ class SharedNavSemanticExplore(Node):
         hint = self._locked_explore_hint(now)
         if hint is None:
             return None
+
+        if (
+            self.explore_target_visible_interrupt
+            and self.active_explore_goal is not None
+            and self.target_ok(self.last_target)
+        ):
+            self._interrupt_explore_for_target()
+            return None
+
+        moving_phase = self._is_explore_moving_phase()
+
         if self.valid_explore_hint(now):
             fresh = self.latest_explore_hint or hint
             prev = self.active_explore_goal
             prev_id = (prev or {}).get("candidate_id")
             next_id = fresh.get("candidate_id")
             switch_ids = prev_id != next_id
-            if prev:
-                _, live_distance = self._explore_goal_geometry(prev)
+
+            if (
+                self.explore_lock_goal_while_moving
+                and moving_phase
+                and prev is not None
+            ):
+                if str(prev_id or "") == str(next_id or ""):
+                    self._merge_same_candidate_goal(prev, fresh)
             else:
-                live_distance = 999.0
-            switch_allowed = (
-                prev is None
-                or (
-                    switch_ids
-                    and self._explore_goal_switch_allowed(prev, fresh, live_distance)
+                if prev:
+                    _, live_distance = self._explore_goal_geometry(prev)
+                else:
+                    live_distance = 999.0
+                switch_allowed = (
+                    prev is None
+                    or (
+                        switch_ids
+                        and self._explore_goal_switch_allowed(prev, fresh, live_distance)
+                    )
                 )
-            )
-            if switch_allowed:
-                self._begin_explore_goal(now)
-                self.active_explore_goal = dict(fresh)
-                if self._hint_has_planned_path(fresh):
-                    self._set_active_planned_path(fresh)
-            else:
-                locked = dict(self.active_explore_goal or fresh)
-                locked["goal_pose"] = fresh.get("goal_pose", locked.get("goal_pose"))
-                locked["look_at"] = fresh.get("look_at", locked.get("look_at"))
-                locked["score"] = fresh.get("score", locked.get("score"))
-                locked["planned_path"] = fresh.get("planned_path", locked.get("planned_path"))
-                locked["goal_frame"] = fresh.get("goal_frame", locked.get("goal_frame"))
-                locked["nav_planner"] = fresh.get("nav_planner", locked.get("nav_planner"))
-                locked["astar_fallback"] = fresh.get("astar_fallback", locked.get("astar_fallback"))
-                locked["selection_explanation"] = fresh.get(
-                    "selection_explanation", locked.get("selection_explanation")
-                )
-                self.active_explore_goal = locked
-                if self._hint_has_planned_path(fresh):
-                    self._set_active_planned_path(fresh)
-                elif str(fresh.get("nav_planner", "")) == "bearing_first" or fresh.get(
-                    "astar_fallback"
-                ):
-                    self._clear_active_planned_path()
+                if switch_allowed:
+                    self._begin_explore_goal(now)
+                    self.active_explore_goal = dict(fresh)
+                    if self._hint_has_planned_path(fresh):
+                        self._set_active_planned_path(fresh)
+                else:
+                    locked = dict(self.active_explore_goal or fresh)
+                    locked["goal_pose"] = fresh.get("goal_pose", locked.get("goal_pose"))
+                    locked["look_at"] = fresh.get("look_at", locked.get("look_at"))
+                    locked["score"] = fresh.get("score", locked.get("score"))
+                    locked["planned_path"] = fresh.get("planned_path", locked.get("planned_path"))
+                    locked["goal_frame"] = fresh.get("goal_frame", locked.get("goal_frame"))
+                    locked["nav_planner"] = fresh.get("nav_planner", locked.get("nav_planner"))
+                    locked["astar_fallback"] = fresh.get("astar_fallback", locked.get("astar_fallback"))
+                    locked["selection_explanation"] = fresh.get(
+                        "selection_explanation", locked.get("selection_explanation")
+                    )
+                    self.active_explore_goal = locked
+                    if self._hint_has_planned_path(fresh):
+                        self._set_active_planned_path(fresh)
+                    elif str(fresh.get("nav_planner", "")) == "bearing_first" or fresh.get(
+                        "astar_fallback"
+                    ):
+                        self._clear_active_planned_path()
         elif self.active_explore_goal is None:
             if self.latest_explore_hint and self.valid_explore_hint(now):
                 fresh = self.latest_explore_hint
@@ -975,6 +1193,12 @@ class SharedNavSemanticExplore(Node):
             self.explore_phase_start = now
 
         if self.explore_phase == "EXPLORE_ALIGN":
+            if (
+                self.explore_target_visible_interrupt
+                and self.target_ok(self.last_target)
+            ):
+                self._interrupt_explore_for_target("target visible during EXPLORE_ALIGN")
+                return None
             if abs(bearing) > align_threshold and align_elapsed < self.explore_align_max_sec:
                 wz = clamp(kp * bearing, -self.bearing_max_wz, self.bearing_max_wz)
                 return ServoCommand(vx=0.0, wz=wz), "semantic_explore_align"
@@ -984,6 +1208,12 @@ class SharedNavSemanticExplore(Node):
                 self.explore_burst_start_xy = self.latest_odom_xy
 
         if self.explore_phase == "EXPLORE_STEP":
+            if (
+                self.explore_target_visible_interrupt
+                and self.target_ok(self.last_target)
+            ):
+                self._interrupt_explore_for_target("target visible during EXPLORE_STEP")
+                return None
             if abs(bearing) > align_threshold * 1.35:
                 self.explore_phase = "EXPLORE_ALIGN"
                 self.explore_phase_start = now
@@ -1080,19 +1310,32 @@ class SharedNavSemanticExplore(Node):
         now = time.time()
         self._prune_rejected_candidates(now)
         self.step_count += 1
+
+        if self.wall_recovery_active:
+            self.desired_reason = "wall_rotate_90"
+            self.publish_point(self.last_target, "WALL_ROTATE_90")
+            self.publish_state(
+                "WALL_ROTATE_90",
+                reason=self.desired_reason,
+                target=self.last_target.to_dict() if self.last_target else {},
+                explore_phase="WALL_ROTATE_90",
+                wall_recovery_active=True,
+                wall_recovery_reason=self.last_qwen_path_reason,
+                wall_recovery_turn_deg=self.wall_recovery_turn_deg,
+                wall_recovery_elapsed_sec=max(0.0, now - self.wall_recovery_start_time),
+            )
+            return
+
         target = self.resolve_target(now)
         self.update_target_memory(target, now)
         if (
             self.semantic_explore_enabled
             and self.explore_target_visible_interrupt
             and self.target_ok(target)
-            and self.fsm.state in (NavState.SEARCH, NavState.LOST_RECOVERY)
+            and self.fsm.state in (NavState.SEARCH, NavState.LOST_RECOVERY, NavState.CANDIDATE_LOCK)
             and self.active_explore_goal is not None
         ):
-            self.active_explore_goal = None
-            self.observe_update_active = False
-            self.explore_phase = "EXPLORE_SELECT"
-            self.explore_phase_start = now
+            self._interrupt_explore_for_target("target visible, interrupt explore goal")
         front_min = self.front_min_distance()
         lidar_dist = self.effective_lidar_distance(target)
         obs = self.make_observation(now, target, lidar_dist, front_min=front_min)
@@ -1132,12 +1375,37 @@ class SharedNavSemanticExplore(Node):
             self.publish_state(result.state.value, reason=self.desired_reason, target=target.to_dict(), from_control=False)
             return
 
+        if (
+            self.semantic_explore_enabled
+            and result.state in (NavState.SEARCH, NavState.LOST_RECOVERY, NavState.BLOCKED)
+            and self._maybe_start_wall_recovery(now, front_min)
+        ):
+            self.desired_reason = "wall_rotate_90"
+            self.publish_point(target, "WALL_ROTATE_90")
+            self.publish_state(
+                "WALL_ROTATE_90",
+                reason=self.desired_reason,
+                target=target.to_dict(),
+                explore_phase="WALL_ROTATE_90",
+                wall_recovery_active=True,
+                wall_recovery_reason=self.last_qwen_path_reason,
+                wall_recovery_turn_deg=self.wall_recovery_turn_deg,
+                wall_recovery_elapsed_sec=max(0.0, now - self.wall_recovery_start_time),
+            )
+            return
+
         cmd, reason = self.command_for_state(result.state, target, now)
         self._record_birth_sector(now)
         self.desired_cmd = self.to_twist(cmd)
         self.desired_reason = reason
         self.publish_point(target, result.state.value)
         self.publish_state(result.state.value, reason=reason, target=target.to_dict(), from_control=False)
+
+    def _sync_wall_recovery_cmd(self, now: float) -> None:
+        if not self.wall_recovery_active:
+            return
+        self.desired_cmd = self._wall_recovery_cmd(now)
+        self.desired_reason = "wall_rotate_90"
 
     def control_timer_cb(self) -> None:
         if self.fsm.state in (NavState.ARRIVE_VERIFY, NavState.SUCCESS, NavState.FAILED):
@@ -1147,6 +1415,8 @@ class SharedNavSemanticExplore(Node):
                 self.publish_state(self.fsm.state.value, reason=self.desired_reason, from_control=True)
             return
 
+        now = time.time()
+        self._sync_wall_recovery_cmd(now)
         self._sync_birth_scan_cmd(time.time())
         safe_cmd, safety = self.apply_safety_layer(self.desired_cmd)
         self.last_safety = safety
@@ -1461,11 +1731,15 @@ class SharedNavSemanticExplore(Node):
         is_retreat = self.blocked_retreat_active or str(self.desired_reason).startswith(
             "blocked_retreat"
         )
+        is_wall_rotate = self.wall_recovery_active or str(self.desired_reason).startswith(
+            "wall_rotate"
+        )
         if (
             self.require_lidar
             and (scan_age is None or scan_age > self.scan_stale_sec)
             and not birth_scanning
             and not is_retreat
+            and not is_wall_rotate
         ):
             info.update({"safe_cmd_vx": 0.0, "safe_cmd_wz": 0.0, "safety_reason": "stale_scan"})
             return safe, info
@@ -1489,8 +1763,27 @@ class SharedNavSemanticExplore(Node):
             )
             return safe, info
 
+        if is_wall_rotate:
+            safe.linear.x = 0.0
+            safe.angular.z = clamp(
+                wz,
+                -abs(self.wall_recovery_wz),
+                abs(self.wall_recovery_wz),
+            )
+            info.update(
+                {
+                    "safe_cmd_vx": 0.0,
+                    "safe_cmd_wz": float(safe.angular.z),
+                    "safety_reason": "wall_rotate_pass",
+                    "control_mode": "WALL_ROTATE_90",
+                    "safety_limited": True,
+                }
+            )
+            return safe, info
+
         if (
             not birth_scanning
+            and not is_wall_rotate
             and front_min is not None
             and front_min < self.emergency_stop_distance
         ):
@@ -1627,6 +1920,11 @@ class SharedNavSemanticExplore(Node):
         if self.blocked_retreat_active:
             parts.append("blocked_retreat_active")
 
+        if self.wall_recovery_active:
+            parts.append("wall_recovery_active")
+            if self.last_qwen_path_reason:
+                parts.append(f"wall_reason={self.last_qwen_path_reason}")
+
         if self.explore_phase and self.explore_phase != "EXPLORE_SELECT":
             parts.append(f"explore_phase={self.explore_phase}")
 
@@ -1694,8 +1992,21 @@ class SharedNavSemanticExplore(Node):
             "birth_scan_odom_yaw_deg": math.degrees(self._birth_odom_accum_rad),
             "birth_scan_target_deg": math.degrees(self.birth_scan_target_rad),
             "explore_phase": self.explore_phase,
+            "active_explore_goal": bool(self.active_explore_goal),
+            "active_candidate_id": (self.active_explore_goal or {}).get("candidate_id"),
+            "latest_hint_candidate_id": (
+                (self.latest_explore_hint or {}).get("candidate_id")
+                if self.latest_explore_hint
+                else None
+            ),
+            "goal_locked_while_moving": self.explore_lock_goal_while_moving,
+            "explore_moving_phase_locked": (
+                self.explore_lock_goal_while_moving and self._is_explore_moving_phase()
+            ),
+            "target_visible_interrupt": self.explore_target_visible_interrupt,
             "explore_goal_traveled_m": round(self.explore_goal_traveled_m, 3),
             "explore_step_distance_m": self.explore_step_distance_m,
+            "step_goal_distance_m": self.explore_step_distance_m,
             "explore_goal_switch_max_distance_m": self.explore_goal_switch_max_distance_m,
             "explore_path_waypoint_idx": self.active_path_waypoint_idx,
             "explore_planned_path_len": len(self.active_planned_path),
@@ -1706,6 +2017,15 @@ class SharedNavSemanticExplore(Node):
             "blocked_retreat_active": self.blocked_retreat_active,
             "blocked_retreat_target_m": round(self.blocked_retreat_clearance_target, 3),
             "blocked_retreat_margin_m": self.blocked_retreat_margin_m,
+            "wall_recovery_active": self.wall_recovery_active,
+            "wall_recovery_reason": self.last_qwen_path_reason,
+            "wall_recovery_turn_deg": self.wall_recovery_turn_deg,
+            "wall_recovery_elapsed_sec": (
+                round(max(0.0, time.time() - self.wall_recovery_start_time), 3)
+                if self.wall_recovery_active
+                else 0.0
+            ),
+            "last_qwen_path_mode": self.last_qwen_path_mode,
             "time": time.time(),
         }
         if self.active_explore_goal:

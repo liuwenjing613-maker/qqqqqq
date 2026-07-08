@@ -116,11 +116,18 @@ def build_prompt(
         "- Do NOT guess where the hidden target is.\n"
         "- Set target_visible=false; u and v must be null.\n"
         "- Set waypoint_visible=true and output waypoint_u/waypoint_v on the center of the safe free path.\n"
+        "- Use PATH only for a visible traversable floor, corridor, doorway, aisle, open passage, or largest connected free-floor region.\n"
+        "- A large uniform wall-like surface, cabinet face, door face, vertical plane, or close obstacle is NOT a traversable path.\n"
+        '- If most of the image is one uniform wall-like color/texture and no clear free-floor region is visible, use mode="NONE".\n'
+        "- If the lower half of the image has no safe connected floor/path region, use mode=\"NONE\".\n"
+        "- If unsure whether a region is floor or wall, prefer mode=\"NONE\" instead of placing a waypoint on a wall.\n"
+        "- For wall/no-floor/no-path cases, set reason to a short phrase such as wall_like_no_floor or no_traversable_path.\n"
         "- Prefer the lower half of the image: ground, floor, corridor centerline, or largest open region.\n"
         "- Choose the center of the widest clear continuation, not near walls, furniture legs, clutter, "
         "shadows, or reflections.\n"
         '- If no safe traversable path is visible, use mode="NONE" with all coordinates null.\n'
         "- Do NOT return TARGET mode or invent a target point in path task.\n"
+        "- Do NOT output motion commands such as rotate or turn; only return PATH or NONE.\n"
     )
 
     none_rules = (
