@@ -13,61 +13,111 @@ def test_parse_instruction_sequence():
     assert parse_instruction_sequence("first find bottle, then find cup") == ["bottle", "cup"]
 
 
-def test_build_prompt_track_contains_locked_and_inferred():
-    prompt = build_prompt("bottle", mode="track", first_request=True, image_width=640, image_height=480)
-    assert "locked|inferred" in prompt
-    assert "TRACK_FIRST" in prompt
-    assert "inferred" in prompt.lower()
-    assert "navigable path waypoint" in prompt
+def test_build_prompt_target_contains_target_mode():
+    prompt = build_prompt("bottle", mode="target", first_request=True, image_width=640, image_height=480)
+    assert "TARGET|PATH|NONE" in prompt
+    assert "TARGET_TASK_FIRST" in prompt
+    assert "Do NOT return PATH mode" in prompt
 
 
-def test_validate_locked_usable():
+def test_build_prompt_path_contains_path_mode():
+    prompt = build_prompt("bottle", mode="path", first_request=True)
+    assert "PATH_TASK_FIRST" in prompt
+    assert "Do NOT return TARGET mode" in prompt
+
+
+def test_validate_target_usable():
+    client = QwenDashScopeClient.__new__(QwenDashScopeClient)
+    client.min_confidence = 0.60
+    image_info = {"orig_w": 1280, "orig_h": 720, "sent_w": 640, "sent_h": 360}
+    out = client._validate_and_map(
+        {
+            "mode": "TARGET",
+            "target_visible": True,
+            "u": 0.5,
+            "v": 0.4,
+            "waypoint_visible": False,
+            "waypoint_u": None,
+            "waypoint_v": None,
+            "confidence": 0.9,
+            "reason": "target visible",
+        },
+        image_info,
+        task_mode="target",
+    )
+    assert out["mode"] == "TARGET"
+    assert out["usable"] is True
+    assert out["u"] is not None
+    assert out["waypoint_u"] is None
+
+
+def test_validate_path_usable():
+    client = QwenDashScopeClient.__new__(QwenDashScopeClient)
+    client.min_confidence = 0.60
+    image_info = {"orig_w": 1280, "orig_h": 720, "sent_w": 640, "sent_h": 360}
+    out = client._validate_and_map(
+        {
+            "mode": "PATH",
+            "target_visible": False,
+            "u": None,
+            "v": None,
+            "waypoint_visible": True,
+            "waypoint_u": 0.5,
+            "waypoint_v": 0.7,
+            "confidence": 0.75,
+            "reason": "safe corridor",
+        },
+        image_info,
+        task_mode="path",
+    )
+    assert out["mode"] == "PATH"
+    assert out["usable"] is True
+    assert out["u"] is None
+    assert out["waypoint_u"] is not None
+
+
+def test_validate_none_not_usable():
+    client = QwenDashScopeClient.__new__(QwenDashScopeClient)
+    client.min_confidence = 0.60
+    image_info = {"orig_w": 1280, "orig_h": 720, "sent_w": 640, "sent_h": 360}
+    out = client._validate_and_map(
+        {
+            "mode": "NONE",
+            "target_visible": False,
+            "u": None,
+            "v": None,
+            "waypoint_visible": False,
+            "waypoint_u": None,
+            "waypoint_v": None,
+            "confidence": 0.0,
+            "reason": "no target and no path",
+        },
+        image_info,
+        task_mode="target",
+    )
+    assert out["mode"] == "NONE"
+    assert out["usable"] is False
+
+
+def test_validate_legacy_locked_still_works():
     client = QwenDashScopeClient.__new__(QwenDashScopeClient)
     client.min_confidence = 0.60
     image_info = {"orig_w": 1280, "orig_h": 720, "sent_w": 640, "sent_h": 360}
     out = client._validate_and_map(
         {"status": "locked", "u": 0.5, "v": 0.4, "confidence": 0.9, "reason": ""},
         image_info,
+        task_mode="target",
     )
+    assert out["mode"] == "TARGET"
     assert out["usable"] is True
-    assert out["direction_valid"] is True
-    assert out["status"] == "locked"
-    assert out["u"] is not None
-    assert abs(out["_raw_u"] - 0.5) < 1e-6
-
-
-def test_validate_inferred_direction_valid_not_usable():
-    client = QwenDashScopeClient.__new__(QwenDashScopeClient)
-    client.min_confidence = 0.60
-    image_info = {"orig_w": 1280, "orig_h": 720, "sent_w": 640, "sent_h": 360}
-    out = client._validate_and_map(
-        {"status": "inferred", "u": 0.5, "v": 0.7, "confidence": 0.35, "reason": "clear path"},
-        image_info,
-    )
-    assert out["usable"] is False
-    assert out["direction_valid"] is True
-    assert out["status"] == "inferred"
-    assert out["u"] is not None
-    assert out["_coord_reason"] == "inferred_waypoint"
-
-
-def test_validate_pixel_coords_converted():
-    client = QwenDashScopeClient.__new__(QwenDashScopeClient)
-    client.min_confidence = 0.60
-    image_info = {"orig_w": 1280, "orig_h": 720, "sent_w": 640, "sent_h": 360}
-    out = client._validate_and_map(
-        {"status": "inferred", "u": 320.0, "v": 180.0, "confidence": 0.4, "reason": ""},
-        image_info,
-    )
-    assert out["direction_valid"] is True
-    assert abs(out["_raw_u"] - 0.5) < 1e-3
-    assert abs(out["_raw_v"] - 0.5) < 1e-3
 
 
 if __name__ == "__main__":
     test_parse_instruction_sequence()
-    test_build_prompt_track_contains_locked_and_inferred()
-    test_validate_locked_usable()
-    test_validate_inferred_direction_valid_not_usable()
-    test_validate_pixel_coords_converted()
+    test_build_prompt_target_contains_target_mode()
+    test_build_prompt_path_contains_path_mode()
+    test_validate_target_usable()
+    test_validate_path_usable()
+    test_validate_none_not_usable()
+    test_validate_legacy_locked_still_works()
     print("PASS test_qwen_dashscope_validate")

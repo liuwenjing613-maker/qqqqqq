@@ -20,32 +20,10 @@ if [ -f "$HOME/ydlidar_ws/install/setup.bash" ]; then
 fi
 set -u
 
-mkdir -p logs
+# shellcheck source=scripts/lib/ensure_foxglove_bridge.sh
+source "$PROJECT_DIR/scripts/lib/ensure_foxglove_bridge.sh"
 
-ensure_foxglove_bridge() {
-  if ! ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
-    echo "[foxglove] ERROR: foxglove_bridge not installed"
-    echo "  Install ROS package foxglove_bridge or use Foxglove Studio native ROS connection."
-    return 1
-  fi
-  if command -v ss >/dev/null 2>&1 && ss -tln 2>/dev/null | grep -q ":${FOXGLOVE_PORT} "; then
-    echo "[foxglove] OK: already listening on ws port ${FOXGLOVE_PORT}"
-    return 0
-  fi
-  echo "[foxglove] starting bridge on port ${FOXGLOVE_PORT}..."
-  bash "$RDK_ORIGINAL_ROOT/scripts/lidar/start_foxglove.sh" \
-    > "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_bridge.log" 2>&1 &
-  for _ in $(seq 1 20); do
-    if ss -tln 2>/dev/null | grep -q ":${FOXGLOVE_PORT} "; then
-      echo "[foxglove] OK: listening on ${FOXGLOVE_PORT}"
-      return 0
-    fi
-    sleep 1
-  done
-  echo "[foxglove] ERROR: bridge failed; see $PROJECT_DIR/logs/qwen_api_lidar_foxglove_bridge.log"
-  tail -20 "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_bridge.log" 2>/dev/null || true
-  return 1
-}
+mkdir -p logs
 
 cleanup() {
   if [ -n "${VIZ_PID:-}" ] && kill -0 "$VIZ_PID" 2>/dev/null; then
@@ -61,21 +39,10 @@ echo "Foxglove WebSocket: ws://<robot-ip>:${FOXGLOVE_PORT}"
 echo ""
 echo "Prerequisite: nav stack running (start_qwen_api_lidar_nav.sh) with /image_raw /scan /qwen_api_*"
 
-ensure_foxglove_bridge
+ensure_foxglove_bridge "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_bridge.log"
 
-echo "[viz] starting qwen_api_lidar_foxglove_viz..."
-python3 "$PROJECT_DIR/src/apps/qwen_api_lidar_foxglove_viz.py" \
-  --config "$CONFIG" \
-  > "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_viz.log" 2>&1 &
-VIZ_PID=$!
-sleep 1
-if ! kill -0 "$VIZ_PID" 2>/dev/null; then
-  echo "[viz] ERROR: viz node exited; see logs/qwen_api_lidar_foxglove_viz.log"
-  tail -30 "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_viz.log" 2>/dev/null || true
-  exit 1
-fi
-
-echo "Started viz pid=$VIZ_PID"
+start_qwen_api_foxglove_viz_node "$CONFIG" "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_viz.log" || exit 1
+VIZ_PID=$FOXGLOVE_VIZ_PID
 echo ""
 echo "Foxglove panels (suggested layout):"
 echo "  1) Image     -> /qwen_api_viz/image/compressed"

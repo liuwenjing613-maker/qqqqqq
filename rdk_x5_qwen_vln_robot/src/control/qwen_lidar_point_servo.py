@@ -2,13 +2,17 @@
 """Point visual servo: same steering law as rdk_x5_vln_robot PointServo + LiDAR safety."""
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from geometry_msgs.msg import Twist
 
 
 def clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+# Distinguish "caller did not pass arrive_distance" from "explicitly disable arrive".
+_ARRIVE_UNSET = object()
 
 
 def turn_dir_from_ex(ex: float) -> float:
@@ -329,7 +333,7 @@ class QwenLidarPointServo:
         target: Dict[str, Any],
         front_distance: Optional[float],
         target_distance: Optional[float],
-        arrive_distance: Optional[float] = None,
+        arrive_distance: Union[float, None, object] = _ARRIVE_UNSET,
         point_kind: str = "locked",
         inferred_confidence: Optional[float] = None,
         inferred_vx_scale: float = 1.0,
@@ -368,7 +372,11 @@ class QwenLidarPointServo:
             arrive_dist = None
         else:
             safety_dist = target_distance if target_distance is not None else front_distance
-            arrive_dist = arrive_distance if arrive_distance is not None else safety_dist
+            if arrive_distance is _ARRIVE_UNSET:
+                arrive_dist = safety_dist
+            else:
+                # Explicit None from nav (lidar_arrive_enable=false) must skip ARRIVED.
+                arrive_dist = arrive_distance
 
         if front_distance is not None and float(front_distance) <= self.emergency_stop_distance:
             return self.stop_result(
