@@ -237,6 +237,8 @@ class ExploreGoalSelector(Node):
         self.direction_cfg = direction_cfg
         self.direction_lock_enabled = bool(direction_cfg.get("enabled", False))
         self.force_best_goal_in_active_sector = bool(direction_cfg.get("force_best_goal_in_active_sector", True))
+        self.force_best_min_total_score = float(direction_cfg.get("force_best_min_total_score", 0.0))
+        self.force_best_require_valid_path = bool(direction_cfg.get("force_best_require_valid_path", True))
         self.direction_sector_count = max(4, int(direction_cfg.get("sector_count", 8)))
 
         self.direction_initial_policy = str(direction_cfg.get("initial_policy", "best_front_sector"))
@@ -1479,6 +1481,100 @@ class ExploreGoalSelector(Node):
 
         return False
 
+    def _candidates_in_active_sector(
+        self,
+        candidates: List[ExploreCandidate],
+    ) -> List[ExploreCandidate]:
+        if not candidates:
+            return []
+
+        if not self.direction_lock_enabled or not self.active_area_id:
+            return list(candidates)
+
+        out: List[ExploreCandidate] = []
+        for c in candidates:
+            if not c.sector_id:
+                c.sector_id = self._sector_id_for_goal(c.goal_xy)
+            if c.sector_id == self.active_area_id:
+                out.append(c)
+
+        return out
+
+    def _candidate_has_valid_navigation(self, c: ExploreCandidate) -> bool:
+        if c is None:
+            return False
+
+        if c.reject_reason:
+            return False
+
+        validation = c.validation or {}
+        if validation.get("ok") is False:
+            return False
+
+        if self.force_best_require_valid_path and self.require_astar_path:
+            planned = None
+            if isinstance(c.source, dict):
+                planned = c.source.get("planned_path")
+            if not isinstance(planned, list) or len(planned) < self.min_astar_path_points:
+                return False
+
+        return True
+
+    def _force_best_active_sector_candidate(
+        self,
+        candidates: List[ExploreCandidate],
+    ) -> Optional[ExploreCandidate]:
+        if not self.force_best_goal_in_active_sector:
+            self._last_selection_explanation = "force_best_disabled"
+            return None
+
+        if not self.direction_lock_enabled or not self.active_area_id:
+            self._last_selection_explanation = (
+                "force_best_skipped: no direction_lock or no active_area_id"
+            )
+            return None
+
+        active = self._candidates_in_active_sector(candidates)
+
+        safe_active = [
+            c for c in active
+            if self._candidate_has_valid_navigation(c)
+            and c.total_score >= self.force_best_min_total_score
+        ]
+
+        if not safe_active:
+            self._last_selection_explanation = (
+                f"force_best_failed: active={self.active_area_id}, "
+                f"active_count={len(active)}, safe_count=0"
+            )
+            return None
+
+        best = max(
+            safe_active,
+            key=lambda c: (
+                float(c.total_score),
+                float(c.safety_margin),
+                float(c.information_gain),
+                float(c.reachability),
+                -self._distance_to_goal(c.goal_xy),
+            ),
+        )
+
+        best.forced_below_threshold = best.total_score < self.min_hint_score
+        best.reason = (
+            f"forced_best_active_sector: active={self.active_area_id}, "
+            f"score={best.total_score:.3f} < min_hint_score={self.min_hint_score:.3f}"
+        )
+
+        if isinstance(best.source, dict):
+            best.source["forced_below_threshold"] = bool(best.forced_below_threshold)
+            best.source["force_reason"] = "best_valid_candidate_in_active_sector"
+            best.source["raw_score"] = float(best.total_score)
+            best.source["min_hint_score"] = float(self.min_hint_score)
+
+        self._last_selection_explanation = best.reason
+        return best
+
     def _goal_in_active_scan_free_area(self, goal_xy: Tuple[float, float]) -> bool:
         """严格检查目标点是否落在 active sector 当前可通行的动态角度区间内（含边缘）。
         坐标基准必须与 sector_id 一致（spawn yaw）。
@@ -1548,6 +1644,14 @@ class ExploreGoalSelector(Node):
     def _filter_by_active_area(
         self, valid_candidates: List[ExploreCandidate]
     ) -> List[ExploreCandidate]:
+        # 时间超时检查必须独立于本帧 valid_candidates 是否为空
+        if self.direction_lock_enabled and self.active_area_id:
+            if self._sector_is_exhausted(self.active_area_id):
+                cands_for_switch = valid_candidates or self._last_valid_candidates or []
+                non_empty = sorted({c.sector_id for c in cands_for_switch}) if cands_for_switch else []
+                avail = [s for s in non_empty if not self._sector_is_exhausted(s)] if non_empty else []
+                self._maybe_init_or_switch_active_sector(cands_for_switch, avail)
+
         if not valid_candidates:
             if self.direction_lock_enabled and self.active_area_id:
                 st = self.sector_states.get(self.active_area_id)
@@ -2970,8 +3074,15 @@ class ExploreGoalSelector(Node):
             "nav_planner": nav_planner,
             "astar_fallback": not use_astar,
             "sector_id": selected.sector_id,
-            "forced_below_threshold": bool(getattr(selected, "forced_below_threshold", False)),
+            "forced_below_threshold": bool(
+                getattr(selected, "forced_below_threshold", False)
+                or (isinstance(selected.source, dict) and selected.source.get("forced_below_threshold", False))
+            ),
             "forced_pick": bool(getattr(selected, "forced_pick", False)),
+            "force_reason": (selected.source.get("force_reason", "") if isinstance(selected.source, dict) else ""),
+            "raw_score": float(selected.source.get("raw_score", selected.total_score) if isinstance(selected.source, dict) else selected.total_score),
+            "min_hint_score": float(selected.source.get("min_hint_score", self.min_hint_score) if isinstance(selected.source, dict) else self.min_hint_score),
+            "active_area_id": self.active_area_id,
             "raw_goal_xy": (
                 [selected.raw_goal_xy[0], selected.raw_goal_xy[1]]
                 if selected.raw_goal_xy is not None
@@ -3578,7 +3689,25 @@ class ExploreGoalSelector(Node):
         self._update_candidate_debug(raw_candidates)
         if path:
             self._last_path = path
-        selected = self._choose_sticky_candidate(best, self._last_valid_candidates or raw_candidates, now)
+
+        valid_pool = list(self._last_valid_candidates or [])
+
+        # 核心新增：如果没有高于阈值的 best，就从 active sector 的 valid candidates 里强制选最高分
+        if best is None and valid_pool:
+            forced = self._force_best_active_sector_candidate(valid_pool)
+            if forced is not None:
+                best = forced
+                forced_path = None
+                if isinstance(forced.source, dict):
+                    forced_path = forced.source.get("planned_path")
+                if isinstance(forced_path, list) and len(forced_path) >= 2:
+                    self._last_path = [
+                        (float(p[0]), float(p[1]))
+                        for p in forced_path
+                        if isinstance(p, (list, tuple)) and len(p) >= 2
+                    ]
+
+        selected = self._choose_sticky_candidate(best, valid_pool or raw_candidates, now)
         self._selected = selected
         if selected is None:
             if not self._last_valid_candidates:
@@ -3609,7 +3738,9 @@ class ExploreGoalSelector(Node):
             path_len = len(selected.source.get("planned_path") or self._last_path or [])
             self.get_logger().info(
                 f"HINT_PUBLISH id={selected.candidate_id} mode={selected.mode} "
-                f"score={selected.total_score:.3f} goal=({selected.goal_xy[0]:.2f},{selected.goal_xy[1]:.2f}) "
+                f"score={selected.total_score:.3f} forced={getattr(selected, 'forced_below_threshold', False)} "
+                f"sector={selected.sector_id} active={self.active_area_id} "
+                f"goal=({selected.goal_xy[0]:.2f},{selected.goal_xy[1]:.2f}) "
                 f"path_len={path_len} projection={selected.projection_status or 'n/a'}"
             )
         elif self._select_tick_count % max(1, int(self.selector_hz)) == 0:
