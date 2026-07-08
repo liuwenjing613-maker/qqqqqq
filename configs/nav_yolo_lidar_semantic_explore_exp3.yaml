@@ -1,0 +1,106 @@
+profile: exp3
+experiment_name: yolo_lidar_semantic_explore_exp3_strict_v3
+semantic_explore_exp3: &exp3_selector
+  enabled: true
+  selector_module: explore_goal_selector_exp3
+  selector_class: ExploreGoalSelectorExp3
+  sector_count: 8
+  sector_choose_by_count: true
+  sector_count_distance_min_m: 0.70
+  active_sector_min_candidates: 2
+  active_sector_keep_seconds: 10.0
+  active_sector_max_seconds: 45.0
+  sector_switch_min_count_gain: 4
+  keep_active_if_tied: true
+  force_goal_in_active_sector: true
+  lidar_candidate_enable: true
+  min_candidates_total: 55
+  min_candidates_per_active_sector: 2
+  lidar_angle_step_deg: 4.0
+  lidar_max_candidates: 260
+  lidar_min_range_m: 0.45
+  lidar_max_range_m: 3.4
+  lidar_obstacle_margin_m: 0.52
+  lidar_unknown_ray_as_frontier: false
+  lidar_yaw_offset_deg: 0.0
+  recovery_projection_radius_schedule_m: [1.0, 1.3, 1.6, 2.0, 2.4, 2.8]
+  min_candidate_score: 0.12
+  recovery_relax_score_schedule: [1.0, 0.55, 0.20, 0.0]
+  near_reject_distance_m: 0.70
+  preferred_min_distance_m: 1.20
+  preferred_max_distance_m: 2.80
+  max_goal_distance_m: 3.20
+  min_unknown_gain: 0.0
+  require_reachable: true
+  w_distance: 0.48
+  w_unknown_gain: 0.16
+  w_raw_score: 0.14
+  w_sector_density: 0.17
+  w_forward: 0.03
+  w_hysteresis: 0.02
+  near_penalty: 0.45
+  visited_penalty: 0.55
+  blacklist_penalty: 0.90
+  prefer_initial_direction: true
+  initial_direction_hold_s: 55.0
+  initial_direction_yaw_deg: null
+  initial_direction_tie_bonus: 0.25
+  observe_spin_on_arrival: true
+  observe_spin_duration_s: 5.8
+  observe_spin_wz: 0.24
+  observe_stop_after_spin_s: 0.35
+  visited_cooldown_s: 90.0
+  visited_radius_m: 0.65
+  blacklist_radius_m: 0.60
+  blacklist_ttl_s: 140.0
+  goal_latch_enabled: true
+  goal_latch_min_seconds: 8.0
+  goal_latch_max_seconds: 28.0
+  goal_reached_radius_m: 0.38
+  goal_switch_min_score_gain: 0.22
+  scan_corridor_enable: true
+  scan_corridor_half_width_deg: 9.0
+  scan_corridor_min_clear_fraction: 0.68
+  scan_corridor_min_beams: 3
+  scan_corridor_safety_margin_m: 0.22
+  scan_corridor_unknown_is_clear: false
+  debug: true
+# Compatibility for exp2 code paths that still read the old key.
+semantic_explore_exp2:
+  <<: *exp3_selector
+direction:
+  mode: exp3_strict_v3_count_latched_sector
+  sector_count: 8
+  sector_choose_by_count: true
+  prefer_initial_direction: true
+  initial_direction_hold_s: 55.0
+  active_sector_recovery:
+    enabled: true
+    expand_after_no_candidate_cycles: 0
+    projection_radius_schedule_m: [1.0, 1.3, 1.6, 2.0, 2.4, 2.8]
+    allow_relax_unknown_gain: true
+    relaxed_min_unknown_gain: 0.0
+    active_cone_expand_deg: [22.5, 45.0, 67.5, 90.0, 135.0, 180.0]
+    recovery_relax_score_schedule: [1.0, 0.55, 0.20, 0.0]
+direction_lock:
+  enabled: true
+  mode: exp3_strict_v3_count_based_soft_lock
+  sector_count: 8
+  min_candidates_to_keep_sector: 2
+  max_lock_seconds: 45.0
+  switch_min_count_gain: 4
+explore_goal_selector:
+  version: exp3_strict_v3
+  selector_module: explore_goal_selector_exp3
+  selector_class: ExploreGoalSelectorExp3
+  sector_count: 8
+  min_candidate_score: 0.12
+  min_candidates_total: 55
+  prefer_far_goal: true
+  preferred_min_distance_m: 1.20
+  preferred_max_distance_m: 2.80
+  force_goal_in_active_sector: true
+  goal_latch_enabled: true
+  require_reachable: true
+  scan_corridor_enable: true
+  observe_spin_on_arrival: true

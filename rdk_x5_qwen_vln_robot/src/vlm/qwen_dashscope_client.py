@@ -91,6 +91,15 @@ def build_prompt(
         "- Do not output pixel coordinates such as 320 or 480.\n"
         "- Never output robot speed or movement commands.\n"
         "- Never guess a hidden target location.\n"
+        "- Never mix a target point and a path waypoint in one response.\n"
+        "\n"
+        "Decision order (strict, very important):\n"
+        "1. Run the visual gates for this task mode first.\n"
+        "2. Only if ALL required gates pass, output TARGET or PATH.\n"
+        "3. If ANY required gate fails, output mode=NONE immediately. Do not guess.\n"
+        "\n"
+        "Visual gate (shared):\n"
+        "- GATE_IMAGE: the image has enough visible scene detail to judge (not blank, blurred, or overexposed).\n"
         "\n"
         "Object naming rules:\n"
         "- If target is bottle, accept water bottle, plastic bottle, drink bottle, or mineral water bottle.\n"
@@ -101,40 +110,69 @@ def build_prompt(
     )
 
     target_rules = (
-        "TARGET mode rules:\n"
-        '- Use mode="TARGET" ONLY when the exact requested target is clearly visible.\n'
+        "TARGET mode rules (center-strict):\n"
+        '- Use mode="TARGET" ONLY when the exact requested target is clearly visible AND all TARGET visual gates pass.\n'
         "- Set target_visible=true and output u/v as the visual center of the target object body.\n"
+        "- Internally estimate the visible bounding box of the exact target; output the geometric center of that bbox. Do not output the bbox.\n"
+        "- The point must lie on the visible object body, near its geometric center, not a random interior point.\n"
+        "- Do not output an edge, corner, cap, handle, label, top, bottom, shadow, reflection, floor point, path point, or navigation waypoint.\n"
+        "- Do not choose the image center unless the target object center is actually at the image center.\n"
+        "- If the target is partly visible, output the center of the visible part of the target object.\n"
+        "- For bottle or cup, place the point at the center of the main body; ignore cap, strap, rope, handle, logo, and label when choosing the horizontal center.\n"
+        "- Do not output the ground area in front of the target or the route toward the target.\n"
         "- waypoint_visible must be false; waypoint_u and waypoint_v must be null.\n"
-        "- Do not output floor, shadow, path, corridor, or guessed locations as the target.\n"
-        '- If the target is not clearly visible, use mode="NONE" with all coordinates null.\n'
+        '- If the target is not clearly visible or any TARGET gate fails, use mode="NONE" with all coordinates null.\n'
         "- Do NOT return PATH mode or any path waypoint in target task.\n"
+        "- For mode=TARGET, confidence should usually be 0.8 to 1.0.\n"
+        "\n"
+        "TARGET visual gates (ALL must pass for mode=TARGET):\n"
+        "- GATE_CATEGORY: the EXACT requested target category is clearly visible.\n"
+        "- GATE_ON_BODY: u/v lies on the visible target object body, not floor, shadow, neighbor object, or wall.\n"
+        "- GATE_CENTER_STRICT: the point is the geometric center of the visible target area.\n"
+        "- GATE_NOT_PATH: the point is NOT a navigation waypoint or search direction.\n"
+        "If any gate fails: mode=NONE (do NOT output PATH in target task).\n"
     )
 
     path_rules = (
-        "PATH mode rules:\n"
-        '- Use mode="PATH" when a safe traversable path is visible but the target is NOT visible.\n'
+        "PATH mode rules (state-safe):\n"
+        '- Use mode="PATH" ONLY when a safe traversable path is visible, the target is NOT visible, AND all PATH visual gates pass.\n'
         "- Do NOT guess where the hidden target is.\n"
         "- Set target_visible=false; u and v must be null.\n"
         "- Set waypoint_visible=true and output waypoint_u/waypoint_v on the center of the safe free path.\n"
         "- Use PATH only for a visible traversable floor, corridor, doorway, aisle, open passage, or largest connected free-floor region.\n"
+        "- Choose a visible traversable route that can lead the robot to another area.\n"
+        "- The waypoint should be near the centerline of that visible route, in the middle of the obstacle-free path.\n"
+        "- If multiple routes are visible, prefer the route with the widest clearance and clearest forward continuation.\n"
+        "- Prefer the lower half of the image: ground, floor, corridor centerline, or largest open region.\n"
+        "- When the central forward path is open, waypoint_u should usually be between 0.40 and 0.60.\n"
+        "- waypoint_v should usually be between 0.55 and 0.75 for indoor floor navigation.\n"
+        "- Avoid obstacles, walls, furniture, object bodies, clutter, narrow gaps, and floor regions immediately blocked by objects.\n"
         "- A large uniform wall-like surface, cabinet face, door face, vertical plane, or close obstacle is NOT a traversable path.\n"
         '- If most of the image is one uniform wall-like color/texture and no clear free-floor region is visible, use mode="NONE".\n'
         "- If the lower half of the image has no safe connected floor/path region, use mode=\"NONE\".\n"
         "- If unsure whether a region is floor or wall, prefer mode=\"NONE\" instead of placing a waypoint on a wall.\n"
-        "- For wall/no-floor/no-path cases, set reason to a short phrase such as wall_like_no_floor or no_traversable_path.\n"
-        "- Prefer the lower half of the image: ground, floor, corridor centerline, or largest open region.\n"
-        "- Choose the center of the widest clear continuation, not near walls, furniture legs, clutter, "
-        "shadows, or reflections.\n"
         '- If no safe traversable path is visible, use mode="NONE" with all coordinates null.\n'
         "- Do NOT return TARGET mode or invent a target point in path task.\n"
         "- Do NOT output motion commands such as rotate or turn; only return PATH or NONE.\n"
+        "- For mode=PATH, confidence means how clear, safe, and useful the navigable path is.\n"
+        "\n"
+        "PATH visual gates (ALL must pass for mode=PATH):\n"
+        "- GATE_FLOOR: the lower half shows a connected traversable floor/ground region, not only a vertical wall.\n"
+        "- GATE_ROUTE: a clear corridor, doorway, aisle, or open passage is visible.\n"
+        "- GATE_NOT_WALL: waypoint is NOT on wall, cabinet, door, furniture, legs, clutter, shadow, border, or vertical plane.\n"
+        "- GATE_CENTERLINE: waypoint is on the centerline of the widest obstacle-free path.\n"
+        "- GATE_STATE_SAFE: if the view is dominated by one uniform wall-like surface with no floor/path boundary, the gate fails.\n"
+        "If any gate fails: mode=NONE; set reason to gate_floor_failed, gate_not_wall, wall_like_no_floor, or no_traversable_path.\n"
+        "Wall-like recovery rule: a large uniform same-color vertical region is NOT a path. "
+        "If unsure whether it is floor or wall, choose NONE rather than placing a waypoint.\n"
     )
 
     none_rules = (
         "NONE mode rules:\n"
-        '- Use mode="NONE" when the requested output for this task is not available.\n'
+        '- Use mode="NONE" when the requested output for this task is not available or any visual gate fails.\n'
         "- Set target_visible=false and waypoint_visible=false.\n"
         "- All coordinate fields must be null.\n"
+        "- reason may name the failed gate or scene condition, e.g. gate_category_failed, gate_floor_failed, wall_like_no_floor.\n"
     )
 
     if mode == "target":
@@ -143,16 +181,17 @@ def build_prompt(
         task = (
             f"Task: {prefix}.\n"
             f'Target object: "{target_name}".\n'
-            "Decide whether the exact target object is clearly visible in the image.\n"
-            "If visible: mode=TARGET with object center u/v.\n"
-            "If not visible: mode=NONE. Do not output a path waypoint.\n"
+            "Run TARGET visual gates first.\n"
+            "If all gates pass and the exact target is clearly visible: mode=TARGET with object center u/v.\n"
+            "If any gate fails or the target is not visible: mode=NONE. Do not output a path waypoint.\n"
             + extra
         )
         return base_format + "\n" + target_rules + "\n" + none_rules + "\n" + task
 
     prefix = "PATH_TASK_FIRST" if first_request else "PATH_TASK"
     extra = (
-        "Reason may contain one short phrase such as 'safe free-space corridor visible ahead'.\n"
+        "Reason may contain one short phrase such as 'safe free-space corridor visible ahead' "
+        "or a gate failure such as 'wall_like_no_floor'.\n"
         if first_request
         else "Keep reason empty or very short.\n"
     )
@@ -160,8 +199,9 @@ def build_prompt(
         f"Task: {prefix}.\n"
         f'Original mission target (NOT visible requirement): "{target_name}".\n'
         "The target is not required to be visible. Analyze only traversable free space.\n"
-        "If a safe path exists: mode=PATH with waypoint_u/waypoint_v at the path center.\n"
-        "If no safe path exists: mode=NONE.\n"
+        "Run PATH visual gates first.\n"
+        "If all gates pass and a safe path exists: mode=PATH with waypoint_u/waypoint_v at the path center.\n"
+        "If any gate fails or no safe path exists: mode=NONE.\n"
         "Do not guess target location.\n"
         + extra
     )

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=scripts/lib/ros_dds_env.sh
+source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
+
 pkill -TERM -f run_shared_nav_semantic_explore 2>/dev/null || true
 pkill -TERM -f semantic_mapper_node 2>/dev/null || true
 pkill -TERM -f explore_goal_selector 2>/dev/null || true
@@ -29,5 +34,7 @@ pkill -f foxglove_bridge || true
 timeout 1 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
   "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \
   >/dev/null 2>&1 || true
+
+cleanup_ros2_fastrtps_shm
 
 echo "[stop_nav] stopped."

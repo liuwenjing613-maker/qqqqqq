@@ -102,7 +102,15 @@
           "namespaces": {
             "direction_decision": { "visible": false },
             "sector_labels": { "visible": true },
-            "visited_goals": { "visible": true }
+            "visited_goals": { "visible": true },
+            "sector_bounds_0": { "visible": true },
+            "sector_bounds_1": { "visible": true },
+            "sector_bounds_2": { "visible": true },
+            "sector_bounds_3": { "visible": true },
+            "sector_bounds_4": { "visible": true },
+            "sector_bounds_5": { "visible": true },
+            "sector_bounds_6": { "visible": true },
+            "sector_bounds_7": { "visible": true }
           }
         },
         "/semantic_landmarks": {
@@ -121,10 +129,10 @@
       },
       "layers": {}
     },
-    "RawMessages!explore_hud": {
-      "topicPath": "/explore_hud",
+    "RawMessages!HUD status": {
+      "topicPath": "/explore_hud.data",
       "diffEnabled": false,
-      "diffMethod": "custom",
+      "diffMethod": "previous message",
       "diffTopicPath": "",
       "showFullMessageForDiff": false,
       "expansion": { "data": "e" }
@@ -220,9 +228,9 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "RawMessages!explore_hud",
+      "first": "RawMessages!HUD status",
       "second": "3D!semantic_explore",
-      "splitPercentage": 20
+      "splitPercentage": 28
     },
     "second": {
       "direction": "column",
