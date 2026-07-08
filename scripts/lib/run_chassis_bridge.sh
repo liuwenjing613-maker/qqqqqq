@@ -58,5 +58,10 @@ run_chassis_bridge() {
     --base-yaw-offset "${CHASSIS_BASE_YAW_OFFSET:-0.0}" \
     $( [ "${CHASSIS_ODOM_USE_VY:-0}" = "1" ] && echo "--odom-use-vy" ) \
     $( [ "${CHASSIS_DEBUG:-0}" = "1" ] && echo "--debug" ) \
+    $( [ "${CHASSIS_KICK_ENABLE:-0}" = "1" ] && echo "--enable-kick-start" ) \
+    --kick-vx "${CHASSIS_KICK_VX:-0.055}" \
+    --kick-wz "${CHASSIS_KICK_WZ:-0.24}" \
+    --kick-duration "${CHASSIS_KICK_DURATION:-0.05}" \
+    --kick-cooldown "${CHASSIS_KICK_COOLDOWN:-0.55}" \
     > "${log_file}" 2>&1 &
 }

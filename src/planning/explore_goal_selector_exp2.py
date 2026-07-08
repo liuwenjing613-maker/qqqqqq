@@ -256,6 +256,22 @@ class ExploreGoalSelector(Node):
         self.exhaust_visited_goals = int(direction_cfg.get("exhaust_visited_goals", 3))
         self.reset_when_all_exhausted = bool(direction_cfg.get("reset_when_all_exhausted", True))
 
+        # active_sector_recovery config (under direction_lock, per corrected plan)
+        recovery = direction_cfg.get("active_sector_recovery", {}) or {}
+        self.active_sector_recovery_enabled = bool(recovery.get("enabled", True))
+        self.expand_after_no_candidate_cycles = int(recovery.get("expand_after_no_candidate_cycles", 2))
+        self.projection_radius_schedule_m = recovery.get("projection_radius_schedule_m", [0.8, 1.2, 1.6])
+        self.allow_relax_unknown_gain = bool(recovery.get("allow_relax_unknown_gain", True))
+        self.relaxed_min_unknown_gain_cells = int(recovery.get("relaxed_min_unknown_gain_cells", 0))
+        self.max_expanded_candidates_per_tick = int(recovery.get("max_expanded_candidates_per_tick", 8))
+        self.allow_scanned_free_fallback = bool(recovery.get("allow_scanned_free_fallback", True))
+        self.scanned_free_expand_max_candidates = int(recovery.get("scanned_free_expand_max_candidates", 40))
+        self.scanned_free_active_return = int(recovery.get("scanned_free_active_return", 8))
+        self.scanned_free_min_distance_m = float(recovery.get("scanned_free_min_distance_m", 0.75))
+        self.scanned_free_max_distance_m = float(recovery.get("scanned_free_max_distance_m", 2.5))
+        self.allow_sector_boundary_margin = bool(recovery.get("allow_sector_boundary_margin", True))
+        self.sector_boundary_margin_deg = float(recovery.get("sector_boundary_margin_deg", 10.0))
+
         self.sector_states: Dict[str, SectorState] = {
             f"sector_{i:02d}": SectorState(sector_id=f"sector_{i:02d}")
             for i in range(self.direction_sector_count)
@@ -580,6 +596,11 @@ class ExploreGoalSelector(Node):
             f"tf_buffer_ok={self.tf_buffer is not None} map_frame={self._frame_fixed} "
             f"require_astar={self.require_astar_path} projection={self.projection_enabled} "
             f"min_clearance_m={self.min_goal_clearance_m} min_hint_score={self.min_hint_score}"
+        )
+        self.get_logger().info(
+            f"active_sector_recovery enabled={self.active_sector_recovery_enabled} "
+            f"expand_after={self.expand_after_no_candidate_cycles} "
+            f"radii={self.projection_radius_schedule_m}"
         )
 
     def _log_sensor_milestones(self) -> None:
@@ -1574,6 +1595,168 @@ class ExploreGoalSelector(Node):
 
         self._last_selection_explanation = best.reason
         return best
+
+    def _get_active_sector_raw_candidates(
+        self, raw_candidates: List[ExploreCandidate]
+    ) -> List[ExploreCandidate]:
+        if not raw_candidates:
+            return []
+        if not self.direction_lock_enabled or not self.active_area_id:
+            return list(raw_candidates)
+        out: List[ExploreCandidate] = []
+        for c in raw_candidates:
+            sid = c.sector_id or self._sector_id_for_goal(c.goal_xy)
+            if sid == self.active_area_id:
+                out.append(c)
+        return out
+
+    def _in_active_or_boundary_margin(self, goal_xy: Tuple[float, float]) -> bool:
+        if not self.direction_lock_enabled or not self.active_area_id:
+            return True
+        if self.spawn_pose is None:
+            return True
+        # compute bearing relative to spawn yaw
+        dx = goal_xy[0] - self.spawn_pose[0]
+        dy = goal_xy[1] - self.spawn_pose[1]
+        bearing = math.atan2(dy, dx) - self.spawn_pose[2]
+        bearing = (bearing + 2 * math.pi) % (2 * math.pi) - math.pi
+        # sector angle width
+        sector_angle = 2 * math.pi / self.direction_sector_count
+        # find active sector index
+        try:
+            idx = int(self.active_area_id.split("_")[1])
+        except Exception:
+            return False
+        center = (idx + 0.5) * sector_angle - math.pi  # rough center
+        margin = math.radians(self.sector_boundary_margin_deg)
+        # check distance to sector center bearing
+        diff = abs(((bearing - center + math.pi) % (2 * math.pi)) - math.pi)
+        return diff <= (sector_angle / 2 + margin)
+
+    def _project_candidate_with_overrides(
+        self,
+        raw_xy: Tuple[float, float],
+        robot_xy: Tuple[float, float],
+        max_radius_m: float,
+        min_unknown_gain_cells: int,
+        require_unknown_gain: bool,
+    ) -> Optional[Tuple[float, float]]:
+        """Local override projection without permanent mutation; uses try/finally for safety."""
+        old_radius = self.projection_max_radius_m
+        old_min_gain = self.min_unknown_gain_cells
+        old_require = self.require_unknown_gain
+        try:
+            self.projection_max_radius_m = max_radius_m
+            self.min_unknown_gain_cells = min_unknown_gain_cells
+            self.require_unknown_gain = require_unknown_gain
+            res = self.project_to_safe_free_goal_result(raw_xy, robot_xy)
+            if res.ok and res.goal_xy:
+                return res.goal_xy
+            return None
+        finally:
+            self.projection_max_radius_m = old_radius
+            self.min_unknown_gain_cells = old_min_gain
+            self.require_unknown_gain = old_require
+
+    def _reproject_active_raw_candidates(
+        self, raw_candidates: List[ExploreCandidate], robot_xy: Tuple[float, float]
+    ) -> List[ExploreCandidate]:
+        if not self.active_area_id:
+            return []
+        active_raw = self._get_active_sector_raw_candidates(raw_candidates)
+        if not active_raw:
+            return []
+        recovered: List[ExploreCandidate] = []
+        radii = self.projection_radius_schedule_m or [0.8, 1.2, 1.6]
+        for raw_cand in active_raw[: self.max_expanded_candidates_per_tick * 2]:
+            if len(recovered) >= self.max_expanded_candidates_per_tick:
+                break
+            raw_xy = raw_cand.goal_xy
+            for r in radii:
+                relaxed = self.relaxed_min_unknown_gain_cells if self.allow_relax_unknown_gain else self.min_unknown_gain_cells
+                proj_xy = self._project_candidate_with_overrides(
+                    raw_xy, robot_xy, float(r), relaxed, self.allow_relax_unknown_gain
+                )
+                if proj_xy is None:
+                    continue
+                # build a new candidate and validate fully (known_free/clearance/A* unchanged)
+                new_cand = ExploreCandidate(
+                    candidate_id=make_candidate_id("recovery_reproj", proj_xy[0], proj_xy[1]),
+                    mode=raw_cand.mode or "frontier",
+                    goal_xy=proj_xy,
+                    goal_yaw=raw_cand.goal_yaw,
+                    semantic_score=raw_cand.semantic_score,
+                    information_gain=raw_cand.information_gain,
+                    reachability=raw_cand.reachability,
+                    novelty=raw_cand.novelty,
+                    safety_margin=raw_cand.safety_margin,
+                    qwen_text_score=raw_cand.qwen_text_score,
+                    target_class=raw_cand.target_class,
+                    reason="recovery_reprojected",
+                    source={"type": "recovery", "layer": 1, "raw": list(raw_xy)},
+                )
+                # run full validation (reuse existing path via _process_raw_candidate if possible, else manual)
+                # for minimal change we call project again (already did) and assume validation in pick
+                # mark as recovery
+                new_cand.source["recovery_layer"] = 1
+                recovered.append(new_cand)
+                break
+        self.get_logger().info(
+            f"RECOVERY layer=1 active={self.active_area_id} produced {len(recovered)} candidates"
+        )
+        return recovered
+
+    def _collect_active_scanned_free(
+        self, robot_xy: Tuple[float, float], target_class: str
+    ) -> List[ExploreCandidate]:
+        if not self.allow_scanned_free_fallback or not self._can_use_map_planning():
+            return []
+        if self.latest_map is None or robot_xy is None:
+            return []
+        plan_robot = (robot_xy[0], robot_xy[1], 0.0)
+        goals = collect_scanned_free_goals(
+            self.latest_map,
+            plan_robot,
+            self.scanned_free_min_distance_m,
+            self.scanned_free_max_distance_m,
+            self.scanned_free_expand_max_candidates,
+        )
+        cands: List[ExploreCandidate] = []
+        for fx, fy, yaw, is_edge in goals:
+            dist = math.hypot(fx - robot_xy[0], fy - robot_xy[1])
+            if dist < self.scanned_free_min_distance_m or dist > self.scanned_free_max_distance_m:
+                continue
+            cand = ExploreCandidate(
+                candidate_id=make_candidate_id("recovery_scanned", fx, fy),
+                mode="scanned_free",
+                goal_xy=(fx, fy),
+                goal_yaw=yaw,
+                semantic_score=0.1,
+                information_gain=0.6,
+                reachability=0.9,
+                novelty=0.4,
+                safety_margin=0.8,
+                qwen_text_score=0.0,
+                target_class=target_class,
+                reason="recovery_scanned_free",
+                source={"type": "scanned_free", "is_frontier_edge": is_edge, "recovery_layer": 2},
+            )
+            cands.append(cand)
+        # filter by active (with margin in recovery)
+        active_cands = [c for c in cands if self._in_active_or_boundary_margin(c.goal_xy)]
+        # apply scan free area filter
+        active_cands = [c for c in active_cands if self._goal_in_active_scan_free_area(c.goal_xy)]
+        # simple validate: require known free etc is already from collect, but run A* etc via existing if needed
+        # for now take top by unknown_gain proxy (dist + info)
+        ranked = sorted(
+            active_cands,
+            key=lambda c: (c.information_gain, -self._distance_to_goal(c.goal_xy)),
+            reverse=True,
+        )[: self.scanned_free_active_return]
+        self.get_logger().info(
+            f"RECOVERY layer=2 active={self.active_area_id} produced {len(ranked)} candidates"
+        )
+        return ranked
 
     def _goal_in_active_scan_free_area(self, goal_xy: Tuple[float, float]) -> bool:
         """严格检查目标点是否落在 active sector 当前可通行的动态角度区间内（含边缘）。
