@@ -18,7 +18,7 @@ qwen:
   qwen_timeout_sec: 15.0
   qwen_resize_width: 640
   qwen_jpeg_quality: 80
-  qwen_max_tokens: 80
+  qwen_max_tokens: 120
   min_confidence: 0.60
   min_inferred_confidence: 0.20
   inferred_vx_scale: 0.85
@@ -30,7 +30,7 @@ qwen_interval_sec: 1.0
 qwen_timeout_sec: 15.0
 qwen_resize_width: 640
 qwen_jpeg_quality: 80
-qwen_max_tokens: 80
+qwen_max_tokens: 120
 min_confidence: 0.60
 min_inferred_confidence: 0.20
 inferred_vx_scale: 0.85
@@ -130,18 +130,23 @@ slow_distance: 0.65
 success:
   lidar_target_arrive_distance: 0.6
   arrive_frames: 2
+  # TEMP: set false to skip LiDAR-based ARRIVED (false stop on front clutter).
+  # Safety stops (emergency/hard/explore) unchanged. Restore true when ready.
+  lidar_arrive_enable: false
 
 lidar_target_arrive_distance: 0.6
 arrive_frames: 2
+# TEMP: mirror success.lidar_arrive_enable — set true to re-enable LiDAR arrive.
+lidar_arrive_enable: false
 
 # --- Lost-target search ---
 search:
-  scan_wz: 0.01
+  scan_wz: 0.02
   lost_stop_sec: 1.2
   scan_flip_interval_sec: 5.0
   search_resume_sec: 3.0
 
-scan_wz: 0.04
+scan_wz: 0.02
 
 # --- Foxglove visualization (start_qwen_api_lidar_foxglove_viz.sh) ---
 foxglove_viz:
@@ -159,8 +164,8 @@ target_filter:
   enabled: true
   smooth_alpha: 0.25
   max_u_jump_px: 120
-  # Hold last u across brief Qwen dropouts (window >= 2*qwen_interval + API latency).
-  hold_last_target_sec: 3.0
+  # Hold last u across brief Qwen dropouts.
+  hold_last_target_sec: 0.2
   hold_max_miss_frames: 3
 
 # --- cmd_vel hold while waiting for cloud API ---
@@ -184,9 +189,9 @@ gimbal:
 # --- Chassis bridge (identical to semantic_explore chassis block) ---
 chassis:
   bridge: pwm
-  port: /dev/ttyUSB2
-  max_vx: 0.07
-  max_wz: 0.05
+  port: /dev/ttyUSB1
+  max_vx: 0.06
+  max_wz: 0.02
   watchdog_timeout: 0.5
   control_rate_hz: 20.0
   wheel_layout: fl-rl-fr-rr
@@ -199,3 +204,30 @@ chassis:
   pwm_smooth_alpha: 0.35
   max_pwm_delta: 10.0
   debug: true
+
+# --- Explore loop: 360° target scan -> path waypoint -> forward -> rescan ---
+explore:
+  enable: true
+
+  # Full 360° scan: complete by integrated yaw (not open-loop time estimate).
+  # Match chassis.max_wz so software yaw matches physical rotation.
+  full_scan_wz: 0.02
+  full_scan_turns: 1.0
+  full_scan_margin: 1.08
+  # 0 = use qwen.qwen_interval_sec (same as track/forward)
+  full_scan_query_interval_sec: 0
+  # Safety cap if chassis wz does not match command (seconds)
+  full_scan_max_sec: 45.0
+
+  # Qwen path waypoint (0.0 = accept PATH when waypoint coords are valid)
+  path_confidence_threshold: 0.0
+  path_turn_threshold: 0.16
+  path_kp_turn: 0.02
+
+  # Explore forward
+  explore_distance_m: 2.5
+  explore_vx: 0.06
+  explore_max_sec: 40.0
+
+  # LiDAR safety during explore forward
+  explore_hard_stop_distance: 0.45

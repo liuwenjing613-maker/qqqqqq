@@ -28,7 +28,7 @@ import yaml
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Point
 from rclpy.node import Node
-from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import CompressedImage, Image, LaserScan
 from std_msgs.msg import ColorRGBA, Header, String
 from visualization_msgs.msg import Marker, MarkerArray
@@ -128,18 +128,13 @@ class QwenApiLidarFoxgloveViz(Node):
             depth=1,
             reliability=QoSReliabilityPolicy.RELIABLE,
         )
-        cam_qos = QoSProfile(
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=1,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-        )
 
         self.marker_pub = self.create_publisher(MarkerArray, self.markers_topic, foxglove_qos)
         self.compressed_pub = self.create_publisher(CompressedImage, self.compressed_topic, foxglove_qos)
         self.hud_pub = self.create_publisher(String, self.hud_topic, 10)
 
-        self.create_subscription(Image, self.image_topic, self._image_cb, cam_qos)
-        self.create_subscription(LaserScan, self.scan_topic, self._scan_cb, 10)
+        self.create_subscription(Image, self.image_topic, self._image_cb, qos_profile_sensor_data)
+        self.create_subscription(LaserScan, self.scan_topic, self._scan_cb, qos_profile_sensor_data)
         self.create_subscription(String, self.json_topic, self._json_cb, 10)
         self.create_subscription(String, self.state_topic, self._state_cb, 10)
 
@@ -243,18 +238,29 @@ class QwenApiLidarFoxgloveViz(Node):
         filtered_u = data.get("filtered_u", data.get("u"))
         raw_u = data.get("raw_u")
         v = data.get("v")
+        path_point = data.get("path_point")
+        if path_point is None and data.get("waypoint_u") is not None:
+            path_point = [data.get("waypoint_u"), data.get("waypoint_v")]
+
+        cx = int(w / 2)
+        cy = int(h / 2)
 
         fu, fv = px_u(filtered_u), px_v(v)
         if fu is not None and fv is not None:
             cv2.drawMarker(vis, (fu, fv), (0, 0, 255), cv2.MARKER_CROSS, 28, 2)
             cv2.circle(vis, (fu, fv), 10, (0, 0, 255), 1, cv2.LINE_AA)
 
+        if path_point and path_point[0] is not None and path_point[1] is not None:
+            pu, pv = px_u(path_point[0]), px_v(path_point[1])
+            if pu is not None and pv is not None:
+                cv2.drawMarker(vis, (pu, pv), (0, 255, 0), cv2.MARKER_DIAMOND, 24, 2)
+                cv2.circle(vis, (pu, pv), 12, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.line(vis, (cx, cy), (pu, pv), (0, 255, 0), 2, cv2.LINE_AA)
+
         ru = px_u(raw_u)
         if ru is not None and fv is not None and (fu is None or abs(ru - fu) > 2):
             cv2.drawMarker(vis, (ru, fv), (255, 128, 0), cv2.MARKER_TILTED_CROSS, 20, 2)
 
-        cx = int(w / 2)
-        cy = int(h / 2)
         cv2.drawMarker(vis, (cx, cy), (0, 255, 255), cv2.MARKER_CROSS, 18, 1)
 
         deadband = float(_nested_get(self.cfg, "servo", "center_deadband", 0.10))

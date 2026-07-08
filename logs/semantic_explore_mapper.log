@@ -1,1 +1,29 @@
 [INFO] [1783441079.816373384] [semantic_mapper]: semantic_mapper session=/root/rdk_x5_vln_robot/logs/semantic_mapping/session_20260708_001759
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/src/mapping/semantic_mapper_node.py", line 671, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/src/mapping/semantic_mapper_node.py", line 657, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 748, in _spin_once_impl
+    raise handler.exception()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 254, in __call__
+    self._handler.send(None)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 447, in handler
+    await call_coroutine(entity, arg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 372, in _execute_subscription
+    await await_or_execute(sub.callback, msg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 107, in await_or_execute
+    return callback(*args)
+  File "/root/rdk_x5_vln_robot/src/mapping/semantic_mapper_node.py", line 369, in on_bbox
+    self.publish_json_and_markers()
+  File "/root/rdk_x5_vln_robot/src/mapping/semantic_mapper_node.py", line 396, in publish_json_and_markers
+    self._publish_markers()
+  File "/root/rdk_x5_vln_robot/src/mapping/semantic_mapper_node.py", line 610, in _publish_markers
+    self.pub_cones.publish(cones)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py", line 70, in publish
+    self.__publisher.publish(msg)
+rclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389

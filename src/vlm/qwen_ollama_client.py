@@ -62,6 +62,94 @@ def _extract_uv_fields(raw: Dict[str, Any]) -> Tuple[Optional[float], Optional[f
     return None, None
 
 
+def parse_mode_nav_result(
+    raw: Dict[str, Any],
+    orig_w: int,
+    orig_h: int,
+    model_w: int,
+    model_h: int,
+    sx: float,
+    sy: float,
+    coord_mode: str = "norm1000",
+    min_confidence: float = 0.0,
+    task_mode: str = "target",
+) -> Dict[str, Any]:
+    """Parse TARGET/PATH/NONE JSON with separate target u/v and waypoint_u/v fields."""
+    mode = str(raw.get("mode", "")).strip().upper()
+    if mode not in ("TARGET", "PATH", "NONE"):
+        status = str(raw.get("status", "")).strip().lower()
+        if status == "locked":
+            mode = "TARGET"
+        elif status == "inferred" and task_mode == "path":
+            mode = "PATH"
+        else:
+            mode = "NONE"
+
+    confidence = _safe_float(raw.get("confidence"))
+    if confidence is None:
+        confidence = 0.0
+    reason = "" if raw.get("reason") is None else str(raw.get("reason", ""))
+
+    target_visible = bool(raw.get("target_visible", mode == "TARGET"))
+    waypoint_visible = bool(raw.get("waypoint_visible", mode == "PATH"))
+
+    def _map_field(u_raw, v_raw):
+        sub = {"u": u_raw, "v": v_raw, "confidence": confidence}
+        mapped = parse_nav_result(
+            sub, orig_w, orig_h, model_w, model_h, sx, sy,
+            coord_mode=coord_mode, min_confidence=min_confidence,
+        )
+        return mapped.get("u"), mapped.get("v"), mapped.get("usable", False), mapped.get("_coord_reason", "")
+
+    u_px = v_px = waypoint_u_px = waypoint_v_px = None
+    coord_reason = mode
+
+    if mode == "TARGET":
+        u_px, v_px, ok, cr = _map_field(raw.get("u"), raw.get("v"))
+        if not ok or not target_visible:
+            mode = "NONE"
+            u_px = v_px = None
+            coord_reason = cr or "target_not_visible"
+    elif mode == "PATH":
+        waypoint_u_px, waypoint_v_px, ok, cr = _map_field(raw.get("waypoint_u"), raw.get("waypoint_v"))
+        if not ok or not waypoint_visible:
+            mode = "NONE"
+            waypoint_u_px = waypoint_v_px = None
+            coord_reason = cr or "waypoint_not_visible"
+    else:
+        mode = "NONE"
+        target_visible = False
+        waypoint_visible = False
+        coord_reason = "none"
+
+    usable = False
+    if mode == "TARGET" and u_px is not None and v_px is not None:
+        usable = confidence >= min_confidence
+        if not usable:
+            coord_reason = f"low_confidence:{confidence}"
+    elif mode == "PATH" and waypoint_u_px is not None and waypoint_v_px is not None:
+        usable = True
+
+    status = "locked" if mode == "TARGET" else ("inferred" if mode == "PATH" else "searching")
+    return {
+        "mode": mode,
+        "target_visible": target_visible,
+        "waypoint_visible": waypoint_visible,
+        "u": u_px,
+        "v": v_px,
+        "waypoint_u": waypoint_u_px,
+        "waypoint_v": waypoint_v_px,
+        "cx": u_px,
+        "usable": usable,
+        "_point_valid": usable and mode == "TARGET",
+        "direction_valid": mode in ("TARGET", "PATH"),
+        "status": status,
+        "confidence": confidence,
+        "reason": reason,
+        "_coord_reason": coord_reason,
+    }
+
+
 def parse_nav_result(
     raw: Dict[str, Any],
     orig_w: int,
@@ -275,6 +363,54 @@ class QwenOllamaClient:
         self.debug_dir = debug_dir
         self.save_debug = bool(save_debug)
         self.min_confidence = float(min_confidence)
+
+    def _build_mode_prompt(
+        self,
+        instruction: str,
+        orig_w: int,
+        orig_h: int,
+        model_w: int,
+        model_h: int,
+        task_mode: str = "target",
+    ) -> str:
+        target = instruction.strip()
+        task_mode = (task_mode or "target").strip().lower()
+        if task_mode not in ("target", "path"):
+            task_mode = "target"
+
+        shape = (
+            '{"mode":"TARGET|PATH|NONE","target_visible":true,"u":500,"v":500,'
+            '"waypoint_visible":false,"waypoint_u":null,"waypoint_v":null,'
+            '"confidence":0.0,"reason":""}'
+        )
+        if self.coord_mode == "norm1000":
+            coord_help = "u/v and waypoint_u/waypoint_v are normalized 0 to 1000.\n"
+        else:
+            coord_help = f"Use pixel coordinates for the image you see ({model_w}x{model_h}).\n"
+
+        if task_mode == "target":
+            task = (
+                f"Target object: {target}\n"
+                "If the exact target is clearly visible: mode=TARGET with object center u/v.\n"
+                "If not visible: mode=NONE with all coordinates null. Do NOT output a path waypoint.\n"
+            )
+        else:
+            task = (
+                f"Mission target (may be hidden): {target}\n"
+                "Analyze only safe traversable free space. Do NOT guess target location.\n"
+                "If a safe path exists: mode=PATH with waypoint_u/waypoint_v at path center.\n"
+                "If no safe path: mode=NONE.\n"
+            )
+
+        return (
+            "Return ONLY one JSON object. No markdown. No explanation.\n"
+            + coord_help
+            + "JSON shape:\n"
+            + shape
+            + "\n"
+            "PATH waypoints must be on floor/corridor center, not walls or obstacles.\n"
+            + task
+        )
 
     def _build_prompt(
         self,
@@ -644,10 +780,19 @@ class QwenOllamaClient:
         """
         return self.warmup_full(frame_bgr=frame_bgr, timeout=timeout, instruction=instruction)
 
-    def infer_navigation(self, frame_bgr, instruction: str) -> Dict[str, Any]:
+    def infer_navigation(
+        self,
+        frame_bgr,
+        instruction: str,
+        *,
+        mode: str = "target",
+    ) -> Dict[str, Any]:
         img_b64, model_bgr, model_w, model_h, sx, sy = self._frame_to_base64(frame_bgr)
         orig_h, orig_w = frame_bgr.shape[:2]
-        prompt = self._build_prompt(instruction, orig_w, orig_h, model_w, model_h)
+        task_mode = (mode or "target").strip().lower()
+        legacy = {"track": "target", "search": "target", "scan": "target"}
+        task_mode = legacy.get(task_mode, task_mode)
+        prompt = self._build_mode_prompt(instruction, orig_w, orig_h, model_w, model_h, task_mode=task_mode)
 
         payload = {
             "model": self.model,
@@ -691,7 +836,7 @@ class QwenOllamaClient:
 
         raw_text = data.get("response", "")
         raw_json = self._extract_json(raw_text)
-        result = parse_nav_result(
+        result = parse_mode_nav_result(
             raw_json,
             orig_w,
             orig_h,
@@ -701,9 +846,11 @@ class QwenOllamaClient:
             sy,
             coord_mode=self.coord_mode,
             min_confidence=self.min_confidence,
+            task_mode=task_mode,
         )
 
         result["_raw_text"] = raw_text
+        result["_qwen_mode"] = task_mode
         result["_raw_json"] = raw_json
         result["_latency_sec"] = dt
         self._attach_ollama_timing(result, data)

@@ -96,3 +96,87 @@
 [INFO] [1783441351.764190628] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
 [INFO] [1783441354.815503381] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
 [INFO] [1783441357.704855458] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441360.953726903] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441363.828814123] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441366.784505310] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441370.003172463] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441372.744252831] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441375.907744034] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441378.791417956] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441382.201393189] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441384.859109794] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441388.025743412] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441390.781248394] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441393.723191030] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441396.736588712] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441399.899361664] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441402.891018988] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441405.751877820] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441408.848763937] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441412.054060730] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441414.841551937] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441417.899750684] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441420.788256642] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441423.754020563] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441426.702321763] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441429.988928093] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441433.084966922] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441435.778525680] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441439.050266393] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441441.772406639] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441444.715464743] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441447.788852857] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441450.693859730] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441454.031022654] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441456.882133377] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441459.966135456] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441462.798442826] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441465.761975289] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441468.911728683] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441471.830546665] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441474.873059028] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[INFO] [1783441477.966678852] [yolov5s_bpu_web_node]: target_classes updated: ['bottle']
+[W][DNN]bpu_model_info.cpp:491][Version](2026-07-08,00:17:55.933.740) Model: yolov5s_tag_v7.0_detect_640x640_bayese_nv12. Inconsistency between the hbrt library version 3.15.55.0 and the model build version 3.15.54.0 detected, in order to ensure correct model results, it is recommended to use compilation tools and the BPU SDK from the same OpenExplorer package.
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 609, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 748, in _spin_once_impl
+    raise handler.exception()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 254, in __call__
+    self._handler.send(None)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 447, in handler
+    await call_coroutine(entity, arg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 372, in _execute_subscription
+    await await_or_execute(sub.callback, msg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 107, in await_or_execute
+    return callback(*args)
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 356, in on_raw_image
+    self.process_frame(frame)
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 481, in process_frame
+    self.publish_empty(image_w, image_h, annotated, "no_target_class_detected", infer_ms)
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 391, in publish_empty
+    self.publish_annotated(annotated)
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 557, in publish_annotated
+    self.pub_img.publish(msg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py", line 70, in publish
+    self.__publisher.publish(msg)
+rclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 616, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/src/perception/yolov5s_bpu_web_node.py", line 612, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241

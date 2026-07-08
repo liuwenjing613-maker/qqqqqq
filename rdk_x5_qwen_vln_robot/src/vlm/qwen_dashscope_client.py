@@ -3,12 +3,7 @@
 """
 Cloud Qwen visual point client for rdk_x5_qwen_vln_robot.
 
-Center-strict prompt semantics (locked object center vs inferred path waypoint).
-
-Environment variables required:
-    DASHSCOPE_API_KEY
-    QWEN_BASE_URL
-    QWEN_MODEL
+Explicit TARGET / PATH / NONE modes so target points and path waypoints are never mixed.
 """
 
 import base64
@@ -21,6 +16,18 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import cv2
+
+_JSON_SHAPE = (
+    '{"mode":"TARGET|PATH|NONE",'
+    '"target_visible":true,'
+    '"u":0.0,'
+    '"v":0.0,'
+    '"waypoint_visible":false,'
+    '"waypoint_u":null,'
+    '"waypoint_v":null,'
+    '"confidence":0.0,'
+    '"reason":""}'
+)
 
 
 def parse_instruction_sequence(instruction: str) -> List[str]:
@@ -51,44 +58,40 @@ def select_current_target(targets: List[str], target_index: int) -> str:
 
 def build_prompt(
     target_name: str,
-    mode: str = "track",
+    mode: str = "target",
     first_request: bool = False,
     image_width: Optional[int] = None,
     image_height: Optional[int] = None,
 ) -> str:
-    mode = (mode or "track").strip().lower()
-    if mode not in {"track", "search", "scan"}:
-        mode = "track"
+    """Build prompt for task mode ``target`` (bottle search) or ``path`` (free-space waypoint)."""
+    mode = (mode or "target").strip().lower()
+    legacy = {"track": "target", "search": "target", "scan": "target"}
+    mode = legacy.get(mode, mode)
+    if mode not in {"target", "path"}:
+        mode = "target"
 
     size_line = ""
     if image_width and image_height:
         size_line = (
             f"The image shown to you has size {int(image_width)} x {int(image_height)} pixels "
-            "(width x height). However, your output u and v must still be normalized 0.0 to 1.0.\n"
+            "(width x height). However, your output u/v and waypoint_u/waypoint_v must still be "
+            "normalized 0.0 to 1.0.\n"
         )
 
     base_format = (
         "Return ONLY valid JSON. No markdown. No extra text.\n"
         + size_line
         + "Output exactly this JSON object shape:\n"
-        '{"status":"locked|inferred","u":0.0,"v":0.0,"confidence":0.0,"reason":""}\n'
-        "\n"
-        "Coordinate rules:\n"
-        "- u and v must be normalized coordinates from 0.0 to 1.0.\n"
-        "- u is horizontal position from left to right.\n"
-        "- v is vertical position from top to bottom.\n"
+        + _JSON_SHAPE
+        + "\n"
+        "Global rules:\n"
+        '- mode must be exactly "TARGET", "PATH", or "NONE".\n'
+        "- u and v are normalized horizontal/vertical coordinates from 0.0 to 1.0.\n"
+        "- waypoint_u and waypoint_v use the same normalized coordinate system.\n"
         "- Do not output pixel coordinates such as 320 or 480.\n"
-        "- Output only ONE point.\n"
         "- Never output robot speed or movement commands.\n"
+        "- Never guess a hidden target location.\n"
         "\n"
-        "Decision order, very important:\n"
-        "1. First decide whether the EXACT requested target object is clearly visible.\n"
-        "2. If it is clearly visible, use status='locked' and output the target object center.\n"
-        "3. If it is not clearly visible, use status='inferred' and output a safe navigable path waypoint.\n"
-        "4. Do not use status='locked' for a guessed direction, a likely area, a route, or a similar wrong object.\n"
-    )
-
-    object_rules = (
         "Object naming rules:\n"
         "- If target is bottle, accept water bottle, plastic bottle, drink bottle, or mineral water bottle.\n"
         "- If target is cup, accept cup, mug, or paper cup, but do not confuse cup with bottle.\n"
@@ -97,84 +100,65 @@ def build_prompt(
         "- Find the exact requested object category. Do not lock onto a similar but wrong object.\n"
     )
 
-    locked_rules = (
-        "Locked status rules:\n"
-        "- Use status='locked' ONLY when the exact requested target is clearly visible.\n"
-        "- If status='locked', u and v MUST be the visual center of the target object itself.\n"
-        "- Internally estimate the visible bounding box of the exact target; output the center of that visible bounding box. Do not output the bounding box.\n"
-        "- The point must lie on the visible object body.\n"
-        "- The point must be near the geometric center of the visible target area, not a random point inside the object.\n"
-        "- Do not output an edge, corner, cap, handle, label, top, bottom, shadow, reflection, floor point, path point, or navigation waypoint.\n"
-        "- Do not output a point above, below, in front of, or behind the object.\n"
-        "- Do not choose the image center unless the target object center is actually at the image center.\n"
-        "- If the target is partly visible, output the center of the visible part of the target object.\n"
-        "- For status='locked', confidence should usually be 0.8 to 1.0.\n"
-        "- If you cannot identify the object center, do NOT output locked; output inferred instead.\n"
+    target_rules = (
+        "TARGET mode rules:\n"
+        '- Use mode="TARGET" ONLY when the exact requested target is clearly visible.\n'
+        "- Set target_visible=true and output u/v as the visual center of the target object body.\n"
+        "- waypoint_visible must be false; waypoint_u and waypoint_v must be null.\n"
+        "- Do not output floor, shadow, path, corridor, or guessed locations as the target.\n"
+        '- If the target is not clearly visible, use mode="NONE" with all coordinates null.\n'
+        "- Do NOT return PATH mode or any path waypoint in target task.\n"
     )
 
-    inferred_rules = (
-        "Inferred status rules:\n"
-        "- Use status='inferred' when the exact target is not clearly visible.\n"
-        "- For status='inferred', u and v are a safe navigable path waypoint, not an object center.\n"
-        "- Do not pretend the target is visible when it is not visible.\n"
-        "- Do not imagine or invent a target location, room, table, shelf, container, or random place.\n"
-        "- Choose a visible traversable route that can lead the robot to another area, such as an open corridor, doorway, passage, or clear open floor path.\n"
-        "- The waypoint should be near the centerline of that visible route, approximately in the middle of the obstacle-free path.\n"
-        "- Avoid obstacles, walls, furniture, object bodies, clutter, narrow gaps, and floor regions immediately blocked by objects.\n"
-        "- If multiple routes are visible, prefer the route with the widest clearance and clearest forward continuation.\n"
-        "- If no clear route is visible, choose the safest visible open-floor continuation with low confidence, not a random semantic area.\n"
-        "- For status='inferred', confidence means how clear, safe, and useful that navigable path is.\n"
+    path_rules = (
+        "PATH mode rules:\n"
+        '- Use mode="PATH" when a safe traversable path is visible but the target is NOT visible.\n'
+        "- Do NOT guess where the hidden target is.\n"
+        "- Set target_visible=false; u and v must be null.\n"
+        "- Set waypoint_visible=true and output waypoint_u/waypoint_v on the center of the safe free path.\n"
+        "- Prefer the lower half of the image: ground, floor, corridor centerline, or largest open region.\n"
+        "- Choose the center of the widest clear continuation, not near walls, furniture legs, clutter, "
+        "shadows, or reflections.\n"
+        '- If no safe traversable path is visible, use mode="NONE" with all coordinates null.\n'
+        "- Do NOT return TARGET mode or invent a target point in path task.\n"
     )
 
-    if mode == "track":
-        prefix = "TRACK_FIRST" if first_request else "TRACK"
-        extra_reason = "Reason may contain one short phrase.\n" if first_request else "Keep reason empty or very short.\n"
-        task = (
-            f"Mode: {prefix}.\n"
-            f'Target: "{target_name}".\n'
-            "If the exact target is clearly visible, output status='locked' and the center of the visible target object itself.\n"
-            "The point must be on the object body itself.\n"
-            "Do not choose the ground area in front of the target.\n"
-            "Do not choose the route toward the target.\n"
-            "Do not choose the image center unless the target object center is actually there.\n"
-            "If the target is small but clearly visible, still output status='locked'.\n"
-            "If the target is not clearly visible, output status='inferred' with a safe waypoint near the center of a visible obstacle-free path that can lead to another area, and use low confidence.\n"
-            + extra_reason
-        )
-    elif mode == "search":
-        prefix = "SEARCH_FIRST" if first_request else "SEARCH"
-        extra_reason = (
-            "Reason may contain one short phrase explaining the path clue, such as 'clear path ahead', 'open corridor center', or 'doorway path'.\n"
-            if first_request
-            else "Use scene context only; do not invent a visible target. Keep reason empty or very short.\n"
-        )
-        task = (
-            f"Mode: {prefix}.\n"
-            f'Target: "{target_name}".\n'
-            "If the exact target is clearly visible, output status='locked' and the center of the visible target object itself.\n"
-            "When locked, the point must be the object center, not the likely search direction.\n"
-            "If the exact target is not clearly visible, output status='inferred' and choose a safe waypoint near the center of a visible obstacle-free route that can lead to another area.\n"
-            "For inferred, u and v should point to the center of the navigable path, not a guessed object location or random search area.\n"
-            + extra_reason
-        )
-    else:
-        prefix = "SCAN_FIRST" if first_request else "SCAN"
-        extra_reason = (
-            "Reason may contain one short phrase, such as 'clear path ahead', 'open corridor center', or 'doorway path'.\n"
-            if first_request
-            else "Do not output a fake object center. Keep reason empty or very short.\n"
-        )
-        task = (
-            f"Mode: {prefix}.\n"
-            f'Target: "{target_name}".\n'
-            "If the exact target is clearly visible, output status='locked' and the center of the visible target object itself.\n"
-            "When locked, the point must be the object center, not the scan direction.\n"
-            "If the exact target is not clearly visible, output status='inferred' and choose a safe waypoint near the center of a visible obstacle-free route that can lead to another area.\n"
-            "For inferred, u and v should point to the center of the navigable path, not a fake object center or random scan area.\n"
-            + extra_reason
-        )
+    none_rules = (
+        "NONE mode rules:\n"
+        '- Use mode="NONE" when the requested output for this task is not available.\n'
+        "- Set target_visible=false and waypoint_visible=false.\n"
+        "- All coordinate fields must be null.\n"
+    )
 
-    return base_format + "\n" + object_rules + "\n" + locked_rules + "\n" + inferred_rules + "\n" + task
+    if mode == "target":
+        prefix = "TARGET_TASK_FIRST" if first_request else "TARGET_TASK"
+        extra = "Reason may contain one short phrase.\n" if first_request else "Keep reason empty or very short.\n"
+        task = (
+            f"Task: {prefix}.\n"
+            f'Target object: "{target_name}".\n'
+            "Decide whether the exact target object is clearly visible in the image.\n"
+            "If visible: mode=TARGET with object center u/v.\n"
+            "If not visible: mode=NONE. Do not output a path waypoint.\n"
+            + extra
+        )
+        return base_format + "\n" + target_rules + "\n" + none_rules + "\n" + task
+
+    prefix = "PATH_TASK_FIRST" if first_request else "PATH_TASK"
+    extra = (
+        "Reason may contain one short phrase such as 'safe free-space corridor visible ahead'.\n"
+        if first_request
+        else "Keep reason empty or very short.\n"
+    )
+    task = (
+        f"Task: {prefix}.\n"
+        f'Original mission target (NOT visible requirement): "{target_name}".\n'
+        "The target is not required to be visible. Analyze only traversable free space.\n"
+        "If a safe path exists: mode=PATH with waypoint_u/waypoint_v at the path center.\n"
+        "If no safe path exists: mode=NONE.\n"
+        "Do not guess target location.\n"
+        + extra
+    )
+    return base_format + "\n" + path_rules + "\n" + none_rules + "\n" + task
 
 
 def _extract_json(text: str) -> Dict[str, Any]:
@@ -195,6 +179,72 @@ def _clamp_float(value: Any, lo: float, hi: float, default: float) -> float:
     except Exception:
         return default
     return max(lo, min(hi, x))
+
+
+def _safe_optional_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _map_coord_pair(
+    u_raw: Any,
+    v_raw: Any,
+    image_info: Dict[str, Any],
+) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], bool, str]:
+    """Map one u/v pair to pixel + normalized coords. Returns (u_px, v_px, u_norm, v_norm, valid, reason)."""
+    if u_raw is None or v_raw is None:
+        return None, None, None, None, False, "missing_point"
+
+    u_val = _safe_optional_float(u_raw)
+    v_val = _safe_optional_float(v_raw)
+    if u_val is None or v_val is None:
+        return None, None, None, None, False, "invalid_non_numeric_coordinate"
+
+    u_norm: Optional[float] = None
+    v_norm: Optional[float] = None
+    valid = False
+    reason = ""
+
+    if 0.0 <= u_val <= 1.0 and 0.0 <= v_val <= 1.0:
+        u_norm, v_norm = u_val, v_val
+        valid = True
+    else:
+        sent_w = image_info.get("sent_w")
+        sent_h = image_info.get("sent_h")
+        orig_w = image_info.get("orig_w")
+        orig_h = image_info.get("orig_h")
+        if sent_w and sent_h and 0.0 <= u_val <= float(sent_w) and 0.0 <= v_val <= float(sent_h):
+            u_norm = u_val / float(sent_w)
+            v_norm = v_val / float(sent_h)
+            valid = True
+            reason = "pixel_coord_converted_from_sent_image"
+        elif orig_w and orig_h and 0.0 <= u_val <= float(orig_w) and 0.0 <= v_val <= float(orig_h):
+            u_norm = u_val / max(1.0, float(orig_w) - 1.0)
+            v_norm = v_val / max(1.0, float(orig_h) - 1.0)
+            valid = True
+            reason = "pixel_coord_converted_from_orig_image"
+
+    if not valid or u_norm is None or v_norm is None:
+        return None, None, None, None, False, "coordinate_out_of_range"
+
+    orig_w = int(image_info["orig_w"])
+    orig_h = int(image_info["orig_h"])
+    u_px = float(u_norm * max(1, orig_w - 1))
+    v_px = float(v_norm * max(1, orig_h - 1))
+    return u_px, v_px, u_norm, v_norm, True, reason
+
+
+def _legacy_mode_from_status(raw: Dict[str, Any], task_mode: str) -> str:
+    status = str(raw.get("status", "")).strip().lower()
+    if status == "locked":
+        return "TARGET"
+    if status == "inferred":
+        return "PATH" if task_mode == "path" else "NONE"
+    return "NONE"
 
 
 def _check_env() -> Tuple[str, str, str]:
@@ -267,7 +317,7 @@ class QwenDashScopeClient:
         resize_width: int = 640,
         jpeg_quality: int = 80,
         min_confidence: float = 0.60,
-        max_tokens: int = 80,
+        max_tokens: int = 120,
     ):
         api_key, base_url, model = _check_env()
         self.model = model
@@ -312,7 +362,7 @@ class QwenDashScopeClient:
         data_url: str,
         instruction: str,
         *,
-        mode: str = "track",
+        mode: str = "target",
         first_request: bool = False,
         target_index: int = 0,
         sent_w: Optional[int] = None,
@@ -342,111 +392,90 @@ class QwenDashScopeClient:
             "max_tokens": self.max_tokens,
         }
 
-    def _validate_and_map(self, raw: Dict[str, Any], image_info: Dict[str, Any]) -> Dict[str, Any]:
-        status = str(raw.get("status", "inferred")).strip().lower()
-        if status not in ("locked", "inferred"):
-            status = "searching"
+    def _validate_and_map(
+        self,
+        raw: Dict[str, Any],
+        image_info: Dict[str, Any],
+        *,
+        task_mode: str = "target",
+    ) -> Dict[str, Any]:
+        task_mode = (task_mode or "target").strip().lower()
+        legacy = {"track": "target", "search": "target", "scan": "target"}
+        task_mode = legacy.get(task_mode, task_mode)
 
         confidence = _clamp_float(raw.get("confidence", 0.0), 0.0, 1.0, 0.0)
         reason = "" if raw.get("reason") is None else str(raw.get("reason", ""))
-        u_raw = raw.get("u")
-        v_raw = raw.get("v")
 
-        if u_raw is None or v_raw is None:
-            return {
-                "usable": False,
-                "_point_valid": False,
-                "direction_valid": False,
-                "status": status,
-                "u": None,
-                "v": None,
-                "cx": None,
-                "_raw_u": None,
-                "_raw_v": None,
-                "confidence": confidence,
-                "reason": reason,
-                "_coord_reason": "missing_point",
-            }
+        mode = str(raw.get("mode", "")).strip().upper()
+        if mode not in ("TARGET", "PATH", "NONE"):
+            mode = _legacy_mode_from_status(raw, task_mode)
 
-        try:
-            u_val = float(u_raw)
-            v_val = float(v_raw)
-        except Exception:
-            return {
-                "usable": False,
-                "_point_valid": False,
-                "direction_valid": False,
-                "status": "searching",
-                "u": None,
-                "v": None,
-                "cx": None,
-                "_raw_u": u_raw,
-                "_raw_v": v_raw,
-                "confidence": 0.0,
-                "reason": reason or "invalid coordinate",
-                "_coord_reason": "invalid_non_numeric_coordinate",
-            }
+        target_visible = bool(raw.get("target_visible", mode == "TARGET"))
+        waypoint_visible = bool(raw.get("waypoint_visible", mode == "PATH"))
 
-        valid = False
-        u_norm: Optional[float] = None
-        v_norm: Optional[float] = None
-        if 0.0 <= u_val <= 1.0 and 0.0 <= v_val <= 1.0:
-            u_norm, v_norm = u_val, v_val
-            valid = True
+        target_u_px = target_v_px = target_u_norm = target_v_norm = None
+        waypoint_u_px = waypoint_v_px = waypoint_u_norm = waypoint_v_norm = None
+        coord_reason = mode
+
+        if mode == "TARGET":
+            u_px, v_px, u_norm, v_norm, valid, cr = _map_coord_pair(raw.get("u"), raw.get("v"), image_info)
+            if valid and target_visible:
+                target_u_px, target_v_px = u_px, v_px
+                target_u_norm, target_v_norm = u_norm, v_norm
+            else:
+                mode = "NONE"
+                target_visible = False
+                coord_reason = cr if not valid else "target_not_visible"
+        elif mode == "PATH":
+            wu_px, wv_px, wu_norm, wv_norm, valid, cr = _map_coord_pair(
+                raw.get("waypoint_u"), raw.get("waypoint_v"), image_info
+            )
+            if valid and waypoint_visible:
+                waypoint_u_px, waypoint_v_px = wu_px, wv_px
+                waypoint_u_norm, waypoint_v_norm = wu_norm, wv_norm
+            else:
+                mode = "NONE"
+                waypoint_visible = False
+                coord_reason = cr if not valid else "waypoint_not_visible"
         else:
-            sent_w = image_info.get("sent_w")
-            sent_h = image_info.get("sent_h")
-            if sent_w and sent_h and 0.0 <= u_val <= float(sent_w) and 0.0 <= v_val <= float(sent_h):
-                u_norm = u_val / float(sent_w)
-                v_norm = v_val / float(sent_h)
-                reason = reason or "pixel coordinate converted to normalized"
-                valid = True
+            mode = "NONE"
+            target_visible = False
+            waypoint_visible = False
+            coord_reason = "none"
 
-        if not valid or u_norm is None or v_norm is None:
-            return {
-                "usable": False,
-                "_point_valid": False,
-                "direction_valid": False,
-                "status": "searching",
-                "u": None,
-                "v": None,
-                "cx": None,
-                "_raw_u": u_val,
-                "_raw_v": v_val,
-                "confidence": 0.0,
-                "reason": reason or "coordinate out of range",
-                "_coord_reason": "coordinate_out_of_range",
-            }
+        usable = False
+        if mode == "TARGET" and target_u_px is not None and target_v_px is not None:
+            usable = confidence >= self.min_confidence
+            if not usable:
+                coord_reason = f"low_confidence:{confidence:.3f}"
+        elif mode == "PATH" and waypoint_u_px is not None and waypoint_v_px is not None:
+            usable = True
 
-        orig_w = int(image_info["orig_w"])
-        orig_h = int(image_info["orig_h"])
-        u_px = float(u_norm * max(1, orig_w - 1))
-        v_px = float(v_norm * max(1, orig_h - 1))
-
-        usable = bool(status == "locked" and confidence >= self.min_confidence)
-        direction_valid = bool(status in ("locked", "inferred") and valid)
-        coord_reason = status
-        if status == "locked" and confidence < self.min_confidence:
-            coord_reason = f"low_confidence:{confidence:.3f}"
-        elif status == "inferred":
-            coord_reason = "inferred_waypoint"
-
-        u_out = v_out = cx_out = None
-        if usable:
-            u_out, v_out, cx_out = u_px, v_px, u_px
-        elif status == "inferred" and direction_valid:
-            u_out, v_out, cx_out = u_px, v_px, u_px
+        # Backward-compat aliases for older nav code paths.
+        status = "locked" if mode == "TARGET" else ("inferred" if mode == "PATH" else "searching")
+        u_out = target_u_px if mode == "TARGET" else None
+        v_out = target_v_px if mode == "TARGET" else None
+        direction_valid = mode in ("TARGET", "PATH") and (
+            (mode == "TARGET" and target_u_px is not None) or (mode == "PATH" and waypoint_u_px is not None)
+        )
 
         return {
-            "usable": usable,
-            "_point_valid": usable,
-            "direction_valid": direction_valid,
-            "status": status,
+            "mode": mode,
+            "target_visible": target_visible,
+            "waypoint_visible": waypoint_visible,
             "u": u_out,
             "v": v_out,
-            "cx": cx_out,
-            "_raw_u": u_norm,
-            "_raw_v": v_norm,
+            "waypoint_u": waypoint_u_px,
+            "waypoint_v": waypoint_v_px,
+            "cx": u_out,
+            "usable": usable,
+            "_point_valid": usable and mode == "TARGET",
+            "direction_valid": direction_valid,
+            "status": status,
+            "_raw_u": target_u_norm,
+            "_raw_v": target_v_norm,
+            "_raw_waypoint_u": waypoint_u_norm,
+            "_raw_waypoint_v": waypoint_v_norm,
             "confidence": confidence,
             "reason": reason,
             "_coord_reason": coord_reason,
@@ -457,7 +486,7 @@ class QwenDashScopeClient:
         frame_bgr,
         instruction: str,
         *,
-        mode: str = "track",
+        mode: str = "target",
         first_request: bool = False,
         target_index: int = 0,
     ) -> Dict[str, Any]:
@@ -476,7 +505,7 @@ class QwenDashScopeClient:
         response_json = json.loads(response_text)
         raw_content = response_json["choices"][0]["message"]["content"]
         raw_json = _extract_json(raw_content)
-        result = self._validate_and_map(raw_json, image_info)
+        result = self._validate_and_map(raw_json, image_info, task_mode=mode)
         end = time.perf_counter()
         result.update({
             "_raw_json": raw_json,

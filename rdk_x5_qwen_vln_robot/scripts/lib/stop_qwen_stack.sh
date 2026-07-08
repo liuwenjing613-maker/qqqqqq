@@ -43,6 +43,12 @@ stop_qwen_stack() {
   pkill -KILL -f "tmini_plus.launch.py" 2>/dev/null || true
   pkill -KILL -f "ydlidar_ros2_driver" 2>/dev/null || true
 
+  pkill -TERM -f "qwen_api_lidar_foxglove_viz.py" 2>/dev/null || true
+  pkill -TERM -f "start_qwen_api_lidar_foxglove_viz.sh" 2>/dev/null || true
+  sleep 0.2
+  pkill -KILL -f "qwen_api_lidar_foxglove_viz.py" 2>/dev/null || true
+  pkill -KILL -f "start_qwen_api_lidar_foxglove_viz.sh" 2>/dev/null || true
+
   pkill -TERM -f "hobot_usb_cam" 2>/dev/null || true
   pkill -TERM -f "compressed_to_raw_image.py" 2>/dev/null || true
   sleep 0.2
