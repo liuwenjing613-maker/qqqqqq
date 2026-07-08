@@ -39,6 +39,21 @@ for key, env_name in mapping.items():
     if isinstance(val, bool):
         val = "1" if val else "0"
     print(f"export {env_name}={shlex.quote(str(val))}")
+kick = ch.get("kick_start") or {}
+kick_map = {
+    "enable": "CHASSIS_KICK_ENABLE",
+    "kick_vx": "CHASSIS_KICK_VX",
+    "kick_wz": "CHASSIS_KICK_WZ",
+    "kick_duration": "CHASSIS_KICK_DURATION",
+    "kick_cooldown": "CHASSIS_KICK_COOLDOWN",
+}
+for key, env_name in kick_map.items():
+    if key not in kick:
+        continue
+    val = kick[key]
+    if isinstance(val, bool):
+        val = "1" if val else "0"
+    print(f"export {env_name}={shlex.quote(str(val))}")
 PY
 )"
 }

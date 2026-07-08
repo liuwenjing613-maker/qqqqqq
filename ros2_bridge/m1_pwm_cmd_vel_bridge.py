@@ -127,6 +127,11 @@ class M1PwmCmdVelBridge(Node):
         odom_use_vy: bool = False,
         odom_xy_yaw_offset: float = 0.0,
         base_yaw_offset: float = 0.0,
+        enable_kick_start: bool = False,
+        kick_vx: float = 0.055,
+        kick_wz: float = 0.24,
+        kick_duration: float = 0.05,
+        kick_cooldown: float = 0.55,
     ):
         super().__init__("m1_pwm_cmd_vel_bridge")
 
@@ -159,6 +164,16 @@ class M1PwmCmdVelBridge(Node):
         self.motor_signs = parse_motor_signs(motor_signs)
         self.motor_trims = parse_motor_trims(motor_trims)
         self.wheel_layout = str(wheel_layout)
+        self.enable_kick_start = bool(enable_kick_start)
+        self.kick_vx = float(kick_vx)
+        self.kick_wz = float(kick_wz)
+        self.kick_duration = max(float(kick_duration), 0.0)
+        self.kick_cooldown = max(float(kick_cooldown), 0.0)
+        self.kick_active_until = 0.0
+        self.kick_vx_target = 0.0
+        self.kick_wz_target = 0.0
+        self.last_kick_time = 0.0
+        self.in_kick = False
 
         self.lock = threading.Lock()
         self.last_cmd_time = time.time()
@@ -239,6 +254,11 @@ class M1PwmCmdVelBridge(Node):
             f"vx_db={self.vx_pwm_deadband:.1f}, wz_db={self.wz_pwm_deadband:.1f}, "
             f"pwm_max={self.pwm_max:.1f}, vx_gain={self.vx_pwm_gain:.1f}, wz_gain={self.wz_pwm_gain:.1f}"
         )
+        if self.enable_kick_start:
+            self.get_logger().info(
+                f"kick_start: vx={self.kick_vx:.3f} wz={self.kick_wz:.3f} "
+                f"duration={self.kick_duration:.3f}s cooldown={self.kick_cooldown:.3f}s"
+            )
         self.get_logger().info(
             "Tip: use angular.z in rad/s (e.g. 0.12~0.16), NOT 3.0. "
             "M1 wz breakaway from calibration is about 0.16 rad/s."
@@ -253,23 +273,47 @@ class M1PwmCmdVelBridge(Node):
         wz = clamp(wz, -self.max_wz, self.max_wz)
         return vx, wz
 
+    def _is_stopped(self) -> bool:
+        return abs(self.last_sent_vx) < 1e-4 and abs(self.last_sent_wz) < 1e-4
+
     def cmd_vel_callback(self, msg: Twist) -> None:
         raw_vx = float(msg.linear.x)
         raw_wz = float(msg.angular.z)
         vx, wz = self._filter_cmd(raw_vx, raw_wz)
+        now = time.time()
+        nonzero_cmd = abs(vx) > 1e-6 or abs(wz) > 1e-6
 
         with self.lock:
             self.last_raw_vx = raw_vx
             self.last_raw_wz = raw_wz
             self.target_vx = vx
             self.target_wz = wz
-            self.last_sent_vx = vx
-            self.last_sent_wz = wz
-            self.last_cmd_time = time.time()
+            self.last_cmd_time = now
+            need_kick = False
+            if not nonzero_cmd:
+                self.kick_active_until = 0.0
+                self.kick_vx_target = 0.0
+                self.kick_wz_target = 0.0
+            elif (
+                self.enable_kick_start
+                and self._is_stopped()
+                and now - self.last_kick_time >= self.kick_cooldown
+            ):
+                need_kick = True
+                self.kick_active_until = now + self.kick_duration
+                self.kick_vx_target = (
+                    math.copysign(self.kick_vx, vx) if abs(vx) > 1e-6 else 0.0
+                )
+                self.kick_wz_target = (
+                    math.copysign(self.kick_wz, wz) if abs(wz) > 1e-6 else 0.0
+                )
+                self.last_kick_time = now
+                self.pwm_smoother.reset()
 
         if self.debug:
             self.get_logger().info(
                 f"raw cmd vx={raw_vx:.3f} wz={raw_wz:.3f} => target vx={vx:.3f} wz={wz:.3f}"
+                + (", kick=1" if need_kick else "")
             )
 
     def _apply_pwm(self, vx: float, wz: float) -> List[int]:
@@ -308,9 +352,18 @@ class M1PwmCmdVelBridge(Node):
         return pwms
 
     def control_timer_callback(self) -> None:
+        now = time.time()
         with self.lock:
             vx = self.target_vx
             wz = self.target_wz
+            in_kick = self.enable_kick_start and now < self.kick_active_until
+            self.in_kick = in_kick
+            if in_kick:
+                vx = self.kick_vx_target
+                wz = self.kick_wz_target
+            else:
+                vx = clamp(vx, -self.max_vx, self.max_vx)
+                wz = clamp(wz, -self.max_wz, self.max_wz)
 
         sent = Twist()
         sent.linear.x = vx
@@ -318,10 +371,14 @@ class M1PwmCmdVelBridge(Node):
         self.sent_cmd_pub.publish(sent)
 
         pwms = self._apply_pwm(vx, wz)
+        with self.lock:
+            self.last_sent_vx = vx
+            self.last_sent_wz = wz
         if self.debug and any(p != 0 for p in pwms):
             self.get_logger().info(
                 f"sent pwm=({pwms[0]}, {pwms[1]}, {pwms[2]}, {pwms[3]}) "
                 f"from vx={vx:.3f} wz={wz:.3f} vx_pwm={self.vx_pwm:.1f} wz_pwm={self.wz_pwm:.1f}"
+                + (", kick=1" if in_kick else "")
             )
 
     def odom_timer_callback(self) -> None:
@@ -472,6 +529,11 @@ class M1PwmCmdVelBridge(Node):
                 "odom_xy_yaw_offset_deg": math.degrees(self.odom_xy_yaw_offset),
                 "base_yaw_offset": self.base_yaw_offset,
                 "base_yaw_offset_deg": math.degrees(self.base_yaw_offset),
+                "kick_enabled": self.enable_kick_start,
+                "kick_active": self.in_kick,
+                "kick_vx": self.kick_vx,
+                "kick_wz": self.kick_wz,
+                "kick_duration": self.kick_duration,
                 "time": time.time(),
             }
         self.state_pub.publish(String(data=json.dumps(state, ensure_ascii=False)))
@@ -529,6 +591,11 @@ def main() -> None:
     parser.add_argument("--odom-use-vy", action="store_true", default=False)
     parser.add_argument("--odom-xy-yaw-offset", type=float, default=0.0)
     parser.add_argument("--base-yaw-offset", type=float, default=0.0)
+    parser.add_argument("--enable-kick-start", action="store_true", default=False)
+    parser.add_argument("--kick-vx", type=float, default=0.055)
+    parser.add_argument("--kick-wz", type=float, default=0.24)
+    parser.add_argument("--kick-duration", type=float, default=0.05)
+    parser.add_argument("--kick-cooldown", type=float, default=0.55)
     args, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -564,6 +631,11 @@ def main() -> None:
         odom_use_vy=args.odom_use_vy,
         odom_xy_yaw_offset=args.odom_xy_yaw_offset,
         base_yaw_offset=args.base_yaw_offset,
+        enable_kick_start=args.enable_kick_start,
+        kick_vx=args.kick_vx,
+        kick_wz=args.kick_wz,
+        kick_duration=args.kick_duration,
+        kick_cooldown=args.kick_cooldown,
     )
 
     try:

@@ -204,6 +204,13 @@ chassis:
   pwm_smooth_alpha: 0.35
   max_pwm_delta: 10.0
   debug: true
+  # Short breakaway pulse when cmd_vel transitions from stop -> move (cold start).
+  kick_start:
+    enable: true
+    kick_vx: 0.055
+    kick_wz: 0.24
+    kick_duration: 0.05
+    kick_cooldown: 0.55
 
 # --- Explore loop: 360° target scan -> path waypoint -> forward -> rescan ---
 explore:
