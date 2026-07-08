@@ -331,10 +331,26 @@ semantic_explore:
   blocked_reject_reasons:
   - unsafe_front_clearance
   - emergency_stop
-  target_visible_interrupt: false
-  observe_after_reach_sec: 0.5
-  observe_scan_deg: 0.0
+  target_visible_interrupt: true
+  observe_after_reach_sec: 1.0
+  observe_scan_deg: 90.0
   observe_scan_wz: 0.05
+  # Lock current path while moving; new hints are cached until step completes.
+  lock_goal_while_moving: true
+  allow_goal_switch_only_when_near: true
+  goal_switch_max_distance_m: 0.45
+  wall_recovery_enabled: true
+  wall_recovery_turn_deg: 90.0
+  wall_recovery_wz: 0.08
+  wall_recovery_max_sec: 15.0
+  wall_recovery_cooldown_sec: 1.0
+  wall_recovery_reason_keywords:
+    - wall_like
+    - no_floor
+    - no_traversable_path
+    - blocked_view
+  qwen_path_json_topic: /qwen_nav_json
+  qwen_path_max_age_sec: 8.0
   min_travel_before_reach_m: 0.25
   blacklist_on_arrived: false
   search_prefer_lidar_after_sec: 5.0
@@ -345,7 +361,7 @@ semantic_explore:
   keep_goal_min_sec: 8.0
   switch_score_margin: 0.35
   switch_confirm_count: 3
-  step_goal_distance_m: 0.5
+  step_goal_distance_m: 2.0
   goal_reached_radius_m: 0.22
   goal_timeout_sec: 60.0
   tf_cache_ttl_sec: 0.25

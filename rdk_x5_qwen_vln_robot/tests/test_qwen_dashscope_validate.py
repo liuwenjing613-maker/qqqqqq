@@ -24,6 +24,9 @@ def test_build_prompt_path_contains_path_mode():
     prompt = build_prompt("bottle", mode="path", first_request=True)
     assert "PATH_TASK_FIRST" in prompt
     assert "Do NOT return TARGET mode" in prompt
+    assert "wall_like_no_floor" in prompt
+    assert "wall-like surface" in prompt.lower() or "wall-like" in prompt.lower()
+    assert "Do NOT output motion commands" in prompt
 
 
 def test_validate_target_usable():

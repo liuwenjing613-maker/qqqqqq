@@ -398,8 +398,13 @@ class QwenOllamaClient:
             task = (
                 f"Mission target (may be hidden): {target}\n"
                 "Analyze only safe traversable free space. Do NOT guess target location.\n"
-                "If a safe path exists: mode=PATH with waypoint_u/waypoint_v at path center.\n"
-                "If no safe path: mode=NONE.\n"
+                "Use mode=PATH only when a clearly visible traversable floor, corridor, doorway, aisle, or open passage exists.\n"
+                "The waypoint must be on the center of that safe free path, preferably in the lower half of the image.\n"
+                "Do NOT put waypoint on walls, vertical surfaces, cabinets, doors, furniture, object bodies, shadows, reflections, or image borders.\n"
+                "If the view is dominated by one uniform wall-like surface, vertical plane, cabinet/door surface, or close obstacle, and no clear floor/path boundary is visible, use mode=NONE.\n"
+                "If the lower half of the image does not contain a safe connected free-floor region, use mode=NONE.\n"
+                "If no safe path exists: mode=NONE with all coordinates null.\n"
+                "For NONE caused by wall/no-floor/no-path, set reason to one short phrase such as wall_like_no_floor or no_traversable_path.\n"
             )
 
         return (
@@ -409,6 +414,8 @@ class QwenOllamaClient:
             + shape
             + "\n"
             "PATH waypoints must be on floor/corridor center, not walls or obstacles.\n"
+            "Wall-like recovery rule: a large uniform same-color vertical region is NOT a path. "
+            "If unsure whether it is floor or wall, choose NONE rather than placing a waypoint.\n"
             + task
         )
 

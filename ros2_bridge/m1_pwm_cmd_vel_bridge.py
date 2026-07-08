@@ -128,7 +128,7 @@ class M1PwmCmdVelBridge(Node):
         odom_xy_yaw_offset: float = 0.0,
         base_yaw_offset: float = 0.0,
         enable_kick_start: bool = False,
-        kick_vx: float = 0.055,
+        kick_vx: float = 0.07,
         kick_wz: float = 0.24,
         kick_duration: float = 0.05,
         kick_cooldown: float = 0.55,
@@ -301,12 +301,18 @@ class M1PwmCmdVelBridge(Node):
             ):
                 need_kick = True
                 self.kick_active_until = now + self.kick_duration
-                self.kick_vx_target = (
-                    math.copysign(self.kick_vx, vx) if abs(vx) > 1e-6 else 0.0
-                )
-                self.kick_wz_target = (
-                    math.copysign(self.kick_wz, wz) if abs(wz) > 1e-6 else 0.0
-                )
+                if abs(vx) > 1e-6:
+                    self.kick_vx_target = math.copysign(
+                        max(abs(vx), self.kick_vx), vx
+                    )
+                else:
+                    self.kick_vx_target = 0.0
+                if abs(wz) > 1e-6:
+                    self.kick_wz_target = math.copysign(
+                        max(abs(wz), self.kick_wz), wz
+                    )
+                else:
+                    self.kick_wz_target = 0.0
                 self.last_kick_time = now
                 self.pwm_smoother.reset()
 
@@ -592,7 +598,7 @@ def main() -> None:
     parser.add_argument("--odom-xy-yaw-offset", type=float, default=0.0)
     parser.add_argument("--base-yaw-offset", type=float, default=0.0)
     parser.add_argument("--enable-kick-start", action="store_true", default=False)
-    parser.add_argument("--kick-vx", type=float, default=0.055)
+    parser.add_argument("--kick-vx", type=float, default=0.07)
     parser.add_argument("--kick-wz", type=float, default=0.24)
     parser.add_argument("--kick-duration", type=float, default=0.05)
     parser.add_argument("--kick-cooldown", type=float, default=0.55)
