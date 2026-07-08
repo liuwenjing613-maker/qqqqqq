@@ -1,12 +1,9 @@
-[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-08-00-17-24-997283-ubuntu-31038
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-07-08-11-12-48-215136-ubuntu-45212
 [INFO] [launch]: Default logging verbosity is set to INFO
-[INFO] [async_slam_toolbox_node-1]: process started with pid [31056]
-[async_slam_toolbox_node-1] [INFO] [1783441045.321550994] [slam_toolbox]: Node using stack size 40000000
-[async_slam_toolbox_node-1] [INFO] [1783441045.443902628] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
-[async_slam_toolbox_node-1] [INFO] [1783441045.544297661] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1783441045.338 for reason 'discarding message because the queue is full'
-[async_slam_toolbox_node-1] [WARN] [1783441045.545434870] [slam_toolbox]: minimum laser range setting (0.0 m) exceeds the capabilities of the used Lidar (0.2 m)
+[INFO] [async_slam_toolbox_node-1]: process started with pid [45234]
+[async_slam_toolbox_node-1] [INFO] [1783480368.740362372] [slam_toolbox]: Node using stack size 40000000
+[async_slam_toolbox_node-1] [INFO] [1783480369.029519767] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
+[async_slam_toolbox_node-1] [INFO] [1783480369.090449705] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1783480368.860 for reason 'discarding message because the queue is full'
+[async_slam_toolbox_node-1] [WARN] [1783480369.101529001] [slam_toolbox]: minimum laser range setting (0.0 m) exceeds the capabilities of the used Lidar (0.2 m)
 [async_slam_toolbox_node-1] Info: clipped range threshold to be within minimum and maximum range!
 [async_slam_toolbox_node-1] Registering sensor: [Custom Described Lidar]
-[async_slam_toolbox_node-1] [INFO] [1783441236.363687856] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1783441236.054 for reason 'discarding message because the queue is full'
-[async_slam_toolbox_node-1] [INFO] [1783441480.563248495] [rclcpp]: signal_handler(signum=15)
-[ERROR] [async_slam_toolbox_node-1]: process has died [pid 31056, exit code -9, cmd '/opt/ros/humble/lib/slam_toolbox/async_slam_toolbox_node --ros-args -r __node:=slam_toolbox --params-file /root/rdk_x5_vln_robot/configs/slam_toolbox.yaml --params-file /tmp/launch_params_gyzz_j3q'].

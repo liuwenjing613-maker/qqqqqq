@@ -82,11 +82,11 @@ target_distance_filter:
 #   每帧千问只设定本帧转角（替换上一帧未转完的预算，不累加）；控制环以 turn_wz 消化 remaining_yaw。
 servo:
   creep_mode: true
-  creep_vx: 0.06
+  creep_vx: 0.04
   creep_turn_vx: 0.0
-  max_vx: 0.06
-  steer_vx: 0.06
-  max_wz: 0.05
+  max_vx: 0.04
+  steer_vx: 0.04
+  max_wz: 0.04
   kp_turn: 0.1
   center_deadband: 0.10
   straight_hysteresis: 0.02
@@ -99,12 +99,12 @@ servo:
 
 angle_servo:
   enabled: true
-  # One-shot: each Qwen frame issues at most one turn (<=1°); finish before next infer.
+  # One-shot: each Qwen frame issues at most one turn (<=2°); finish before next infer.
   gain: 50
   power: 0.85
   max_turn_deg: 1
   absolute_cap_deg: 1
-  turn_wz: 0.04
+  turn_wz: 0.05
   complete_tol_deg: 0.5
   max_pending_deg: 1
   skip_while_turning: true

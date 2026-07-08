@@ -181,7 +181,7 @@ rates:
   selector_log_hz: 1
 chassis:
   bridge: pwm
-  port: /dev/ttyUSB2
+  port: /dev/ttyUSB1
   max_vx: 0.06
   max_wz: 0.05
   watchdog_timeout: 0.5
@@ -526,6 +526,8 @@ explore_memory:
 
 direction_lock:
   enabled: true
+  # 当 active sector 内无 >= min_hint_score 的点时，是否强制选 active sector 内最高分的安全候选点（绕过分数阈值，但不绕过任何安全验证）
+  force_best_goal_in_active_sector: true
 
   # 8 个 sector，每个 45°，先别调大
   sector_count: 8

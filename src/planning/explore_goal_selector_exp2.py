@@ -114,7 +114,8 @@ class ExploreCandidate:
     reject_reason: str = ""
     validation: Dict[str, Any] = field(default_factory=dict)
     sector_id: str = ""
-    forced_pick: bool = False  # 标记是否来自 active sector 强制 pick（scan 过滤失败时）
+    forced_pick: bool = False  # legacy: scan bypass force (to be phased)
+    forced_below_threshold: bool = False  # 当 direction_lock 强制选低于 min_hint_score 的 active sector 最高分点时标记
 
     @property
     def total_score(self) -> float:
@@ -235,6 +236,7 @@ class ExploreGoalSelector(Node):
         # Direction lock configuration (plan section 8.3)
         self.direction_cfg = direction_cfg
         self.direction_lock_enabled = bool(direction_cfg.get("enabled", False))
+        self.force_best_goal_in_active_sector = bool(direction_cfg.get("force_best_goal_in_active_sector", True))
         self.direction_sector_count = max(4, int(direction_cfg.get("sector_count", 8)))
 
         self.direction_initial_policy = str(direction_cfg.get("initial_policy", "best_front_sector"))
@@ -2329,12 +2331,18 @@ class ExploreGoalSelector(Node):
                 best.sector_id,
                 f"final pick outside active (was {self.active_area_id})"
             )
-        # forced pick 路径绕过 min_hint_score 检查（用户需求：active sector 有候选时必须出点）
-        if best.total_score < self.min_hint_score and not best.forced_pick:
-            self._last_selection_explanation = (
-                f"best score {best.total_score:.3f} < min_hint_score {self.min_hint_score}"
-            )
-            return None, []
+        # 按新策略：active sector 内若无 >= min_hint_score 的 valid 候选，则在 force_best_goal_in_active_sector=true 时
+        # 强制选 active 内最高分的安全点（已通过 projection/validation/A*/blacklist 等），并标记 forced_below_threshold
+        if best.total_score < self.min_hint_score:
+            if self.direction_lock_enabled and self.active_area_id and self.force_best_goal_in_active_sector:
+                best.forced_below_threshold = True
+                # 仍保留 legacy forced_pick 兼容
+                best.forced_pick = True
+            else:
+                self._last_selection_explanation = (
+                    f"best score {best.total_score:.3f} < min_hint_score {self.min_hint_score}"
+                )
+                return None, []
         path = best.source.get("planned_path")
         if not isinstance(path, list) or len(path) < 2:
             path = self._plan_candidate_path(robot_xy, best.goal_xy)
@@ -2962,6 +2970,8 @@ class ExploreGoalSelector(Node):
             "nav_planner": nav_planner,
             "astar_fallback": not use_astar,
             "sector_id": selected.sector_id,
+            "forced_below_threshold": bool(getattr(selected, "forced_below_threshold", False)),
+            "forced_pick": bool(getattr(selected, "forced_pick", False)),
             "raw_goal_xy": (
                 [selected.raw_goal_xy[0], selected.raw_goal_xy[1]]
                 if selected.raw_goal_xy is not None

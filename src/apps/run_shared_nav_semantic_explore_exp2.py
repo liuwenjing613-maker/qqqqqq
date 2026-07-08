@@ -589,11 +589,14 @@ class SharedNavSemanticExplore(Node):
             )
             return False
 
-        if score < self.explore_min_hint_score:
+        forced_below = bool(hint.get("forced_below_threshold", False)) if isinstance(hint, dict) else False
+        if score < self.explore_min_hint_score and not forced_below:
             self.get_logger().debug(
                 f"explore_hint rejected: id={cid} reason=low_score score={score:.3f} < min={self.explore_min_hint_score:.2f}"
             )
             return False
+        if forced_below:
+            self.get_logger().debug(f"explore_hint accepted below threshold due to forced_below_threshold (active sector force)")
 
         if cid and cid in self.rejected_candidate_ids:
             if self.rejected_candidate_ids[cid] > now:
