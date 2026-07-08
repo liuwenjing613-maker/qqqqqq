@@ -6,11 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from typing import Any, Dict, List
 
 import yaml
 
 PROJECT_ROOT = os.path.expanduser("~/rdk_x5_vln_robot")
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "configs", "yolo_lidar_failsafe_nav.yaml")
 
 
@@ -69,6 +72,10 @@ def load_launch_config(path: str | None = None) -> Dict[str, Any]:
             yolo_bridge.get("target_classes", _join_words(target_cfg.get("classes", [])) or target_words_csv or "bottle"),
         )
     ).strip()
+    from src.perception.coco_classes import coco_class_csv, is_all_coco_mode
+
+    if is_all_coco_mode(bridge_classes):
+        bridge_classes = coco_class_csv()
 
     use_yolov5s_bpu = _as_bool(yolov5s_bpu.get("enabled", False))
     score_threshold = _as_float(

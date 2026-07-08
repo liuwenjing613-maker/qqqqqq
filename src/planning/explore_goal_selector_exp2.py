@@ -7,8 +7,7 @@ import argparse
 import json
 import math
 import os
-import sys
-import time
+import textwrap
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path as PathLib
@@ -228,9 +227,6 @@ class ExploreGoalSelector(Node):
         self.force_best_goal_in_active_sector = bool(direction_cfg.get("force_best_goal_in_active_sector", True))
         self.direction_sector_count = max(4, int(direction_cfg.get("sector_count", 8)))
 
-        # 无候选点可数时是否强制轮转到相邻 sector（保证 active 一定改变）
-        self.direction_allow_neighbor = bool(direction_cfg.get("allow_neighbor_when_empty", True))
-
         self.exhaust_no_candidate_cycles = int(direction_cfg.get("exhaust_no_candidate_cycles", 3))
         self.exhaust_failed_goals = int(direction_cfg.get("exhaust_failed_goals", 2))
         self.exhaust_visited_goals = int(direction_cfg.get("exhaust_visited_goals", 3))
@@ -274,6 +270,8 @@ class ExploreGoalSelector(Node):
         self.explore_enabled = bool(explore.get("enabled", True))
         self.hint_topic = str(explore.get("hint_topic", topics.get("explore_goal_hint", "/explore_goal_hint")))
         self.state_topic = str(explore.get("state_topic", topics.get("explore_state", "/explore_state_json")))
+        self.hud_topic = str(explore.get("hud_topic", topics.get("explore_hud", "/explore_hud")))
+        self.hud_wrap_width = max(24, int(explore.get("hud_wrap_width", 46)))
         self.valid_sec = float(explore.get("max_hint_age_sec", 1.5))
         self.min_hint_score = float(explore.get("min_hint_score", 0.42))
         self.blacklist_radius_m = float(explore.get("blacklist_radius_m", 0.60))
@@ -452,6 +450,7 @@ class ExploreGoalSelector(Node):
 
         self.pub_hint = self.create_publisher(String, self.hint_topic, 10)
         self.pub_state = self.create_publisher(String, self.state_topic, 10)
+        self.pub_hud = self.create_publisher(String, self.hud_topic, 10)
         self.pub_path = self.create_publisher(
             NavPath, topics.get("explore_path", "/explore_path"), 10
         )
@@ -943,8 +942,8 @@ class ExploreGoalSelector(Node):
             m.pose.position.z = 0.1
             arr.markers.append(m)
 
-        # Decision reason text (visible in Foxglove)
-        if self.active_area_id:
+        # Decision reason: moved to /explore_hud (Foxglove fixed panel), skip 3D floating text.
+        if False and self.active_area_id:
             reason_marker = Marker()
             reason_marker.header.stamp = stamp
             reason_marker.header.frame_id = self._fixed_frame
@@ -1070,6 +1069,28 @@ class ExploreGoalSelector(Node):
         dy = goal_xy[1] - sy
         rel = self._normalize_angle(math.atan2(dy, dx) - syaw)
         return self._sector_id_from_relative_angle(rel)
+
+    def _sector_id_for_candidate(self, candidate: ExploreCandidate) -> str:
+        if candidate.sector_id:
+            return candidate.sector_id
+        return self._sector_id_for_goal(candidate.goal_xy)
+
+    def _assign_sector_ids(self, candidates: List[ExploreCandidate]) -> None:
+        for candidate in candidates:
+            candidate.sector_id = self._sector_id_for_goal(candidate.goal_xy)
+
+    def _sector_count_pool(self) -> List[ExploreCandidate]:
+        """Foxglove 黄点对应的 raw 候选，用于 sector 数量统计。"""
+        pool = list(self._last_candidates or [])
+        if pool:
+            self._assign_sector_ids(pool)
+            return pool
+        fallback = list(self._last_valid_candidates or [])
+        if fallback:
+            for candidate in fallback:
+                if not candidate.sector_id:
+                    candidate.sector_id = self._sector_id_for_goal(candidate.goal_xy)
+        return fallback
 
     # --- Direction lock helpers (plan sections 8.5-8.8) ---
 
@@ -1207,25 +1228,12 @@ class ExploreGoalSelector(Node):
             return False
         return (now - st.exhausted_time) < self.exhausted_cooldown_sec
 
-    def _sector_neighbor_order(self, center_idx: int) -> List[int]:
-        """Alternating neighbor order, excluding center itself."""
-        n = max(1, self.direction_sector_count)
-        order: List[int] = []
-        for step in range(1, n):
-            if step % 2 == 1:
-                off = (step + 1) // 2
-                order.append((center_idx + off) % n)
-            else:
-                off = step // 2
-                order.append((center_idx - off) % n)
-        return order
-
     def _group_candidates_by_sector(
         self, candidates: List[ExploreCandidate]
     ) -> Dict[str, List[ExploreCandidate]]:
         grouped: Dict[str, List[ExploreCandidate]] = {}
         for c in candidates:
-            grouped.setdefault(c.sector_id, []).append(c)
+            grouped.setdefault(self._sector_id_for_candidate(c), []).append(c)
         return grouped
 
     def _choose_sector_by_candidate_count(
@@ -1236,7 +1244,7 @@ class ExploreGoalSelector(Node):
         respect_cooldown: bool = True,
         now: Optional[float] = None,
     ) -> Optional[str]:
-        """统一 sector 选择策略：选 valid_candidates 数量最多的 sector。"""
+        """统一 sector 选择策略：只按候选点数量（Foxglove 黄点 / raw 候选）选最多的 sector。"""
         if now is None:
             now = time.time()
         if not candidates:
@@ -1268,27 +1276,14 @@ class ExploreGoalSelector(Node):
 
         return best_sid
 
-    def _force_neighbor_sector_switch(self, old_sector: str, reason: str) -> Optional[str]:
-        """无其他 sector 有候选时，强制切到邻近 sector（保证 active 改变）。"""
-        order = self._sector_neighbor_order(self._sector_index(old_sector))
-        for idx in order:
-            sid = f"sector_{idx:02d}"
-            if sid != old_sector:
-                self._mark_sector_exhausted(old_sector, reason)
-                self._activate_sector(sid, f"neighbor_forced_switch from {old_sector}: {reason}")
-                self._clear_current_selection_for_sector_switch(f"neighbor forced to {sid}")
-                return sid
-        return None
-
     def _switch_active_sector_by_candidate_count(
         self,
         candidates: List[ExploreCandidate],
         old_sector: str,
         allowed_sector_ids: List[str],
         reason: str,
-        force_neighbor_if_empty: bool = True,
     ) -> Optional[str]:
-        """耗尽/超时后切换：全局选候选点最多的 sector（排除 old_sector）。"""
+        """耗尽/超时后切换：只按候选点数量选择 sector（排除 old_sector）。"""
         chosen = self._choose_sector_by_candidate_count(
             candidates,
             exclude_sector=old_sector,
@@ -1307,8 +1302,10 @@ class ExploreGoalSelector(Node):
                 f"candidate_count_switch (chose {chosen} with most candidates)"
             )
             return chosen
-        if force_neighbor_if_empty:
-            return self._force_neighbor_sector_switch(old_sector, reason)
+        self._last_direction_reason = (
+            f"candidate_count_switch skipped: no eligible candidate-count sector "
+            f"from {old_sector}, reason={reason}"
+        )
         return None
 
     def _maybe_init_or_switch_active_sector(
@@ -1337,7 +1334,6 @@ class ExploreGoalSelector(Node):
             old,
             available_sector_ids,
             exhaust_reason,
-            force_neighbor_if_empty=True,
         )
 
     def _sector_is_exhausted(self, sector_id: str) -> bool:
@@ -1353,7 +1349,7 @@ class ExploreGoalSelector(Node):
             return list(raw_candidates)
         out: List[ExploreCandidate] = []
         for c in raw_candidates:
-            sid = c.sector_id or self._sector_id_for_goal(c.goal_xy)
+            sid = self._sector_id_for_candidate(c)
             if sid == self.active_area_id:
                 out.append(c)
         return out
@@ -1480,26 +1476,29 @@ class ExploreGoalSelector(Node):
         """Delegate to centralized _activate_sector to keep timer consistent."""
         self._activate_sector(sector_id, reason)
 
+    def _candidate_in_active_sector(self, candidate: ExploreCandidate) -> bool:
+        if not self.active_area_id:
+            return True
+        raw_xy = candidate.raw_goal_xy or candidate.goal_xy
+        return self._sector_id_for_goal(raw_xy) == self.active_area_id
+
     def _filter_by_active_area(
         self, valid_candidates: List[ExploreCandidate]
     ) -> List[ExploreCandidate]:
-        # 耗尽/超时：任意耗尽条件满足即强制换 sector（即使本帧没有候选点也要换）
+        count_pool = self._sector_count_pool()
+
+        # 耗尽/超时：只在存在候选点数量依据时切换 sector。
         if self.direction_lock_enabled and self.active_area_id:
             if self._sector_is_exhausted(self.active_area_id):
                 exhaust_reason = self._sector_exhaust_reason(self.active_area_id) or "time_limit"
                 old_active = self.active_area_id
                 self._mark_sector_exhausted(old_active, exhaust_reason)
-                # 优先按候选点数量切到别的 sector；无候选可数则强制轮转到相邻 sector
-                cands_for_switch = valid_candidates or self._last_valid_candidates or []
-                if cands_for_switch:
-                    non_empty = sorted({c.sector_id for c in cands_for_switch})
+                if count_pool:
+                    non_empty = sorted({self._sector_id_for_candidate(c) for c in count_pool})
                     avail = [s for s in non_empty if not self._sector_is_exhausted(s)]
                     self._switch_active_sector_by_candidate_count(
-                        cands_for_switch, old_active, avail, exhaust_reason,
-                        force_neighbor_if_empty=self.direction_allow_neighbor,
+                        count_pool, old_active, avail, exhaust_reason,
                     )
-                elif self.direction_allow_neighbor:
-                    self._force_neighbor_sector_switch(old_active, exhaust_reason)
 
         if not valid_candidates:
             if self.direction_lock_enabled and self.active_area_id:
@@ -1513,7 +1512,7 @@ class ExploreGoalSelector(Node):
             return valid_candidates
 
         # 清理 exhausted 状态：如果全部 exhausted，就重新来一轮
-        non_empty_sector_ids = sorted({c.sector_id for c in valid_candidates})
+        non_empty_sector_ids = sorted({self._sector_id_for_candidate(c) for c in count_pool})
         available_sector_ids = [
             sid for sid in non_empty_sector_ids
             if not self._sector_is_exhausted(sid)
@@ -1528,11 +1527,11 @@ class ExploreGoalSelector(Node):
             available_sector_ids = non_empty_sector_ids
             self.active_area_id = None
 
-        # 统一 sector 选择：初始化 / 耗尽 / 超时 → 全部按候选点数量
-        self._maybe_init_or_switch_active_sector(valid_candidates, available_sector_ids)
+        # 统一 sector 选择：初始化 / 耗尽 / 超时 → 全部按 raw 候选点数量
+        self._maybe_init_or_switch_active_sector(count_pool, available_sector_ids)
 
-        # 只在 active sector 内选点，直接返回该扇区候选（最终 pick 会取最高分）
-        in_active = [c for c in valid_candidates if c.sector_id == self.active_area_id]
+        # 只在 active sector 内选点（按 raw 黄点所在扇区判断，与数量统计一致）
+        in_active = [c for c in valid_candidates if self._candidate_in_active_sector(c)]
         if in_active:
             st = self.sector_states.get(self.active_area_id)
             if st:
@@ -1552,16 +1551,16 @@ class ExploreGoalSelector(Node):
         if self.active_area_id and not self._sector_is_exhausted(self.active_area_id):
             return []
 
-        # 已耗尽但当前 active 内无候选：按候选点数量切到别的 sector 并重试一次
+        # 已耗尽但当前 active 内无候选：按 raw 候选点数量切到别的 sector 并重试一次
         if self.active_area_id:
             self._switch_active_sector_by_candidate_count(
-                valid_candidates,
+                count_pool,
                 self.active_area_id,
                 available_sector_ids,
                 self._sector_exhaust_reason(self.active_area_id) or "exhausted_no_in_active",
             )
             in_active_retry = [
-                c for c in valid_candidates if c.sector_id == self.active_area_id
+                c for c in valid_candidates if self._candidate_in_active_sector(c)
             ]
             if in_active_retry:
                 return in_active_retry
@@ -2151,8 +2150,14 @@ class ExploreGoalSelector(Node):
         """验证预算有限时，优先验证 active sector 内的点。"""
         if not self.direction_lock_enabled or not self.active_area_id:
             return sorted(raw_candidates, key=lambda c: c.total_score, reverse=True)
-        active = [c for c in raw_candidates if c.sector_id == self.active_area_id]
-        other = [c for c in raw_candidates if c.sector_id != self.active_area_id]
+        active = [
+            c for c in raw_candidates
+            if self._sector_id_for_candidate(c) == self.active_area_id
+        ]
+        other = [
+            c for c in raw_candidates
+            if self._sector_id_for_candidate(c) != self.active_area_id
+        ]
         active.sort(key=lambda c: c.total_score, reverse=True)
         other.sort(key=lambda c: c.total_score, reverse=True)
         return active + other
@@ -2264,12 +2269,6 @@ class ExploreGoalSelector(Node):
         if not ranked:
             return None, []
         best = ranked[0]
-        # 最终一致性保证：如果 best 的扇区与当前 active 不同，立即更新 active + reason
-        if best.sector_id != self.active_area_id:
-            self._mark_sector_active(
-                best.sector_id,
-                f"final pick outside active (was {self.active_area_id})"
-            )
         # 按新策略：active sector 内若无 >= min_hint_score 的 valid 候选，则在 force_best_goal_in_active_sector=true 时
         # 强制选 active 内最高分的安全点（已通过 projection/validation/A*/blacklist 等），并标记 forced_below_threshold
         if best.total_score < self.min_hint_score:
@@ -2518,6 +2517,7 @@ class ExploreGoalSelector(Node):
                 candidates, robot_xy, ranges, angles, map_ok
             )
 
+        self._assign_sector_ids(candidates)
         return candidates
 
     def _generate_candidates(self, robot_xy: Tuple[float, float]) -> List[ExploreCandidate]:
@@ -3327,26 +3327,8 @@ class ExploreGoalSelector(Node):
                 pm.header.stamp = stamp
                 arr.markers.append(pm)
 
-        status = Marker()
-        status.header = self._marker_header(stamp)
-        status.ns = "status"
-        status.id = 1
-        status.type = Marker.TEXT_VIEW_FACING
-        status.action = Marker.ADD
-        status.pose.position.x = robot_viz[0]
-        status.pose.position.y = robot_viz[1]
-        status.pose.position.z = 0.45
-        status.scale.z = 0.14
-        status.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=0.98)
-        sel_id = selected.candidate_id if selected else "none"
-        status.text = (
-            f"{self._status_message}\n"
-            f"raw={self._last_raw_count} valid={self._last_valid_count}\n"
-            f"top_reject={self._top_reject_reason()}\n"
-            f"sel={sel_id}\n"
-            f"{self._last_selection_explanation}"
-        )[:220]
-        arr.markers.append(status)
+        # Status text moved to /explore_hud; keep robot/links/pending markers only.
+        arr.markers.append(self._marker_delete_all("status", stamp))
         self.pub_selection_markers.publish(arr)
 
     def _publish_markers(
@@ -3572,11 +3554,67 @@ class ExploreGoalSelector(Node):
                     f"HINT none status={self._status_message} reason={self._last_selection_explanation}"
                 )
 
+    def _wrap_hud_line(self, text: str, width: Optional[int] = None) -> str:
+        line = str(text or "").strip()
+        if not line:
+            return ""
+        return textwrap.fill(
+            line,
+            width=width or self.hud_wrap_width,
+            break_long_words=True,
+            break_on_hyphens=False,
+        )
+
+    def _build_hud_text(self) -> str:
+        lines: List[str] = []
+        lines.append(f"STATUS: {self._status_message}")
+        lines.append(f"raw={self._last_raw_count} valid={self._last_valid_count}")
+        lines.append(f"top_reject={self._top_reject_str()}")
+        sel = self._selected
+        lines.append(f"sel={sel.candidate_id if sel else 'none'}")
+        if self.active_area_id:
+            active_st = self.sector_states.get(self.active_area_id)
+            exhaust_info = ""
+            if active_st:
+                exhaust_info = (
+                    f"nc={active_st.no_candidate_cycles}/{self.exhaust_no_candidate_cycles} "
+                    f"f={active_st.failed_goals}/{self.exhaust_failed_goals} "
+                    f"v={active_st.visited_goals}/{self.exhaust_visited_goals}"
+                )
+            elapsed = self._active_sector_elapsed_sec()
+            sel_dist = ""
+            if sel and self.robot_pose:
+                d = math.hypot(
+                    sel.goal_xy[0] - self.robot_pose[0],
+                    sel.goal_xy[1] - self.robot_pose[1],
+                )
+                sel_dist = f" dist={d:.1f}m"
+            lines.append(f"ACTIVE: {self.active_area_id}")
+            lines.append(f"REASON: {self._last_direction_reason}")
+            lines.append(f"EXHAUST: {exhaust_info}")
+            lines.append(
+                f"TIME: {elapsed:.0f}/{self.max_active_sector_sec:.0f}s "
+                f"{self._sector_exhaust_reason(self.active_area_id)}"
+            )
+            lines.append(f"SELECTED: {sel.sector_id if sel else 'none'}{sel_dist}")
+        if self._last_selection_explanation:
+            lines.append(self._last_selection_explanation)
+        wrapped = [self._wrap_hud_line(line) for line in lines if line]
+        return "\n".join(wrapped)
+
+    def _sector_counts_summary(self) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for candidate in self._sector_count_pool():
+            sid = self._sector_id_for_candidate(candidate)
+            counts[sid] = counts.get(sid, 0) + 1
+        return counts
+
     def _build_state_payload(self) -> Dict[str, Any]:
         sel = self._selected
         summary = {
             "status": self._status_message,
             "active_sector": self.active_area_id,
+            "sector_counts": self._sector_counts_summary(),
             "sector_progress": self._active_sector_progress(),
             "exhaust_reason": self._sector_exhaust_reason(self.active_area_id) if self.active_area_id else "",
             "valid": self._last_valid_count,
@@ -3693,6 +3731,7 @@ class ExploreGoalSelector(Node):
             self._update_robot_pose()
             payload = self._build_state_payload()
             self.pub_state.publish(String(data=json.dumps(payload, ensure_ascii=False)))
+            self.pub_hud.publish(String(data=self._build_hud_text()))
             if self.robot_pose is not None and self._last_candidates:
                 self._publish_markers(
                     self.robot_pose,

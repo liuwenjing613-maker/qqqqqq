@@ -24,6 +24,7 @@ topics:
   semantic_map_json: /semantic_map_json
   explore_goal_hint: /explore_goal_hint
   explore_state: /explore_state_json
+  explore_hud: /explore_hud
   explore_candidate_goals: /explore_candidate_goals
   explore_selected_goal: /explore_selected_goal
   explore_frontiers: /explore_frontiers
@@ -52,7 +53,7 @@ yolov5s_bpu:
   image_topic: /image_raw
   out_topic: /target_bbox_json
   target_words_topic: /target_words
-  target_classes: bottle,cup,backpack,chair,dining table,book,potted plant,cell phone,couch
+  target_classes: all_coco
   score_threshold: 0.2
   nms_threshold: 0.45
   max_hz: 8.0
@@ -89,7 +90,7 @@ fsm:
   stable_frames_required: 3
   lost_frames_limit: 5
   centered_required_frames: 3
-  max_search_sec: 180
+  max_search_sec: 1000
   max_task_sec: 0
   min_state_frames: 2
 birth_scan:
@@ -153,7 +154,7 @@ safety:
 search:
   # 单独自转（无 vx）wz=0.06；有 vx 时 wz=0.04，避免边走边快速自转
   scan_wz: 0.06
-  scan_wz_with_vx: 0.04
+  scan_wz_with_vx: 0.02
   search_arc_vx: 0.04
   pulse_sec: 0.35
   observe_sec: 0.1
@@ -181,7 +182,7 @@ rates:
   selector_log_hz: 1
 chassis:
   bridge: pwm
-  port: /dev/ttyUSB1
+  port: /dev/ttyUSB0
   max_vx: 0.06
   max_wz: 0.05
   watchdog_timeout: 0.5
@@ -237,29 +238,28 @@ semantic_mapping:
     no_range_policy: viewpoint_only
     default_position_sigma_m: 1.2
   classes:
-    whitelist:
-    - bottle
-    - cup
-    - backpack
-    - chair
-    - dining table
-    - book
-    - potted plant
-    - cell phone
-    - couch
+    # 语义地图收录 YOLO 可检测的全部 COCO 80 类（动态类只观测不建 landmark）
+    whitelist_mode: all_coco
     dynamic:
     - person
-    - dog
+    - bicycle
+    - car
+    - motorcycle
+    - airplane
+    - bus
+    - train
+    - truck
+    - boat
+    - bird
     - cat
-    small_objects:
-    - bottle
-    - cup
-    - cell phone
-    - book
-    large_objects:
-    - chair
-    - dining table
-    - couch
+    - dog
+    - horse
+    - sheep
+    - cow
+    - elephant
+    - bear
+    - zebra
+    - giraffe
   detection_filter:
     min_score_default: 0.25
     min_score_small_object: 0.2
@@ -321,6 +321,8 @@ semantic_explore:
   enabled: true
   hint_topic: /explore_goal_hint
   state_topic: /explore_state_json
+  hud_topic: /explore_hud
+  hud_wrap_width: 46
   control_frame: map
   use_in_search_only: true
   max_hint_age_sec: 15.0
@@ -349,7 +351,7 @@ semantic_explore:
   switch_confirm_count: 3
   step_goal_distance_m: 0.45
   goal_reached_radius_m: 0.28
-  goal_timeout_sec: 60.0
+  goal_timeout_sec: 80.0
   tf_cache_ttl_sec: 0.25
   tf_lookup_timeout_sec: 0.12
   blacklist_radius_m: 0.6
@@ -532,10 +534,7 @@ direction_lock:
   # 8 个 sector，每个 45°，先别调大
   sector_count: 8
 
-  # active sector 无候选点可数时，强制轮转到相邻 sector（保证 active 一定改变）
-  allow_neighbor_when_empty: true
-
-  exhaust_no_candidate_cycles: 10
+  exhaust_no_candidate_cycles: 5
   exhaust_failed_goals: 2
   exhaust_visited_goals: 2
 
@@ -549,3 +548,10 @@ direction_lock:
     allow_relax_unknown_gain: true
     relaxed_min_unknown_gain_cells: 0
     max_expanded_candidates_per_tick: 8
+
+joy_teleop:
+  enabled: true
+  device: /dev/input/js0
+  autonomy_topic: /cmd_vel_autonomy
+  joy_cmd_topic: /cmd_vel_joy
+  output_topic: /cmd_vel

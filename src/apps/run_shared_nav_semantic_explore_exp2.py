@@ -401,7 +401,10 @@ class SharedNavSemanticExplore(Node):
         _topics = section(cfg, "topics")
         self.scan_topic = str(_topics.get("scan_filtered", _topics.get("scan", "/scan_filtered")))
         self.odom_topic = topic(cfg, "odom", "odom_topic", "/odom")
-        self.cmd_topic = topic(cfg, "cmd_vel", "cmd_topic", "/cmd_vel")
+        self.cmd_topic = os.environ.get(
+            "CMD_VEL_AUTONOMY_TOPIC",
+            topic(cfg, "cmd_vel", "cmd_topic", "/cmd_vel"),
+        )
         self.bbox_topic = topic(cfg, "target_bbox_json", "target_bbox_topic", "/target_bbox_json")
         self.words_topic = topic(cfg, "target_words", "target_words_topic", "/target_words")
         self.state_topic = topic(cfg, "nav_state", "state_topic", "/nav_state")

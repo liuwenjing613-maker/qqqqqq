@@ -47,6 +47,55 @@ def _as_list(value: Any) -> List[str]:
     return []
 
 
+def _resolve_semantic_classes(classes: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Expand whitelist_mode: all_coco to full COCO 80-class lists."""
+    from src.perception.coco_classes import (
+        COCO_CLASS_NAMES,
+        COCO_DYNAMIC_CLASSES,
+        COCO_LARGE_OBJECTS,
+        COCO_SMALL_OBJECTS,
+        expand_class_list,
+        is_all_coco_mode,
+    )
+
+    mode = str(classes.get("whitelist_mode", "")).lower().strip()
+    use_all = is_all_coco_mode(mode)
+
+    whitelist_raw = _as_list(classes.get("whitelist"))
+    if use_all or (len(whitelist_raw) == 1 and is_all_coco_mode(whitelist_raw[0])):
+        whitelist = list(COCO_CLASS_NAMES)
+    else:
+        whitelist = whitelist_raw
+
+    dynamic_raw = _as_list(classes.get("dynamic"))
+    if use_all and not dynamic_raw:
+        dynamic = sorted(COCO_DYNAMIC_CLASSES)
+    else:
+        dynamic = dynamic_raw
+
+    small_mode = str(classes.get("small_objects_mode", "")).lower().strip()
+    small_raw = _as_list(classes.get("small_objects"))
+    if use_all and (not small_raw or is_all_coco_mode(small_mode)):
+        small_objects = sorted(COCO_SMALL_OBJECTS)
+    else:
+        small_objects = expand_class_list(small_raw, auto_set=COCO_SMALL_OBJECTS)
+
+    large_mode = str(classes.get("large_objects_mode", "")).lower().strip()
+    large_raw = _as_list(classes.get("large_objects"))
+    if use_all and (not large_raw or is_all_coco_mode(large_mode)):
+        large_objects = sorted(COCO_LARGE_OBJECTS)
+    else:
+        large_objects = expand_class_list(large_raw, auto_set=COCO_LARGE_OBJECTS)
+
+    return {
+        "whitelist": whitelist,
+        "dynamic": dynamic,
+        "small_objects": small_objects,
+        "large_objects": large_objects,
+        "whitelist_mode": mode or ("all_coco" if use_all else ""),
+    }
+
+
 def load_semantic_config(path: str | None = None) -> Dict[str, Any]:
     cfg_path = os.path.expanduser(path or DEFAULT_CONFIG)
     with open(cfg_path, "r", encoding="utf-8") as f:
@@ -103,12 +152,7 @@ def load_semantic_config(path: str | None = None) -> Dict[str, Any]:
                 projection.get("default_position_sigma_m", 1.20), 1.20
             ),
         },
-        "classes": {
-            "whitelist": _as_list(classes.get("whitelist")),
-            "dynamic": _as_list(classes.get("dynamic")),
-            "small_objects": _as_list(classes.get("small_objects")),
-            "large_objects": _as_list(classes.get("large_objects")),
-        },
+        "classes": _resolve_semantic_classes(classes),
         "detection_filter": {
             "min_score_default": _as_float(detection.get("min_score_default", 0.25), 0.25),
             "min_score_small_object": _as_float(

@@ -52,6 +52,49 @@ PY
 
 mkdir -p logs
 
+JOY_ENABLED="${JOY_ENABLED:-1}"
+CMD_VEL_AUTONOMY_TOPIC="${CMD_VEL_AUTONOMY_TOPIC:-/cmd_vel_autonomy}"
+CMD_VEL_JOY_TOPIC="${CMD_VEL_JOY_TOPIC:-/cmd_vel_joy}"
+CMD_VEL_OUTPUT_TOPIC="${CMD_VEL_OUTPUT_TOPIC:-/cmd_vel}"
+JOY_DEV="${JOY_DEV:-/dev/input/js0}"
+
+# shellcheck source=scripts/lib/start_joy_teleop.sh
+source "${PWD}/scripts/lib/start_joy_teleop.sh"
+# shellcheck source=scripts/lib/camera_stack.sh
+source "${PWD}/scripts/lib/camera_stack.sh"
+
+start_cmd_vel_mux() {
+  echo "[joy] starting cmd_vel priority mux (joy > autonomy)..."
+  python3 -u "$PROJECT_DIR/scripts/control/cmd_vel_priority_mux.py" \
+    --autonomy-topic "$CMD_VEL_AUTONOMY_TOPIC" \
+    --joy-cmd-topic "$CMD_VEL_JOY_TOPIC" \
+    --output-topic "$CMD_VEL_OUTPUT_TOPIC" \
+    --joy-topic /joy \
+    --axis-linear "${JOY_AXIS_LINEAR:-1}" \
+    --axis-angular "${JOY_AXIS_ANGULAR:-0}" \
+    --joy-deadzone "${JOY_DEADZONE:-0.08}" \
+    > "$PROJECT_DIR/logs/semantic_explore_cmd_vel_mux.log" 2>&1 &
+  sleep 1
+}
+
+ensure_joy_control_stack() {
+  if [ "$JOY_ENABLED" != "1" ]; then
+    echo "[joy] JOY_ENABLED=0: nav publishes directly to ${CMD_VEL_OUTPUT_TOPIC}"
+    return 0
+  fi
+  export CMD_VEL_AUTONOMY_TOPIC
+  start_cmd_vel_mux || {
+    echo "[joy] ERROR: cmd_vel mux failed; see logs/semantic_explore_cmd_vel_mux.log"
+    return 1
+  }
+  start_joy_teleop "$PROJECT_DIR/logs/semantic_explore_joy_teleop.log" || {
+    echo "[joy] ERROR: joy teleop failed; see logs/semantic_explore_joy_teleop.log"
+    return 1
+  }
+  echo "[joy] OK: teleop -> ${CMD_VEL_JOY_TOPIC}, nav -> ${CMD_VEL_AUTONOMY_TOPIC}, chassis -> ${CMD_VEL_OUTPUT_TOPIC}"
+  echo "[joy] Foxglove cmd plot uses /cmd_vel_sent (real clipped velocity)"
+}
+
 echo "===== semantic_explore_nav ====="
 echo "CONFIG=$CONFIG"
 echo "INSTRUCTION=$INSTRUCTION"
@@ -219,6 +262,7 @@ ensure_foxglove_bridge() {
 }
 
 stop_explore_nav_nodes() {
+  stop_joy_teleop
   # 必须同时杀原版和 exp2 版，否则旧 exp2 进程的 trajectory_points / visited_goals 会残留
   pkill -TERM -f run_shared_nav_semantic_explore.py 2>/dev/null || true
   pkill -TERM -f explore_goal_selector.py 2>/dev/null || true
@@ -233,6 +277,7 @@ stop_explore_nav_nodes() {
 }
 
 stop_explore_nav_nodes
+stop_camera_stack
 pkill -f semantic_mapper_node.py || true
 pkill -f yolov5s_bpu_web_node.py || true
 pkill -f yolo_world_to_bbox_json.py || true
@@ -248,16 +293,24 @@ if [ "$NAV_ONLY" = "1" ]; then
   echo "[semantic_explore] waiting for TF stable before explore nodes..."
   wait_tf_before_explore_nodes || exit 1
   wait_map_topic_ready 30 || echo "[semantic_explore] WARN: continuing without latched /map (volatile sub may still work)"
+  ensure_joy_control_stack || exit 1
   if [ "$SEMANTIC_EXPLORE_ENABLED" = "1" ]; then
     python3 -u "$PROJECT_DIR/src/planning/explore_goal_selector_exp2.py" \
       --config "$CONFIG" \
       --instruction "$INSTRUCTION" \
       > "$PROJECT_DIR/logs/semantic_explore_selector.log" 2>&1 &
   fi
-  python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
-    --config "$CONFIG" \
-    --instruction "$INSTRUCTION" \
-    > "$PROJECT_DIR/logs/semantic_explore_nav.log" 2>&1 &
+  if [ "$JOY_ENABLED" = "1" ]; then
+    CMD_VEL_AUTONOMY_TOPIC="$CMD_VEL_AUTONOMY_TOPIC" python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
+      --config "$CONFIG" \
+      --instruction "$INSTRUCTION" \
+      > "$PROJECT_DIR/logs/semantic_explore_nav.log" 2>&1 &
+  else
+    python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
+      --config "$CONFIG" \
+      --instruction "$INSTRUCTION" \
+      > "$PROJECT_DIR/logs/semantic_explore_nav.log" 2>&1 &
+  fi
   echo "[semantic_explore] started nav-only stack"
   exit 0
 fi
@@ -281,9 +334,6 @@ wait_topic_exists /tf 40 || exit 1
 echo "[semantic_explore] waiting for SLAM TF chain (map<-odom, odom<-base_link) before perception stack..."
 wait_tf_before_explore_nodes || exit 1
 
-# shellcheck source=scripts/lib/camera_stack.sh
-source "${PWD}/scripts/lib/camera_stack.sh"
-
 echo "[2/8] Start camera + image bridge..."
 ensure_camera_image_stream logs/semantic_explore_camera.log || {
   echo "[semantic_explore] ERROR: camera failed; see logs/semantic_explore_camera.log"
@@ -296,6 +346,10 @@ ensure_image_raw_stream logs/semantic_explore_image_raw.log || {
 }
 
 echo "[3/8] Start detector..."
+_YOLO_CMD_VEL_TOPIC="/cmd_vel"
+if [ "$JOY_ENABLED" = "1" ]; then
+  _YOLO_CMD_VEL_TOPIC="/cmd_vel_sent"
+fi
 if [ "${DETECTOR_BACKEND:-yolov5s_bpu}" = "yolov5s_bpu" ]; then
   python3 "$PROJECT_DIR/src/perception/yolov5s_bpu_web_node.py" \
     --model "$YOLOV5S_MODEL" \
@@ -309,6 +363,7 @@ if [ "${DETECTOR_BACKEND:-yolov5s_bpu}" = "yolov5s_bpu" ]; then
     --score-thres "$SCORE_THRESHOLD" \
     --nms-thres "$YOLOV5S_NMS_THRESHOLD" \
     --max-hz "$YOLOV5S_MAX_HZ" \
+    --cmd-vel-topic "$_YOLO_CMD_VEL_TOPIC" \
     --semantic-depth-overlay \
     --semantic-obs-topic /semantic_observations \
     > logs/semantic_explore_yolov5s_bpu.log 2>&1 &
@@ -359,15 +414,28 @@ else
 fi
 
 echo "[6/8] Start semantic explore nav (no separate chassis; SLAM stack owns it)..."
-python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
-  --config "$CONFIG" \
-  --instruction "$INSTRUCTION" \
-  > logs/semantic_explore_nav.log 2>&1 &
+ensure_joy_control_stack || exit 1
+if [ "$JOY_ENABLED" = "1" ]; then
+  CMD_VEL_AUTONOMY_TOPIC="$CMD_VEL_AUTONOMY_TOPIC" python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
+    --config "$CONFIG" \
+    --instruction "$INSTRUCTION" \
+    > logs/semantic_explore_nav.log 2>&1 &
+else
+  python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
+    --config "$CONFIG" \
+    --instruction "$INSTRUCTION" \
+    > logs/semantic_explore_nav.log 2>&1 &
+fi
 
 echo "[7/8] Foxglove bridge..."
 ensure_foxglove_bridge || true
 
 echo "[8/8] semantic_explore_nav started"
+if [ "$JOY_ENABLED" = "1" ]; then
+  echo "  Joystick: ${JOY_DEV} -> ${CMD_VEL_JOY_TOPIC} (highest priority)"
+  echo "  Nav cmd: ${CMD_VEL_AUTONOMY_TOPIC} -> mux -> ${CMD_VEL_OUTPUT_TOPIC}"
+  echo "  Real velocity plot: /cmd_vel_sent"
+fi
 echo "  tail -f logs/semantic_explore_nav.log"
 echo "  tail -f logs/semantic_explore_selector.log"
 echo "  ros2 topic echo /explore_goal_hint"

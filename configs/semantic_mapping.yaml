@@ -44,29 +44,27 @@ semantic_mapping:
     default_position_sigma_m: 1.20
 
   classes:
-    whitelist:
-      - bottle
-      - cup
-      - backpack
-      - chair
-      - dining table
-      - book
-      - potted plant
-      - cell phone
-      - couch
+    whitelist_mode: all_coco
     dynamic:
       - person
-      - dog
+      - bicycle
+      - car
+      - motorcycle
+      - airplane
+      - bus
+      - train
+      - truck
+      - boat
+      - bird
       - cat
-    small_objects:
-      - bottle
-      - cup
-      - cell phone
-      - book
-    large_objects:
-      - chair
-      - dining table
-      - couch
+      - dog
+      - horse
+      - sheep
+      - cow
+      - elephant
+      - bear
+      - zebra
+      - giraffe
 
   detection_filter:
     min_score_default: 0.25
