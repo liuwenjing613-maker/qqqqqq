@@ -41,7 +41,7 @@ camera:
   compressed_topic: /image
   width: 1280
   height: 720
-  image_raw_max_fps: 8
+  image_raw_max_fps: 20
 yolo_world:
   enabled: false
 yolov5s_bpu:
@@ -56,7 +56,7 @@ yolov5s_bpu:
   target_classes: bottle,cup,backpack,chair,dining table,book,potted plant,cell phone,couch
   score_threshold: 0.2
   nms_threshold: 0.45
-  max_hz: 8.0
+  max_hz: 20.0
 yolo_bridge:
   enabled: false
   out_topic: /target_bbox_json
@@ -325,7 +325,7 @@ semantic_explore:
   control_frame: map
   use_in_search_only: true
   max_hint_age_sec: 15.0
-  min_hint_score: 0.03
+  min_hint_score: 0.02
   goal_hold_sec: 30.0
   max_goal_select_distance_m: 3.5
   min_goal_select_distance_m: 0.65
@@ -335,16 +335,25 @@ semantic_explore:
   - unsafe_front_clearance
   - emergency_stop
   target_visible_interrupt: false
-  observe_after_reach_sec: 0.5
-  observe_scan_deg: 0.0
+  observe_after_reach_sec: 0.35
+  observe_scan_deg: 360.0
   observe_scan_wz: 0.05
+  observe_scan_once: true
+  observe_scan_turn_dir: 1.0
+  idle_until_next_goal: true
   min_travel_before_reach_m: 0.25
   blacklist_on_arrived: false
   search_prefer_lidar_after_sec: 5.0
   max_goal_age_sec: 20.0
   reselect_interval_sec: 4.0
-  max_candidates_validate_per_tick: 10
-  max_validate_sec_per_tick: 0.55
+  max_candidates_validate_per_tick: 24
+  max_active_sector_validate_per_tick: 4
+  max_validate_sec_per_tick: 0.85
+  max_raw_candidates_total: 64
+  visualization:
+    max_raw_candidate_markers: 64
+    max_candidate_goal_markers: 48
+    max_projection_debug_markers: 24
   keep_goal_min_sec: 8.0
   switch_score_margin: 0.35
   switch_confirm_count: 3
@@ -408,19 +417,19 @@ semantic_priors:
 frontier:
   enabled: true
   map_topic: /map
-  min_cluster_cells: 3
-  max_frontiers: 12
+  min_cluster_cells: 2
+  max_frontiers: 32
   unknown_value: -1
   free_threshold: 20
   occupied_threshold: 65
   inflation_radius_m: 0.22
-  min_distance_m: 0.55
-  max_distance_m: 3.5
+  min_distance_m: 0.45
+  max_distance_m: 4.2
   observation_standoff_m: 0.8
-  unknown_gain_radius_m: 0.6
+  unknown_gain_radius_m: 0.75
   require_goal_on_known_free: true
   scanned_free_candidates: true
-  scanned_free_max_candidates: 12
+  scanned_free_max_candidates: 40
 planner:
   mode: astar
   astar_enabled: true
@@ -444,12 +453,12 @@ goal_validation:
   min_astar_path_points: 2
 safe_goal_projection:
   enabled: true
-  max_projection_radius_m: 1.2
-  projection_step_m: 0.15
-  projection_max_samples: 16
-  prefer_nearest: true
+  max_projection_radius_m: 1.6
+  projection_step_m: 0.12
+  projection_max_samples: 32
+  prefer_nearest: false
   require_unknown_gain: false
-  min_unknown_gain_cells: 1
+  min_unknown_gain_cells: 0
   frontier_standoff_m: 0.6
   landmark_view_min_radius_m: 0.65
   landmark_view_max_radius_m: 1.2
@@ -527,26 +536,38 @@ explore_memory:
 
 direction_lock:
   enabled: true
-
-  # 8 个 sector，每个 45°，先别调大
   sector_count: 8
 
-  # 初始方向选择：
-  # best_front_sector: 在当前正前方 ±90° 内选择候选最多/分最高的 sector
-  # best_global_sector: 全局最高分 sector
-  initial_policy: best_front_sector
-
-  front_sector_angle_deg: 90.0
+  initial_policy: best_global_sector
+  sector_select_by_count: true
+  sector_count_pool: raw_projectable
+  sector_switch_respect_cooldown: false
+  init_sector_respect_cooldown: true
 
   hard_filter_active_sector: true
-  allow_neighbor_when_empty: true
-  neighbor_order: alternating
+  allow_neighbor_when_empty: false
+  allow_cross_sector_before_exhausted: false
+  force_active_sector_goal: true
 
-  active_sector_bonus: 0.35
-  inactive_sector_penalty: 0.45
-
-  exhaust_no_candidate_cycles: 5
+  exhaust_logic: any
+  exhaust_no_candidate_cycles: 3
   exhaust_failed_goals: 2
   exhaust_visited_goals: 2
-
+  max_active_sector_sec: 100.0
+  exhausted_cooldown_sec: 10.0
   reset_when_all_exhausted: true
+
+  far_goal_priority_enabled: true
+  force_farthest_when_no_best: true
+  far_goal_bonus_max: 0.65
+  far_goal_bonus_norm_m: 3.5
+
+  active_sector_recovery:
+    enabled: true
+    expand_after_no_candidate_cycles: 0
+    projection_radius_schedule_m: [0.8, 1.2, 1.6, 2.0]
+    allow_relax_unknown_gain: true
+    relaxed_min_unknown_gain_cells: 0
+    max_expanded_candidates_per_tick: 12
+
+  active_recovery_marker_enabled: true

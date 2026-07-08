@@ -9,6 +9,7 @@ import math
 import os
 import sys
 import textwrap
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -226,7 +227,12 @@ class ExploreGoalSelector(Node):
         # Direction lock configuration (plan section 8.3)
         self.direction_cfg = direction_cfg
         self.direction_lock_enabled = bool(direction_cfg.get("enabled", False))
-        self.force_best_goal_in_active_sector = bool(direction_cfg.get("force_best_goal_in_active_sector", True))
+        self.force_best_goal_in_active_sector = bool(
+            direction_cfg.get(
+                "force_best_goal_in_active_sector",
+                direction_cfg.get("force_active_sector_goal", True),
+            )
+        )
         self.direction_sector_count = max(4, int(direction_cfg.get("sector_count", 8)))
 
         self.exhaust_no_candidate_cycles = int(direction_cfg.get("exhaust_no_candidate_cycles", 3))
@@ -234,10 +240,41 @@ class ExploreGoalSelector(Node):
         self.exhaust_visited_goals = int(direction_cfg.get("exhaust_visited_goals", 3))
         self.reset_when_all_exhausted = bool(direction_cfg.get("reset_when_all_exhausted", True))
 
+        # exp2 strict sector selection policy
+        self.sector_select_by_count = bool(direction_cfg.get("sector_select_by_count", True))
+        self.sector_count_pool = str(direction_cfg.get("sector_count_pool", "raw_projectable"))
+        # 耗尽/超时切换是否尊重 exhausted cooldown；默认 false，始终按候选点数量选
+        self.sector_switch_respect_cooldown = bool(
+            direction_cfg.get("sector_switch_respect_cooldown", False)
+        )
+        self.init_sector_respect_cooldown = bool(
+            direction_cfg.get("init_sector_respect_cooldown", True)
+        )
+        self.force_active_sector_goal = bool(direction_cfg.get("force_active_sector_goal", True))
+        self.allow_cross_sector_before_exhausted = bool(
+            direction_cfg.get("allow_cross_sector_before_exhausted", False)
+        )
+
+        self.far_goal_priority_enabled = bool(direction_cfg.get("far_goal_priority_enabled", True))
+        self.far_goal_bonus_max = float(direction_cfg.get("far_goal_bonus_max", 0.65))
+        self.far_goal_bonus_norm_m = float(direction_cfg.get("far_goal_bonus_norm_m", 3.5))
+        self.force_farthest_when_no_best = bool(
+            direction_cfg.get(
+                "force_farthest_when_no_best",
+                direction_cfg.get("force_active_sector_goal", True),
+            )
+        )
+
+        self.active_recovery_marker_enabled = bool(
+            direction_cfg.get("active_recovery_marker_enabled", True)
+        )
+        self._last_sector_counts: Dict[str, Dict[str, Any]] = {}
+        self._last_recovery_debug: List[Dict[str, Any]] = []
+        self._last_recovery_candidates: List[ExploreCandidate] = []
         # active_sector_recovery config (under direction_lock, per corrected plan)
         recovery = direction_cfg.get("active_sector_recovery", {}) or {}
         self.active_sector_recovery_enabled = bool(recovery.get("enabled", True))
-        self.expand_after_no_candidate_cycles = int(recovery.get("expand_after_no_candidate_cycles", 2))
+        self.expand_after_no_candidate_cycles = int(recovery.get("expand_after_no_candidate_cycles", 0))
         self.projection_radius_schedule_m = recovery.get("projection_radius_schedule_m", [0.8, 1.2, 1.6])
         self.allow_relax_unknown_gain = bool(recovery.get("allow_relax_unknown_gain", True))
         self.relaxed_min_unknown_gain_cells = int(recovery.get("relaxed_min_unknown_gain_cells", 0))
@@ -353,7 +390,33 @@ class ExploreGoalSelector(Node):
         self.max_candidates_validate_per_tick = max(
             1, int(explore.get("max_candidates_validate_per_tick", 12))
         )
+        self.max_active_sector_validate_per_tick = max(
+            4,
+            int(
+                explore.get(
+                    "max_active_sector_validate_per_tick",
+                    self.max_candidates_validate_per_tick,
+                )
+            ),
+        )
         self.max_validate_sec_per_tick = float(explore.get("max_validate_sec_per_tick", 0.4))
+        viz_cfg = explore.get("visualization", {}) or {}
+        self.max_raw_candidates_total = max(
+            16,
+            int(explore.get("max_raw_candidates_total", viz_cfg.get("max_raw_candidates_total", 64))),
+        )
+        self.max_raw_candidate_markers = max(
+            12,
+            int(viz_cfg.get("max_raw_candidate_markers", self.max_raw_candidates_total)),
+        )
+        self.max_candidate_goal_markers = max(
+            12,
+            int(viz_cfg.get("max_candidate_goal_markers", min(48, self.max_raw_candidate_markers))),
+        )
+        self.max_projection_debug_markers = max(
+            8,
+            int(viz_cfg.get("max_projection_debug_markers", 24)),
+        )
         self.known_map_bonus_weight = float(scoring.get("known_map_bonus", 0.12))
         self.unknown_goal_penalty_weight = float(scoring.get("unknown_goal_penalty", 1.0))
         self.scoring_weights = scoring
@@ -447,6 +510,7 @@ class ExploreGoalSelector(Node):
         self._last_logged_hint_id: Optional[str] = None
         self._select_tick_count = 0
         self._select_busy = False
+        self._sector_timeout_lock = threading.Lock()
         self._validate_budget_offset = 0
         self._valid_candidates_cache: Dict[str, Tuple[float, ExploreCandidate]] = {}
 
@@ -1072,6 +1136,17 @@ class ExploreGoalSelector(Node):
         rel = self._normalize_angle(math.atan2(dy, dx) - syaw)
         return self._sector_id_from_relative_angle(rel)
 
+    def _sector_id_for_count(self, candidate: ExploreCandidate) -> str:
+        """扇区候选点数量统计用 raw 黄点方位，与投影后 goal 无关。"""
+        raw_xy = candidate.raw_goal_xy or candidate.goal_xy
+        return self._sector_id_for_goal(raw_xy)
+
+    def _sector_ids_with_raw_candidates(
+        self, candidates: List[ExploreCandidate]
+    ) -> List[str]:
+        """有 raw 候选点的扇区列表（用于按数量切换，不按 exhausted 过滤）。"""
+        return sorted({self._sector_id_for_count(c) for c in candidates})
+
     def _sector_id_for_candidate(self, candidate: ExploreCandidate) -> str:
         if candidate.sector_id:
             return candidate.sector_id
@@ -1134,6 +1209,11 @@ class ExploreGoalSelector(Node):
         self.active_area_id = sector_id
         self.active_area_started_at = now
         self.active_area_switch_count += 1
+        # 切换 sector 后清掉旧 sector 的 valid 缓存，避免 valid=1 但 active 内无点
+        self._valid_candidates_cache.clear()
+        self._validate_budget_offset = 0
+        self._last_valid_candidates = []
+        self._last_valid_count = 0
 
         st = self.sector_states.get(sector_id)
         if st is not None:
@@ -1152,6 +1232,109 @@ class ExploreGoalSelector(Node):
         if self.active_area_started_at <= 0.0:
             return 0.0
         return max(0.0, now - self.active_area_started_at)
+
+    def _active_sector_timed_out(self, now: Optional[float] = None) -> bool:
+        """纯时间判定：elapsed >= max_active_sector_sec，不依赖其它耗尽条件。"""
+        if not self.direction_lock_enabled or not self.active_area_id:
+            return False
+        if self.max_active_sector_sec <= 0.0:
+            return False
+        if self.active_area_started_at <= 0.0:
+            return False
+        return self._active_sector_elapsed_sec(now) >= self.max_active_sector_sec
+
+    def _force_switch_to_next_sector(
+        self,
+        old_sector: str,
+        reason: str,
+        *,
+        ignore_cooldown: bool = False,
+    ) -> Optional[str]:
+        """轮询下一个 sector；超时强制切换时 ignore_cooldown=True 保证一定能换区。"""
+        n = max(1, self.direction_sector_count)
+        old_idx = self._sector_index(old_sector)
+        now = time.time()
+        for k in range(1, n + 1):
+            next_id = f"sector_{(old_idx + k) % n:02d}"
+            if next_id == old_sector:
+                continue
+            st = self.sector_states.get(next_id)
+            if (
+                not ignore_cooldown
+                and st is not None
+                and st.status == "exhausted"
+                and self.exhausted_cooldown_sec > 0.0
+                and (now - st.exhausted_time) < self.exhausted_cooldown_sec
+            ):
+                continue
+            self._mark_sector_exhausted(old_sector, reason)
+            self._activate_sector(next_id, f"force_rotate from {old_sector}: {reason}")
+            self._clear_current_selection_for_sector_switch(
+                f"force rotate to {next_id}: {reason}"
+            )
+            self._last_direction_reason = f"force_rotate to {next_id}"
+            return next_id
+        return None
+
+    def _execute_active_sector_timeout_switch(self) -> bool:
+        """执行强制超时切换（调用方需已持有 _sector_timeout_lock）。"""
+        old_sector = self.active_area_id
+        if not old_sector:
+            return False
+
+        elapsed = self._active_sector_elapsed_sec()
+        reason = f"time_limit {elapsed:.1f}/{self.max_active_sector_sec:.1f}s (forced)"
+
+        self._selected = None
+        self._pending_switch_id = None
+        self._pending_switch_count = 0
+        self._selected_since = 0.0
+        self._last_select_time = 0.0
+
+        pool = list(self._last_candidates or [])
+        switched: Optional[str] = None
+        if pool and self.sector_select_by_count:
+            switched = self._switch_active_sector_by_candidate_count(
+                pool,
+                old_sector,
+                self._sector_ids_with_raw_candidates(pool),
+                reason,
+                respect_cooldown=False,
+            )
+
+        if not switched:
+            switched = self._force_switch_to_next_sector(
+                old_sector, reason, ignore_cooldown=True,
+            )
+
+        if switched:
+            self._status_message = "sector_timeout_switch"
+            self._last_selection_explanation = (
+                f"forced sector timeout: {old_sector} -> {switched}; {reason}"
+            )
+            self.get_logger().info(
+                f"SECTOR_TIMEOUT forced switch {old_sector} -> {switched} ({reason})"
+            )
+        else:
+            self._status_message = "sector_timeout_no_target_sector"
+            self._mark_sector_exhausted(old_sector, reason)
+            self._last_selection_explanation = (
+                f"forced timeout but no target sector from {old_sector}: {reason}"
+            )
+            self.get_logger().warn(
+                f"SECTOR_TIMEOUT no target after {old_sector} ({reason})"
+            )
+
+        return bool(switched)
+
+    def _maybe_force_active_sector_timeout(self) -> bool:
+        """独立强制超时：不阻塞在 generate/validate，select_busy 时也会执行。"""
+        if not self._active_sector_timed_out():
+            return False
+        with self._sector_timeout_lock:
+            if not self._active_sector_timed_out():
+                return False
+            return self._execute_active_sector_timeout_switch()
 
     def _active_sector_progress(self) -> str:
         """active sector 的耗尽进度短串: nc/failed/visited/elapsed 相对各自阈值。"""
@@ -1238,6 +1421,103 @@ class ExploreGoalSelector(Node):
             grouped.setdefault(self._sector_id_for_candidate(c), []).append(c)
         return grouped
 
+    def _distance_to_robot(self, goal_xy: Tuple[float, float]) -> float:
+        if self.robot_pose is None:
+            return 0.0
+        return math.hypot(goal_xy[0] - self.robot_pose[0], goal_xy[1] - self.robot_pose[1])
+
+    def _candidate_pick_key(self, c: ExploreCandidate) -> Tuple[float, float, float, float]:
+        dist = self._distance_to_robot(c.goal_xy)
+        if self.far_goal_priority_enabled:
+            # 距离远优先：主键为 dist，同距离再比 score
+            return (dist, c.total_score, c.information_gain, c.safety_margin)
+        return (c.total_score, dist, c.information_gain, c.safety_margin)
+
+    def _sector_balanced_downsample_candidates(
+        self,
+        candidates: List[ExploreCandidate],
+        max_total: int,
+    ) -> List[ExploreCandidate]:
+        if not candidates or max_total <= 0:
+            return candidates
+
+        for c in candidates:
+            if not c.sector_id:
+                c.sector_id = self._sector_id_for_goal(c.goal_xy)
+
+        grouped = self._group_candidates_by_sector(candidates)
+        per_sector_min = max(2, max_total // max(1, self.direction_sector_count))
+        selected: List[ExploreCandidate] = []
+
+        for sid in sorted(grouped.keys()):
+            group = grouped[sid]
+            group.sort(
+                key=lambda c: (
+                    self._distance_to_robot(c.goal_xy),
+                    c.information_gain,
+                    c.total_score,
+                ),
+                reverse=True,
+            )
+            selected.extend(group[:per_sector_min])
+
+        if len(selected) < max_total:
+            used = {c.candidate_id for c in selected}
+            rest = [c for c in candidates if c.candidate_id not in used]
+            rest.sort(
+                key=lambda c: (
+                    c.total_score,
+                    self._distance_to_robot(c.goal_xy),
+                    c.information_gain,
+                ),
+                reverse=True,
+            )
+            selected.extend(rest[: max_total - len(selected)])
+
+        return selected[:max_total]
+
+    def _build_sector_count_stats(
+        self,
+        candidates: List[ExploreCandidate],
+    ) -> Dict[str, Dict[str, Any]]:
+        stats: Dict[str, Dict[str, Any]] = {
+            f"sector_{i:02d}": {
+                "count": 0,
+                "max_dist": 0.0,
+                "avg_score": 0.0,
+                "ids": [],
+            }
+            for i in range(self.direction_sector_count)
+        }
+
+        for c in candidates:
+            sid = self._sector_id_for_count(c)
+
+            if sid not in stats:
+                continue
+
+            d = self._distance_to_robot(c.goal_xy)
+            stats[sid]["count"] += 1
+            stats[sid]["max_dist"] = max(stats[sid]["max_dist"], d)
+            stats[sid]["avg_score"] += float(c.total_score)
+            stats[sid]["ids"].append(c.candidate_id)
+
+        for sid, st in stats.items():
+            if st["count"] > 0:
+                st["avg_score"] /= float(st["count"])
+
+        self._last_sector_counts = stats
+        return stats
+
+    def _format_sector_count_summary(self, stats: Optional[Dict[str, Dict[str, Any]]] = None) -> str:
+        stats = stats or self._last_sector_counts
+        parts = [
+            f"{sid}:{int(st['count'])}"
+            for sid, st in sorted(stats.items())
+            if int(st.get("count", 0)) > 0
+        ]
+        return "{" + ",".join(parts) + "}" if parts else "{}"
+
     def _choose_sector_by_candidate_count(
         self,
         candidates: List[ExploreCandidate],
@@ -1246,35 +1526,51 @@ class ExploreGoalSelector(Node):
         respect_cooldown: bool = True,
         now: Optional[float] = None,
     ) -> Optional[str]:
-        """统一 sector 选择策略：只按候选点数量（Foxglove 黄点 / raw 候选）选最多的 sector。"""
         if now is None:
             now = time.time()
+
         if not candidates:
+            self._last_direction_reason = "candidate_count_select failed: no candidates"
             return None
 
-        grouped = self._group_candidates_by_sector(candidates)
-        best_sid: Optional[str] = None
-        best_count = -1
+        stats = self._build_sector_count_stats(candidates)
 
-        for sid, cands in grouped.items():
+        best_sid = None
+        best_key = None
+
+        for sid, st in stats.items():
+            if st["count"] <= 0:
+                continue
             if exclude_sector and sid == exclude_sector:
                 continue
             if allowed_sector_ids is not None and sid not in allowed_sector_ids:
                 continue
-            if respect_cooldown:
-                st = self.sector_states.get(sid)
-                if st is not None and st.status == "exhausted":
-                    if (
-                        self.exhausted_cooldown_sec > 0
-                        and (now - st.exhausted_time) < self.exhausted_cooldown_sec
-                    ):
+
+            sec_state = self.sector_states.get(sid)
+            if respect_cooldown and sec_state is not None and sec_state.status == "exhausted":
+                if self.exhausted_cooldown_sec > 0:
+                    if now - sec_state.exhausted_time < self.exhausted_cooldown_sec:
                         continue
-            cnt = len(cands)
-            if cnt > best_count:
-                best_count = cnt
+
+            key = (
+                int(st["count"]),
+                float(st["max_dist"]),
+                float(st["avg_score"]),
+                -self._sector_index(sid),
+            )
+
+            if best_key is None or key > best_key:
+                best_key = key
                 best_sid = sid
-            elif cnt == best_count and (best_sid is None or sid < best_sid):
-                best_sid = sid
+
+        if best_sid:
+            st = stats[best_sid]
+            self._last_direction_reason = (
+                f"sector_count_select {best_sid}: "
+                f"count={st['count']} max_dist={st['max_dist']:.2f} avg_score={st['avg_score']:.2f}"
+            )
+        else:
+            self._last_direction_reason = "sector_count_select failed: no eligible sector"
 
         return best_sid
 
@@ -1282,16 +1578,40 @@ class ExploreGoalSelector(Node):
         self,
         candidates: List[ExploreCandidate],
         old_sector: str,
-        allowed_sector_ids: List[str],
+        allowed_sector_ids: Optional[List[str]],
         reason: str,
+        *,
+        respect_cooldown: Optional[bool] = None,
     ) -> Optional[str]:
         """耗尽/超时后切换：只按候选点数量选择 sector（排除 old_sector）。"""
+        if not self.sector_select_by_count:
+            return None
+        if respect_cooldown is None:
+            respect_cooldown = self.sector_switch_respect_cooldown
+
+        if allowed_sector_ids is None:
+            allowed_sector_ids = self._sector_ids_with_raw_candidates(candidates)
+
         chosen = self._choose_sector_by_candidate_count(
             candidates,
             exclude_sector=old_sector,
             allowed_sector_ids=set(allowed_sector_ids) if allowed_sector_ids else None,
+            respect_cooldown=respect_cooldown,
         )
+        if not chosen and respect_cooldown:
+            chosen = self._choose_sector_by_candidate_count(
+                candidates,
+                exclude_sector=old_sector,
+                allowed_sector_ids=set(allowed_sector_ids) if allowed_sector_ids else None,
+                respect_cooldown=False,
+            )
         if chosen:
+            st = self._last_sector_counts.get(chosen, {})
+            self.get_logger().info(
+                f"SECTOR_COUNT_SWITCH {old_sector} -> {chosen} "
+                f"count={st.get('count', 0)} max_dist={st.get('max_dist', 0):.2f} "
+                f"reason={reason} all_counts={self._format_sector_count_summary()}"
+            )
             self._mark_sector_exhausted(old_sector, reason)
             self._activate_sector(
                 chosen,
@@ -1316,14 +1636,24 @@ class ExploreGoalSelector(Node):
         available_sector_ids: List[str],
     ) -> None:
         """在 in_active 过滤之前统一处理：初始化 / 耗尽 / 超时 → 全部按候选点数量选 sector。"""
+        if not self.sector_select_by_count:
+            return
+
         old = self.active_area_id
+        count_sectors = self._sector_ids_with_raw_candidates(valid_candidates)
 
         if old is None:
             chosen = self._choose_sector_by_candidate_count(
                 valid_candidates,
-                allowed_sector_ids=set(available_sector_ids),
+                allowed_sector_ids=set(count_sectors or available_sector_ids),
+                respect_cooldown=self.init_sector_respect_cooldown,
             )
             if chosen:
+                st = self._last_sector_counts.get(chosen, {})
+                self.get_logger().info(
+                    f"SECTOR_COUNT_INIT -> {chosen} count={st.get('count', 0)} "
+                    f"all_counts={self._format_sector_count_summary()}"
+                )
                 self._activate_sector(chosen, "candidate_count_init")
             return
 
@@ -1334,8 +1664,9 @@ class ExploreGoalSelector(Node):
         self._switch_active_sector_by_candidate_count(
             valid_candidates,
             old,
-            available_sector_ids,
+            count_sectors,
             exhaust_reason,
+            respect_cooldown=False,
         )
 
     def _sector_is_exhausted(self, sector_id: str) -> bool:
@@ -1351,8 +1682,7 @@ class ExploreGoalSelector(Node):
             return list(raw_candidates)
         out: List[ExploreCandidate] = []
         for c in raw_candidates:
-            sid = self._sector_id_for_candidate(c)
-            if sid == self.active_area_id:
+            if self._candidate_in_active_sector(c):
                 out.append(c)
         return out
 
@@ -1363,6 +1693,9 @@ class ExploreGoalSelector(Node):
         max_radius_m: float,
         min_unknown_gain_cells: int,
         require_unknown_gain: bool,
+        *,
+        require_astar: bool = True,
+        max_samples: Optional[int] = None,
     ) -> Optional[Tuple[float, float]]:
         """Local override projection without permanent mutation; uses try/finally for safety."""
         old_radius = self.projection_max_radius_m
@@ -1372,7 +1705,12 @@ class ExploreGoalSelector(Node):
             self.projection_max_radius_m = max_radius_m
             self.min_unknown_gain_cells = min_unknown_gain_cells
             self.require_unknown_gain = require_unknown_gain
-            res = self.project_to_safe_free_goal_result(raw_xy, robot_xy)
+            res = self.project_to_safe_free_goal_result(
+                raw_xy,
+                robot_xy,
+                require_astar=require_astar,
+                max_samples=max_samples,
+            )
             if res.ok and res.goal_xy:
                 return res.goal_xy
             return None
@@ -1380,6 +1718,132 @@ class ExploreGoalSelector(Node):
             self.projection_max_radius_m = old_radius
             self.min_unknown_gain_cells = old_min_gain
             self.require_unknown_gain = old_require
+    
+    def _recover_candidates_in_active_sector(
+        self,
+        raw_candidates: List[ExploreCandidate],
+        robot_xy: Tuple[float, float, float],
+    ) -> List[ExploreCandidate]:
+        self._last_recovery_debug = []
+        self._last_recovery_candidates = []
+
+        if not self.direction_lock_enabled:
+            return []
+        if not self.active_area_id:
+            return []
+        if not self.active_sector_recovery_enabled:
+            return []
+
+        robot_pos = (robot_xy[0], robot_xy[1])
+
+        active_raw: List[ExploreCandidate] = []
+        for c in raw_candidates:
+            if self._candidate_in_active_sector(c):
+                active_raw.append(c)
+
+        if not active_raw:
+            self._last_recovery_debug.append({
+                "active_sector": self.active_area_id,
+                "status": "no_raw_candidate_in_active_sector",
+            })
+            return []
+
+        # 远点优先（raw 距离），分数第二
+        active_raw.sort(key=self._active_sector_raw_distance_key, reverse=True)
+
+        recovered: List[ExploreCandidate] = []
+        max_try = max(1, int(self.max_expanded_candidates_per_tick))
+        radius_schedule = [
+            float(r) for r in self.projection_radius_schedule_m
+            if float(r) > 0.0
+        ]
+        recovery_deadline = time.time() + max(0.35, float(self.max_validate_sec_per_tick))
+
+        for base in active_raw[:max_try]:
+            if time.time() > recovery_deadline:
+                break
+            raw_xy = base.raw_goal_xy or base.goal_xy
+
+            for layer, radius_m in enumerate(radius_schedule):
+                if time.time() > recovery_deadline:
+                    break
+                projected = self._project_candidate_with_overrides(
+                    raw_xy=raw_xy,
+                    robot_xy=robot_pos,
+                    max_radius_m=radius_m,
+                    min_unknown_gain_cells=(
+                        self.relaxed_min_unknown_gain_cells
+                        if self.allow_relax_unknown_gain
+                        else self.min_unknown_gain_cells
+                    ),
+                    require_unknown_gain=False if self.allow_relax_unknown_gain else self.require_unknown_gain,
+                )
+
+                debug_item = {
+                    "base_id": base.candidate_id,
+                    "sector": self.active_area_id,
+                    "layer": layer,
+                    "radius_m": radius_m,
+                    "raw_xy": [float(raw_xy[0]), float(raw_xy[1])],
+                    "projected_xy": None,
+                    "ok": False,
+                    "reason": "",
+                }
+
+                if projected is None:
+                    debug_item["reason"] = "projection_failed"
+                    self._last_recovery_debug.append(debug_item)
+                    continue
+
+                cand = ExploreCandidate(
+                    candidate_id=f"active_recover:{layer}:{make_candidate_id(base.mode, projected[0], projected[1])}",
+                    mode="active_recovery",
+                    goal_xy=projected,
+                    goal_yaw=math.atan2(projected[1] - robot_pos[1], projected[0] - robot_pos[0]),
+                    look_at=base.look_at,
+                    semantic_score=base.semantic_score,
+                    information_gain=max(base.information_gain, 0.10),
+                    reachability=base.reachability,
+                    novelty=base.novelty,
+                    safety_margin=base.safety_margin,
+                    qwen_text_score=base.qwen_text_score,
+                    blacklist_penalty=base.blacklist_penalty,
+                    repeated_observation_penalty=base.repeated_observation_penalty,
+                    travel_cost_penalty=self._travel_cost_penalty(
+                        math.hypot(projected[0] - robot_pos[0], projected[1] - robot_pos[1])
+                    ),
+                    known_map_bonus=base.known_map_bonus,
+                    unknown_goal_penalty=0.0,
+                    reason=f"active sector forced recovery layer={layer} radius={radius_m:.2f}",
+                    source={
+                        **base.source,
+                        "recovery_layer": layer,
+                        "projection_radius_m": radius_m,
+                        "base_candidate_id": base.candidate_id,
+                        "active_sector": self.active_area_id,
+                    },
+                    target_class=base.target_class,
+                    raw_goal_xy=raw_xy,
+                    projection_status=f"active_recovery_r{radius_m:.2f}",
+                    sector_id=self.active_area_id,
+                    forced_below_threshold=True,
+                )
+
+                # 必须仍然走安全验证，不能为了强制 sector 直接撞墙。人类已经够莽了，机器人别学。
+                self._finalize_recovery_candidate(cand, robot_pos, layer)
+
+                debug_item["projected_xy"] = [float(projected[0]), float(projected[1])]
+                debug_item["ok"] = self._candidate_safe(cand)
+                debug_item["reason"] = cand.reject_reason or cand.projection_status
+                self._last_recovery_debug.append(debug_item)
+
+                if self._candidate_safe(cand):
+                    recovered.append(cand)
+
+        recovered.sort(key=self._candidate_pick_key, reverse=True)
+
+        self._last_recovery_candidates = recovered
+        return recovered
 
     def _finalize_recovery_candidate(
         self,
@@ -1393,11 +1857,12 @@ class ExploreGoalSelector(Node):
         if cand is None or self.latest_map is None:
             return
 
-        gx, gy = self._goal_map_xy(cand.goal_xy)
+        wx, wy = cand.goal_xy
+        mx, my = world_to_map(self.latest_map, wx, wy)
         cfg = self._map_grid_cfg()
-        on_known = is_known_free(self.latest_map, gx, gy, cfg) if self.require_known_free else True
-        clearance = self._clearance_at_map_xy(gx, gy)
-        gain_cells = self._unknown_gain_cells_at_map_xy(gx, gy)
+        on_known = is_known_free(self.latest_map, mx, my, cfg) if self.require_known_free else True
+        clearance = self._clearance_at_map_xy(wx, wy)
+        gain_cells = self._unknown_gain_cells_at_map_xy(wx, wy)
 
         # A* path (respect require_astar_path)
         path = None
@@ -1478,6 +1943,280 @@ class ExploreGoalSelector(Node):
         """Delegate to centralized _activate_sector to keep timer consistent."""
         self._activate_sector(sector_id, reason)
 
+    def _raw_distance_to_robot(self, candidate: ExploreCandidate) -> float:
+        raw_xy = candidate.raw_goal_xy or candidate.goal_xy
+        return self._distance_to_robot(raw_xy)
+
+    def _active_sector_raw_distance_key(
+        self, candidate: ExploreCandidate
+    ) -> Tuple[float, float, float, float]:
+        """active sector 内按 raw 黄点距离排序（远点优先）。"""
+        dist = self._raw_distance_to_robot(candidate)
+        return (dist, candidate.total_score, candidate.information_gain, candidate.safety_margin)
+
+    def _farthest_raw_in_active_sector(
+        self, raw_candidates: List[ExploreCandidate]
+    ) -> Optional[ExploreCandidate]:
+        active = [c for c in raw_candidates if self._candidate_in_active_sector(c)]
+        if not active:
+            return None
+        active.sort(key=self._active_sector_raw_distance_key, reverse=True)
+        return active[0]
+
+    def _reset_candidate_to_raw(self, candidate: ExploreCandidate) -> Tuple[float, float]:
+        raw_xy = candidate.raw_goal_xy or candidate.goal_xy
+        candidate.goal_xy = raw_xy
+        candidate.raw_goal_xy = raw_xy
+        candidate.reject_reason = ""
+        candidate.projection_status = ""
+        candidate.validation = {}
+        return raw_xy
+
+    def _mark_forced_active_pick(
+        self, candidate: ExploreCandidate, reason: str
+    ) -> ExploreCandidate:
+        candidate.forced_pick = True
+        candidate.forced_below_threshold = True
+        candidate.reason = f"{candidate.reason}; {reason}"
+        return candidate
+
+    def _force_accept_relaxed_explore_goal(
+        self,
+        candidate: ExploreCandidate,
+        robot_xy: Tuple[float, float],
+        deadline: float,
+    ) -> Optional[ExploreCandidate]:
+        """强制探索兜底：允许 unknown frontier，不做 A*，仅做基础安全校验。"""
+        raw_xy = candidate.raw_goal_xy or candidate.goal_xy
+        robot_pos = (robot_xy[0], robot_xy[1])
+
+        def _apply_goal(goal_xy: Tuple[float, float], tag: str) -> ExploreCandidate:
+            dist = math.hypot(goal_xy[0] - robot_pos[0], goal_xy[1] - robot_pos[1])
+            candidate.goal_xy = goal_xy
+            candidate.raw_goal_xy = raw_xy
+            candidate.validation = {
+                "ok": True,
+                "reject_reason": "",
+                "allow_unknown_goal": True,
+                "raw_goal_xy": [raw_xy[0], raw_xy[1]],
+                "projected_goal_xy": [goal_xy[0], goal_xy[1]],
+            }
+            candidate.reject_reason = ""
+            candidate.projection_status = f"force_relaxed_{tag}"
+            candidate.source = dict(candidate.source)
+            candidate.source["fast_validation"] = True
+            candidate.source["force_relaxed"] = True
+            candidate.sector_id = self._sector_id_for_goal(raw_xy)
+            candidate.travel_cost_penalty = self._travel_cost_penalty(dist)
+            return self._mark_forced_active_pick(
+                candidate, f"forced relaxed explore ({tag})"
+            )
+
+        for px, py in self._sample_projection_points(raw_xy):
+            if time.time() >= deadline:
+                break
+            val = self.validate_nav_goal(
+                (px, py),
+                robot_pos,
+                require_unknown_gain=False,
+                require_astar=False,
+                allow_unknown_goal=True,
+            )
+            if not val.get("ok"):
+                continue
+            tmp = ExploreCandidate(
+                candidate_id=candidate.candidate_id,
+                mode=candidate.mode,
+                goal_xy=(px, py),
+                goal_yaw=candidate.goal_yaw,
+                look_at=candidate.look_at,
+                semantic_score=candidate.semantic_score,
+                information_gain=candidate.information_gain,
+                reachability=candidate.reachability,
+                novelty=candidate.novelty,
+                safety_margin=candidate.safety_margin,
+                reason=candidate.reason,
+                source=dict(candidate.source),
+                target_class=candidate.target_class,
+                raw_goal_xy=raw_xy,
+                sector_id=candidate.sector_id,
+            )
+            if not self._within_select_range(robot_pos, tmp):
+                continue
+            self.get_logger().info(
+                f"FORCE_FARTHEST_ACTIVE ok(relaxed_snap) sector={self.active_area_id} "
+                f"id={candidate.candidate_id} dist={self._raw_distance_to_robot(candidate):.2f}m"
+            )
+            return _apply_goal((px, py), "snap")
+
+        val = self.validate_nav_goal(
+            raw_xy,
+            robot_pos,
+            require_unknown_gain=False,
+            require_astar=False,
+            allow_unknown_goal=True,
+        )
+        if val.get("ok") and self._within_select_range(robot_pos, candidate):
+            self.get_logger().info(
+                f"FORCE_FARTHEST_ACTIVE ok(relaxed_raw) sector={self.active_area_id} "
+                f"id={candidate.candidate_id} dist={self._raw_distance_to_robot(candidate):.2f}m"
+            )
+            return _apply_goal(raw_xy, "raw")
+
+        return None
+
+    def _force_validate_farthest_in_active_sector(
+        self,
+        raw_candidates: List[ExploreCandidate],
+        robot_xy: Tuple[float, float],
+    ) -> Optional[ExploreCandidate]:
+        """无最优可探索点时：在 active sector 内强制选最远 raw 点并验证（含增强投影）。"""
+        if not (
+            self.direction_lock_enabled
+            and self.active_area_id
+            and self.force_active_sector_goal
+            and self.force_farthest_when_no_best
+        ):
+            return None
+
+        farthest = self._farthest_raw_in_active_sector(raw_candidates)
+        if farthest is None:
+            return None
+
+        active_ranked = [
+            c for c in raw_candidates if self._candidate_in_active_sector(c)
+        ]
+        active_ranked.sort(key=self._active_sector_raw_distance_key, reverse=True)
+        try_limit = max(1, int(self.max_active_sector_validate_per_tick))
+
+        deadline = time.time() + max(0.45, float(self.max_validate_sec_per_tick))
+
+        old_radius = self.projection_max_radius_m
+        old_min_gain = self.min_unknown_gain_cells
+        old_require = self.require_unknown_gain
+        schedule = [
+            float(r) for r in (self.projection_radius_schedule_m or [])
+            if float(r) > 0.0
+        ]
+        max_sched = max(schedule) if schedule else old_radius
+
+        def _ok_fast(cand: ExploreCandidate, tag: str) -> ExploreCandidate:
+            self.get_logger().info(
+                f"FORCE_FARTHEST_ACTIVE ok({tag}) sector={self.active_area_id} "
+                f"id={cand.candidate_id} dist={self._raw_distance_to_robot(cand):.2f}m fast=True"
+            )
+            return self._mark_forced_active_pick(cand, f"forced farthest {tag}")
+
+        try:
+            for base in active_ranked[:try_limit]:
+                if time.time() >= deadline:
+                    break
+                dist = self._raw_distance_to_robot(base)
+                self._reset_candidate_to_raw(base)
+
+                if self._process_raw_candidate(base, robot_xy, fast=True):
+                    return _ok_fast(base, "fast")
+
+                self.projection_max_radius_m = max(old_radius, max_sched)
+                if self.allow_relax_unknown_gain:
+                    self.min_unknown_gain_cells = self.relaxed_min_unknown_gain_cells
+                    self.require_unknown_gain = False
+
+                self._reset_candidate_to_raw(base)
+                if time.time() < deadline and self._process_raw_candidate(
+                    base, robot_xy, fast=True
+                ):
+                    return _ok_fast(base, "relaxed_fast")
+
+                robot_pos = (robot_xy[0], robot_xy[1])
+                raw_xy = base.raw_goal_xy or base.goal_xy
+                for layer, radius_m in enumerate(reversed(schedule)):
+                    if time.time() >= deadline:
+                        break
+                    projected = self._project_candidate_with_overrides(
+                        raw_xy=raw_xy,
+                        robot_xy=robot_pos,
+                        max_radius_m=radius_m,
+                        min_unknown_gain_cells=(
+                            self.relaxed_min_unknown_gain_cells
+                            if self.allow_relax_unknown_gain
+                            else self.min_unknown_gain_cells
+                        ),
+                        require_unknown_gain=(
+                            False
+                            if self.allow_relax_unknown_gain
+                            else self.require_unknown_gain
+                        ),
+                        require_astar=False,
+                        max_samples=8,
+                    )
+                    if projected is None:
+                        continue
+
+                    cand = ExploreCandidate(
+                        candidate_id=(
+                            f"force_far:{layer}:"
+                            f"{make_candidate_id(base.mode, projected[0], projected[1])}"
+                        ),
+                        mode="force_farthest_active",
+                        goal_xy=projected,
+                        goal_yaw=math.atan2(
+                            projected[1] - robot_pos[1], projected[0] - robot_pos[0]
+                        ),
+                        look_at=base.look_at,
+                        semantic_score=base.semantic_score,
+                        information_gain=max(base.information_gain, 0.10),
+                        reachability=base.reachability,
+                        novelty=base.novelty,
+                        safety_margin=base.safety_margin,
+                        qwen_text_score=base.qwen_text_score,
+                        blacklist_penalty=base.blacklist_penalty,
+                        repeated_observation_penalty=base.repeated_observation_penalty,
+                        travel_cost_penalty=self._travel_cost_penalty(
+                            math.hypot(
+                                projected[0] - robot_pos[0], projected[1] - robot_pos[1]
+                            )
+                        ),
+                        known_map_bonus=base.known_map_bonus,
+                        unknown_goal_penalty=0.0,
+                        reason=(
+                            f"forced farthest active recovery layer={layer} "
+                            f"radius={radius_m:.2f} dist={dist:.2f}m"
+                        ),
+                        source={
+                            **base.source,
+                            "force_farthest": True,
+                            "base_candidate_id": base.candidate_id,
+                            "recovery_layer": layer,
+                            "projection_radius_m": radius_m,
+                            "active_sector": self.active_area_id,
+                        },
+                        target_class=base.target_class,
+                        raw_goal_xy=raw_xy,
+                        projection_status=f"force_farthest_r{radius_m:.2f}",
+                        sector_id=self.active_area_id,
+                    )
+                    if self._process_raw_candidate(cand, robot_pos, fast=True):
+                        return _ok_fast(cand, f"recovery_r{radius_m:.2f}")
+
+                relaxed = self._force_accept_relaxed_explore_goal(
+                    base, robot_xy, deadline
+                )
+                if relaxed is not None:
+                    return relaxed
+        finally:
+            self.projection_max_radius_m = old_radius
+            self.min_unknown_gain_cells = old_min_gain
+            self.require_unknown_gain = old_require
+
+        fail_id = farthest.candidate_id if farthest else "n/a"
+        fail_dist = self._raw_distance_to_robot(farthest) if farthest else 0.0
+        self.get_logger().warn(
+            f"FORCE_FARTHEST_ACTIVE failed sector={self.active_area_id} "
+            f"id={fail_id} dist={fail_dist:.2f}m tried={min(len(active_ranked), try_limit)}"
+        )
+        return None
+
     def _candidate_in_active_sector(self, candidate: ExploreCandidate) -> bool:
         if not self.active_area_id:
             return True
@@ -1489,17 +2228,23 @@ class ExploreGoalSelector(Node):
     ) -> List[ExploreCandidate]:
         count_pool = self._sector_count_pool()
 
-        # 耗尽/超时：只在存在候选点数量依据时切换 sector。
-        if self.direction_lock_enabled and self.active_area_id:
+        # 耗尽/超时：按 raw 候选点数量切换 sector（不按 exhausted 过滤 allowed）
+        if (
+            self.direction_lock_enabled
+            and self.sector_select_by_count
+            and self.active_area_id
+        ):
             if self._sector_is_exhausted(self.active_area_id):
                 exhaust_reason = self._sector_exhaust_reason(self.active_area_id) or "time_limit"
                 old_active = self.active_area_id
                 self._mark_sector_exhausted(old_active, exhaust_reason)
                 if count_pool:
-                    non_empty = sorted({self._sector_id_for_candidate(c) for c in count_pool})
-                    avail = [s for s in non_empty if not self._sector_is_exhausted(s)]
                     self._switch_active_sector_by_candidate_count(
-                        count_pool, old_active, avail, exhaust_reason,
+                        count_pool,
+                        old_active,
+                        self._sector_ids_with_raw_candidates(count_pool),
+                        exhaust_reason,
+                        respect_cooldown=False,
                     )
 
         if not valid_candidates:
@@ -1514,7 +2259,7 @@ class ExploreGoalSelector(Node):
             return valid_candidates
 
         # 清理 exhausted 状态：如果全部 exhausted，就重新来一轮
-        non_empty_sector_ids = sorted({self._sector_id_for_candidate(c) for c in count_pool})
+        non_empty_sector_ids = self._sector_ids_with_raw_candidates(count_pool)
         available_sector_ids = [
             sid for sid in non_empty_sector_ids
             if not self._sector_is_exhausted(sid)
@@ -1554,12 +2299,13 @@ class ExploreGoalSelector(Node):
             return []
 
         # 已耗尽但当前 active 内无候选：按 raw 候选点数量切到别的 sector 并重试一次
-        if self.active_area_id:
+        if self.active_area_id and self.sector_select_by_count:
             self._switch_active_sector_by_candidate_count(
                 count_pool,
                 self.active_area_id,
-                available_sector_ids,
+                self._sector_ids_with_raw_candidates(count_pool),
                 self._sector_exhaust_reason(self.active_area_id) or "exhausted_no_in_active",
+                respect_cooldown=False,
             )
             in_active_retry = [
                 c for c in valid_candidates if self._candidate_in_active_sector(c)
@@ -1865,6 +2611,9 @@ class ExploreGoalSelector(Node):
         self,
         raw_goal_xy: Tuple[float, float],
         robot_xy: Tuple[float, float],
+        *,
+        require_astar: bool = True,
+        max_samples: Optional[int] = None,
     ) -> ProjectionResult:
         if self.latest_map is None:
             return ProjectionResult(False, status="no_map")
@@ -1875,7 +2624,7 @@ class ExploreGoalSelector(Node):
             raw_goal_xy,
             robot_xy,
             require_unknown_gain=False,
-            require_astar=True,
+            require_astar=require_astar,
         )
         if raw_validation.get("ok"):
             return ProjectionResult(
@@ -1898,8 +2647,10 @@ class ExploreGoalSelector(Node):
         valid_n = 0
         raw_x, raw_y = raw_goal_xy
 
+        sample_cap = max_samples if max_samples is not None else self.projection_max_samples
+
         for p in self._sample_projection_points(raw_goal_xy):
-            if sampled >= self.projection_max_samples:
+            if sampled >= sample_cap:
                 break
             sampled += 1
             cheap = self.validate_nav_goal(
@@ -1913,13 +2664,13 @@ class ExploreGoalSelector(Node):
             if float(cheap.get("clearance_m", 0.0)) < self.min_goal_clearance_m:
                 continue
 
-            path = self._plan_candidate_path(robot_xy, p)
+            path = self._plan_candidate_path(robot_xy, p) if require_astar else []
             full = self.validate_nav_goal(
                 p,
                 robot_xy,
-                planned_path=path,
+                planned_path=path if path else None,
                 require_unknown_gain=False,
-                require_astar=True,
+                require_astar=require_astar,
             )
             if not full.get("ok"):
                 continue
@@ -1977,6 +2728,7 @@ class ExploreGoalSelector(Node):
         *,
         require_unknown_gain: Optional[bool] = None,
         require_astar: Optional[bool] = None,
+        allow_unknown_goal: bool = False,
     ) -> Dict[str, Any]:
         if require_unknown_gain is None:
             require_unknown_gain = self.require_unknown_gain
@@ -2020,7 +2772,8 @@ class ExploreGoalSelector(Node):
         result["inside_map"] = inside
 
         mx, my = world_to_map(self.latest_map, gx, gy)
-        if is_unknown_cell(self.latest_map, mx, my, cfg):
+        is_unknown = is_unknown_cell(self.latest_map, mx, my, cfg)
+        if is_unknown and not allow_unknown_goal:
             result["reject_reason"] = "unknown_cell"
             return result
 
@@ -2029,7 +2782,7 @@ class ExploreGoalSelector(Node):
             result["reject_reason"] = "occupied_cell"
             return result
 
-        if self.require_known_free and not is_known_free(self.latest_map, mx, my, cfg):
+        if self.require_known_free and not allow_unknown_goal and not is_known_free(self.latest_map, mx, my, cfg):
             result["reject_reason"] = "unknown_cell"
             return result
 
@@ -2037,9 +2790,14 @@ class ExploreGoalSelector(Node):
             result["reject_reason"] = "inflated_obstacle"
             return result
 
-        result["is_known_free"] = True
+        result["is_known_free"] = not is_unknown and is_known_free(
+            self.latest_map, mx, my, cfg
+        )
         result["clearance_m"] = round(self._clearance_at_map_xy(gx, gy), 3)
-        if result["clearance_m"] < self.min_goal_clearance_m:
+        min_clear = self.min_goal_clearance_m
+        if allow_unknown_goal:
+            min_clear = max(0.05, min_clear * 0.5)
+        if result["clearance_m"] < min_clear:
             result["reject_reason"] = "low_clearance"
             return result
 
@@ -2068,11 +2826,18 @@ class ExploreGoalSelector(Node):
         self,
         candidate: ExploreCandidate,
         robot_xy: Tuple[float, float],
+        *,
+        fast: bool = False,
     ) -> bool:
-        raw_xy = candidate.goal_xy
+        raw_xy = candidate.raw_goal_xy or candidate.goal_xy
         candidate.raw_goal_xy = raw_xy
 
-        proj = self.project_to_safe_free_goal_result(raw_xy, robot_xy)
+        proj = self.project_to_safe_free_goal_result(
+            raw_xy,
+            robot_xy,
+            require_astar=not fast,
+            max_samples=8 if fast else None,
+        )
         candidate.projection_status = proj.status
 
         if not proj.ok or proj.goal_xy is None:
@@ -2098,13 +2863,13 @@ class ExploreGoalSelector(Node):
             }
             return False
 
-        path = self._plan_candidate_path(robot_xy, candidate.goal_xy)
+        path = self._plan_candidate_path(robot_xy, candidate.goal_xy) if not fast else []
         validation = self.validate_nav_goal(
             candidate.goal_xy,
             robot_xy,
-            planned_path=path,
+            planned_path=path if path else None,
             require_unknown_gain=False,
-            require_astar=True,
+            require_astar=not fast,
         )
         candidate.validation = {
             **validation,
@@ -2122,11 +2887,16 @@ class ExploreGoalSelector(Node):
 
         candidate.reject_reason = ""
         candidate.sector_id = self._sector_id_for_goal(candidate.goal_xy)
+        dist = self._distance_to_robot(candidate.goal_xy)
+        candidate.travel_cost_penalty = self._travel_cost_penalty(dist)
         candidate.source = dict(candidate.source)
-        candidate.source["planned_path"] = path
+        if path:
+            candidate.source["planned_path"] = path
         candidate.source["raw_goal_xy"] = [raw_xy[0], raw_xy[1]]
         candidate.source["projection_status"] = candidate.projection_status
         candidate.source["validation"] = candidate.validation
+        if fast:
+            candidate.source["fast_validation"] = True
 
         try:
             candidate.information_gain = max(
@@ -2149,20 +2919,23 @@ class ExploreGoalSelector(Node):
     def _rank_raw_for_validation(
         self, raw_candidates: List[ExploreCandidate]
     ) -> List[ExploreCandidate]:
-        """验证预算有限时，优先验证 active sector 内的点。"""
+        """验证预算有限时，优先验证 active sector 内的点（按 raw 扇区 + 远点优先）。"""
         if not self.direction_lock_enabled or not self.active_area_id:
-            return sorted(raw_candidates, key=lambda c: c.total_score, reverse=True)
-        active = [
-            c for c in raw_candidates
-            if self._sector_id_for_candidate(c) == self.active_area_id
-        ]
-        other = [
-            c for c in raw_candidates
-            if self._sector_id_for_candidate(c) != self.active_area_id
-        ]
-        active.sort(key=lambda c: c.total_score, reverse=True)
-        other.sort(key=lambda c: c.total_score, reverse=True)
+            ranked = list(raw_candidates)
+            ranked.sort(key=self._candidate_pick_key, reverse=True)
+            return ranked
+        active = [c for c in raw_candidates if self._candidate_in_active_sector(c)]
+        other = [c for c in raw_candidates if not self._candidate_in_active_sector(c)]
+        active.sort(key=self._active_sector_raw_distance_key, reverse=True)
+        other.sort(key=self._candidate_pick_key, reverse=True)
         return active + other
+
+    def _valid_candidates_in_active_sector(
+        self, candidates: List[ExploreCandidate]
+    ) -> List[ExploreCandidate]:
+        if not self.direction_lock_enabled or not self.active_area_id:
+            return list(candidates)
+        return [c for c in candidates if self._candidate_in_active_sector(c)]
 
     def _prune_valid_candidate_cache(self, now: Optional[float] = None) -> None:
         if now is None:
@@ -2198,7 +2971,26 @@ class ExploreGoalSelector(Node):
         ranked_raw = self._rank_raw_for_validation(raw_candidates)
         budget = self.max_candidates_validate_per_tick
         n = len(ranked_raw)
-        if n <= budget:
+        force_active = (
+            self.direction_lock_enabled
+            and self.active_area_id
+            and self.force_active_sector_goal
+        )
+        active_ranked = (
+            [c for c in ranked_raw if self._candidate_in_active_sector(c)]
+            if force_active
+            else []
+        )
+        other_ranked = (
+            [c for c in ranked_raw if not self._candidate_in_active_sector(c)]
+            if force_active
+            else ranked_raw
+        )
+        if force_active and active_ranked:
+            # 批量验证改由 select_tick 内 _force_validate_farthest 承担，避免卡死
+            to_process = []
+            skipped = n
+        elif n <= budget:
             to_process = ranked_raw
             skipped = 0
         else:
@@ -2210,11 +3002,17 @@ class ExploreGoalSelector(Node):
             reject_stats["skipped_budget"] = skipped
 
         validate_deadline = time.time() + self.max_validate_sec_per_tick
+        wall_start = time.time()
         for idx, candidate in enumerate(to_process):
+            if time.time() - wall_start > self.max_validate_sec_per_tick:
+                reject_stats["skipped_time_budget"] = len(to_process) - idx
+                break
             if time.time() > validate_deadline:
                 reject_stats["skipped_time_budget"] = len(to_process) - idx
                 break
-            ok = self._process_raw_candidate(candidate, robot_xy)
+            ok = self._process_raw_candidate(
+                candidate, robot_xy, fast=bool(force_active)
+            )
 
             item = self._candidate_summary(candidate, rank=0)
             item["raw_goal_xy"] = (
@@ -2235,6 +3033,7 @@ class ExploreGoalSelector(Node):
             valid.append(candidate)
 
         merged_valid = self._merge_valid_candidate_cache(valid)
+        merged_valid = self._valid_candidates_in_active_sector(merged_valid)
         self._last_valid_count = len(merged_valid)
         self._last_candidate_debug = debug_items[:80]
         self._last_pick_stats = {
@@ -2253,30 +3052,25 @@ class ExploreGoalSelector(Node):
         robot_xy: Tuple[float, float],
         valid_candidates: List[ExploreCandidate],
     ) -> Tuple[Optional[ExploreCandidate], List[Tuple[float, float]]]:
-        if not valid_candidates:
+        return self._pick_best_from_pool(robot_xy, valid_candidates)
+
+    def _pick_best_from_pool(
+        self,
+        robot_xy: Tuple[float, float],
+        candidate_pool: List[ExploreCandidate],
+    ) -> Tuple[Optional[ExploreCandidate], List[Tuple[float, float]]]:
+        if not candidate_pool:
             return None, []
-        area_filtered = self._filter_by_active_area(valid_candidates)
-        if not area_filtered and self.direction_lock_enabled and self.active_area_id and self.active_sector_recovery_enabled:
-            # active sector 内无候选 → 膨胀恢复：对原始候选点用递增半径重新投影到安全 free 点
-            self._last_pick_stats = {**getattr(self, "_last_pick_stats", {}), "recovery_attempted": True}
-            raw_pool = self._last_candidates or []
-            recovered = self._reproject_active_raw_candidates(raw_pool, robot_xy)
-            if recovered:
-                area_filtered = recovered
-                st = self.sector_states.get(self.active_area_id)
-                if st:
-                    st.no_candidate_cycles = 0
-                    st.last_update_time = time.time()
-        ranked = sorted(area_filtered, key=lambda c: c.total_score, reverse=True)
+        for c in candidate_pool:
+            dist = self._distance_to_robot(c.goal_xy)
+            c.travel_cost_penalty = self._travel_cost_penalty(dist)
+        ranked = sorted(candidate_pool, key=self._candidate_pick_key, reverse=True)
         if not ranked:
             return None, []
         best = ranked[0]
-        # 按新策略：active sector 内若无 >= min_hint_score 的 valid 候选，则在 force_best_goal_in_active_sector=true 时
-        # 强制选 active 内最高分的安全点（已通过 projection/validation/A*/blacklist 等），并标记 forced_below_threshold
         if best.total_score < self.min_hint_score:
             if self.direction_lock_enabled and self.active_area_id and self.force_best_goal_in_active_sector:
                 best.forced_below_threshold = True
-                # 仍保留 legacy forced_pick 兼容
                 best.forced_pick = True
             else:
                 self._last_selection_explanation = (
@@ -2407,6 +3201,7 @@ class ExploreGoalSelector(Node):
                     reachability=0.75,
                     novelty=0.55,
                     safety_margin=min(1.0, r / 2.0),
+                    travel_cost_penalty=self._travel_cost_penalty(dist),
                     reason="free_space fallback on scanned cell",
                     source={"type": "free_space"},
                     target_class=target_class,
@@ -2519,7 +3314,14 @@ class ExploreGoalSelector(Node):
                 candidates, robot_xy, ranges, angles, map_ok
             )
 
-        self._assign_sector_ids(candidates)
+        for c in candidates:
+            if c.raw_goal_xy is None:
+                c.raw_goal_xy = c.goal_xy
+
+        candidates = self._sector_balanced_downsample_candidates(
+            candidates,
+            max_total=self.max_raw_candidates_total,
+        )
         return candidates
 
     def _generate_candidates(self, robot_xy: Tuple[float, float]) -> List[ExploreCandidate]:
@@ -2591,7 +3393,7 @@ class ExploreGoalSelector(Node):
     ) -> Tuple[Optional[ExploreCandidate], List[Tuple[float, float]]]:
         valid = self._build_valid_candidates(robot_xy, candidates)
         self._last_valid_candidates = valid
-        return self._pick_best_valid_candidate(robot_xy, valid)
+        return None, []
 
     def _score_candidates(self, candidates: List[ExploreCandidate]) -> Optional[ExploreCandidate]:
         ranked = self._rank_candidates(candidates)
@@ -2689,7 +3491,30 @@ class ExploreGoalSelector(Node):
         now: float,
     ) -> Optional[ExploreCandidate]:
         current = self._selected
-        by_id = {c.candidate_id: c for c in candidates}
+        by_id: Dict[str, ExploreCandidate] = {}
+        for c in candidates:
+            prev = by_id.get(c.candidate_id)
+            if prev is None:
+                by_id[c.candidate_id] = c
+                continue
+            if bool((c.validation or {}).get("ok")) and not bool(
+                (prev.validation or {}).get("ok")
+            ):
+                by_id[c.candidate_id] = c
+            elif getattr(c, "forced_pick", False) and not getattr(prev, "forced_pick", False):
+                by_id[c.candidate_id] = c
+
+        if current is not None and self.direction_lock_enabled and self.active_area_id:
+            cur_sector = current.sector_id or self._sector_id_for_goal(current.goal_xy)
+            if cur_sector != self.active_area_id:
+                self._status_message = "cancel_cross_sector_goal"
+                self._last_selection_explanation = (
+                    f"cancel {current.candidate_id}: sector {cur_sector} != active {self.active_area_id}"
+                )
+                self._pending_switch_id = None
+                self._pending_switch_count = 0
+                self._selected_since = 0.0
+                current = None
 
         if current is None:
             self._pending_switch_id = None
@@ -2702,16 +3527,55 @@ class ExploreGoalSelector(Node):
             return best
 
         refreshed = by_id.get(current.candidate_id)
+        if (
+            refreshed is not None
+            and current is not None
+            and getattr(current, "forced_pick", False)
+            and bool((current.validation or {}).get("ok"))
+            and not bool((refreshed.validation or {}).get("ok"))
+        ):
+            refreshed = current
+        if refreshed is None and getattr(current, "forced_pick", False):
+            refreshed = current
+
         if refreshed is None or not self._candidate_safe(refreshed):
+            if (
+                current is not None
+                and getattr(current, "forced_pick", False)
+                and bool((current.validation or {}).get("ok"))
+            ):
+                self._last_selection_explanation = (
+                    f"keep forced current {current.candidate_id}"
+                )
+                return current
             self._status_message = "current_goal_unsafe_cancel"
             self._last_selection_explanation = f"cancel current {current.candidate_id}: missing or unsafe"
             self._pending_switch_id = None
             self._pending_switch_count = 0
             self._selected_since = 0.0
-            if best is not None and best.candidate_id != current.candidate_id:
-                self._selected_since = now
-                self._last_selection_explanation += f"; select replacement {best.candidate_id}"
+            if best is not None:
+                if best.candidate_id != current.candidate_id:
+                    self._selected_since = now
+                    self._last_selection_explanation += (
+                        f"; select replacement {best.candidate_id}"
+                    )
+                    self._status_message = "current_goal_unsafe_cancel"
+                else:
+                    self._status_message = "selected"
+                    self._last_selection_explanation = (
+                        f"keep forced current {current.candidate_id}"
+                    )
+                    self._selected_since = max(self._selected_since, now - 1.0)
                 return best
+            if (
+                getattr(current, "forced_pick", False)
+                and bool((current.validation or {}).get("ok"))
+            ):
+                self._selected_since = now
+                self._last_selection_explanation = (
+                    f"keep forced current {current.candidate_id}"
+                )
+                return current
             return None
 
         if self.robot_pose is not None and not self._within_select_range(self.robot_pose, refreshed):
@@ -2725,22 +3589,41 @@ class ExploreGoalSelector(Node):
             return best
 
         if self.robot_pose is not None and self.require_astar_path and not self.astar_fallback_bearing:
-            path = self._plan_candidate_path(self.robot_pose, refreshed.goal_xy)
-            if not path:
-                self._status_message = "current_goal_no_astar_path"
-                self._last_selection_explanation = (
-                    f"cancel current {refreshed.candidate_id}: astar path unavailable"
-                )
-                self._pending_switch_id = None
-                self._pending_switch_count = 0
-                self._selected_since = 0.0
-                return best
+            if getattr(refreshed, "forced_pick", False) and refreshed.source.get(
+                "force_relaxed"
+            ):
+                pass
+            else:
+                path = self._plan_candidate_path(self.robot_pose, refreshed.goal_xy)
+                if not path:
+                    self._status_message = "current_goal_no_astar_path"
+                    self._last_selection_explanation = (
+                        f"cancel current {refreshed.candidate_id}: astar path unavailable"
+                    )
+                    self._pending_switch_id = None
+                    self._pending_switch_count = 0
+                    self._selected_since = 0.0
+                    return best
 
         if best is None or best.candidate_id == refreshed.candidate_id:
             self._pending_switch_id = None
             self._pending_switch_count = 0
             self._last_selection_explanation = f"keep current {refreshed.candidate_id}: still best"
             return refreshed
+
+        if self.far_goal_priority_enabled and best is not None:
+            cur_dist = self._distance_to_robot(refreshed.goal_xy)
+            best_dist = self._distance_to_robot(best.goal_xy)
+            if best_dist > cur_dist + 0.25:
+                self._pending_switch_id = None
+                self._pending_switch_count = 0
+                self._selected_since = now
+                self._status_message = "switch_farther_goal"
+                self._last_selection_explanation = (
+                    f"far-priority switch {refreshed.candidate_id}({cur_dist:.2f}m) "
+                    f"-> {best.candidate_id}({best_dist:.2f}m)"
+                )
+                return best
 
         if self._nav_abort_reselect:
             self._nav_abort_reselect = False
@@ -3170,6 +4053,62 @@ class ExploreGoalSelector(Node):
             return "none"
         return max(stats.items(), key=lambda kv: kv[1])[0]
 
+    def _publish_raw_candidate_pool_markers(
+        self,
+        candidates: List[ExploreCandidate],
+        stamp,
+        *,
+        selected: Optional[ExploreCandidate] = None,
+    ) -> None:
+        """Foxglove 黄点：发布全部 raw 候选池，与验证 budget 无关。"""
+        self._prepare_viz_frame()
+        arr = MarkerArray()
+        arr.markers.append(self._marker_delete_all("raw_goals", stamp))
+        arr.markers.append(self._marker_delete_all("raw_pool_labels", stamp))
+
+        limit = self.max_raw_candidate_markers
+        for i, c in enumerate(candidates[:limit]):
+            raw_xy = c.raw_goal_xy or c.goal_xy
+            if raw_xy is None:
+                continue
+            rx, ry = self._xy_to_viz_frame(float(raw_xy[0]), float(raw_xy[1]))
+            in_active = (
+                self.direction_lock_enabled
+                and self.active_area_id
+                and self._candidate_in_active_sector(c)
+            )
+            if selected and c.candidate_id == selected.candidate_id:
+                color = (1.0, 0.55, 0.0, 1.0)
+                scale = 0.13
+            elif in_active:
+                color = (1.0, 0.85, 0.1, 0.95)
+                scale = 0.10
+            else:
+                color = (0.85, 0.75, 0.15, 0.55)
+                scale = 0.08
+
+            raw_m = self._marker_sphere("raw_goals", i, rx, ry, color, scale)
+            raw_m.pose.position.z = 0.12
+            raw_m.header.stamp = stamp
+            arr.markers.append(raw_m)
+
+        if len(candidates) > limit:
+            label = Marker()
+            label.header = self._marker_header(stamp)
+            label.ns = "raw_pool_labels"
+            label.id = 0
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position.x = 0.0
+            label.pose.position.y = 0.0
+            label.pose.position.z = 0.5
+            label.scale.z = 0.14
+            label.color = ColorRGBA(r=1.0, g=0.9, b=0.2, a=0.9)
+            label.text = f"+{len(candidates) - limit} more raw"
+            arr.markers.append(label)
+
+        self.pub_projection_markers.publish(arr)
+
     def _publish_projection_debug_markers(
         self,
         robot_xy: Tuple[float, float, float],
@@ -3179,7 +4118,6 @@ class ExploreGoalSelector(Node):
         self._prepare_viz_frame()
         arr = MarkerArray()
         for ns in (
-            "raw_goals",
             "projected_goals",
             "rejected_goals",
             "projection_links",
@@ -3188,7 +4126,7 @@ class ExploreGoalSelector(Node):
         ):
             arr.markers.append(self._marker_delete_all(ns, stamp))
 
-        debug_items = self._last_candidate_debug[:15]
+        debug_items = self._last_candidate_debug[: self.max_projection_debug_markers]
         link_id = 0
         label_id = 0
         for i, item in enumerate(debug_items):
@@ -3197,10 +4135,6 @@ class ExploreGoalSelector(Node):
             if not raw_xy or len(raw_xy) < 2:
                 continue
             rx, ry = self._xy_to_viz_frame(float(raw_xy[0]), float(raw_xy[1]))
-            raw_m = self._marker_sphere("raw_goals", i, rx, ry, (1.0, 0.85, 0.1, 0.95), 0.09)
-            raw_m.pose.position.z = 0.12
-            raw_m.header.stamp = stamp
-            arr.markers.append(raw_m)
 
             validation = item.get("validation") or {}
             ok = bool(validation.get("ok"))
@@ -3285,6 +4219,84 @@ class ExploreGoalSelector(Node):
 
         self.pub_projection_markers.publish(arr)
 
+    def _publish_recovery_debug_markers(self, stamp) -> None:
+        if not self.active_recovery_marker_enabled:
+            return
+
+        arr = MarkerArray()
+        arr.markers.append(self._marker_delete_all("active_recovery_raw", stamp))
+        arr.markers.append(self._marker_delete_all("active_recovery_projected", stamp))
+        arr.markers.append(self._marker_delete_all("active_recovery_link", stamp))
+        arr.markers.append(self._marker_delete_all("active_recovery_label", stamp))
+
+        idx = 0
+        for item in self._last_recovery_debug[:40]:
+            raw_xy = item.get("raw_xy")
+            proj_xy = item.get("projected_xy")
+            if not raw_xy:
+                continue
+
+            rx, ry = self._xy_to_viz_frame(float(raw_xy[0]), float(raw_xy[1]))
+            raw_m = self._marker_sphere(
+                "active_recovery_raw",
+                idx,
+                rx,
+                ry,
+                (1.0, 0.4, 0.1, 0.85),
+                0.08,
+            )
+            raw_m.header.stamp = stamp
+            arr.markers.append(raw_m)
+
+            if proj_xy:
+                px, py = self._xy_to_viz_frame(float(proj_xy[0]), float(proj_xy[1]))
+                proj_m = self._marker_sphere(
+                    "active_recovery_projected",
+                    idx,
+                    px,
+                    py,
+                    (0.8, 0.0, 1.0, 0.95) if item.get("ok") else (1.0, 0.0, 0.0, 0.75),
+                    0.12,
+                )
+                proj_m.header.stamp = stamp
+                arr.markers.append(proj_m)
+
+                line = Marker()
+                line.header = proj_m.header
+                line.ns = "active_recovery_link"
+                line.id = idx
+                line.type = Marker.LINE_STRIP
+                line.action = Marker.ADD
+                line.scale.x = 0.035
+                line.color = ColorRGBA(r=0.8, g=0.2, b=1.0, a=0.8)
+                line.points = [
+                    Point(x=rx, y=ry, z=0.08),
+                    Point(x=px, y=py, z=0.08),
+                ]
+                arr.markers.append(line)
+
+                label = Marker()
+                label.header = proj_m.header
+                label.ns = "active_recovery_label"
+                label.id = idx
+                label.type = Marker.TEXT_VIEW_FACING
+                label.action = Marker.ADD
+                label.pose.position.x = px
+                label.pose.position.y = py
+                label.pose.position.z = 0.32
+                label.scale.z = 0.10
+                label.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=0.95)
+                label.text = (
+                    f"{item.get('sector')}\n"
+                    f"r={item.get('radius_m')}\n"
+                    f"{'OK' if item.get('ok') else 'X'} {str(item.get('reason', ''))[:18]}"
+                )
+                arr.markers.append(label)
+
+            idx += 1
+
+        self.pub_projection_markers.publish(arr)
+
     def _publish_selection_process_markers(
         self,
         robot_xy: Tuple[float, float, float],
@@ -3350,7 +4362,7 @@ class ExploreGoalSelector(Node):
         cand_arr = MarkerArray()
         cand_arr.markers.append(self._marker_delete_all("candidates", stamp))
         cand_arr.markers.append(self._marker_delete_all("candidate_labels", stamp))
-        for i, c in enumerate(candidates[:12]):
+        for i, c in enumerate(candidates[: self.max_candidate_goal_markers]):
             is_sel = selected is not None and c.candidate_id == selected.candidate_id
             is_pending = c.candidate_id == self._pending_switch_id
             color = self._mode_color(c.mode, selected=is_sel, pending=is_pending)
@@ -3443,6 +4455,9 @@ class ExploreGoalSelector(Node):
             fl.text = f"{fg.frontier_id}\ngain={fg.unknown_gain:.2f}"
             fr_arr.markers.append(fl)
         self.pub_frontier_markers.publish(fr_arr)
+        self._publish_recovery_debug_markers(stamp)
+        # 黄点 raw 池：每 tick 都更新，不依赖 full 或验证 budget
+        self._publish_raw_candidate_pool_markers(candidates, stamp, selected=selected)
 
         if not full:
             return
@@ -3452,6 +4467,8 @@ class ExploreGoalSelector(Node):
         self._publish_projection_debug_markers(robot_xy, selected, stamp)
 
     def _select_tick(self) -> None:
+        # 超时切换必须在 _select_busy 之前执行，否则长 tick 会挡住切换。
+        self._maybe_force_active_sector_timeout()
         if self._select_busy:
             return
         self._select_busy = True
@@ -3481,15 +4498,55 @@ class ExploreGoalSelector(Node):
             self._status_message = "waiting_map"
             return
         now = time.time()
-        if now - self._last_select_time < self._effective_reselect_interval_sec() and self._selected is not None:
-            self._publish_hint(self._selected, self.robot_pose)
-            self._publish_markers(self.robot_pose, self._last_candidates, self._selected)
-            return
-        self._last_select_time = now
         robot_xy = self.robot_pose
+        tick_sector = self.active_area_id
+
+        if self._maybe_force_active_sector_timeout():
+            # 超时切换后同 tick 继续在新 sector 选点，不要 return 卡住
+            self._last_select_time = 0.0
+            tick_sector = self.active_area_id
+
+        if now - self._last_select_time < self._effective_reselect_interval_sec() and self._selected is not None:
+            hold_ok = True
+            if self.direction_lock_enabled and self.active_area_id:
+                sel_sector = self._selected.sector_id or self._sector_id_for_goal(self._selected.goal_xy)
+                if sel_sector != self.active_area_id:
+                    hold_ok = False
+            if hold_ok:
+                self._publish_hint(self._selected, self.robot_pose)
+                self._publish_markers(self.robot_pose, self._last_candidates, self._selected)
+                return
+        self._last_select_time = now
         self._status_message = "generating_candidates"
         raw_candidates = self._generate_raw_candidates(robot_xy)
         self._last_candidates = raw_candidates
+
+        self._assign_sector_ids(raw_candidates)
+        sector_pool = list(raw_candidates)
+        self._build_sector_count_stats(sector_pool)
+
+        if (
+            self.direction_lock_enabled
+            and self.sector_select_by_count
+            and self.active_area_id is None
+        ):
+            chosen = self._choose_sector_by_candidate_count(
+                sector_pool,
+                allowed_sector_ids=set(self._sector_ids_with_raw_candidates(sector_pool)),
+                respect_cooldown=self.init_sector_respect_cooldown,
+                now=now,
+            )
+            if chosen:
+                st = self._last_sector_counts.get(chosen, {})
+                self.get_logger().info(
+                    f"SECTOR_COUNT_INIT -> {chosen} count={st.get('count', 0)} "
+                    f"all_counts={self._format_sector_count_summary()}"
+                )
+                self._activate_sector(chosen, "init_by_candidate_count")
+                self._clear_current_selection_for_sector_switch(
+                    f"init active sector by candidate count: {chosen}"
+                )
+
         self._last_pick_stats = {
             "candidates_total": len(raw_candidates),
             "map_coords_trusted": self._map_coords_trusted(),
@@ -3500,19 +4557,164 @@ class ExploreGoalSelector(Node):
             "projection_enabled": self.projection_enabled,
             "active_area_id": self.active_area_id,
         }
-        # Lightweight viz first so Foxglove shows goals while validation runs.
         if raw_candidates:
             self._publish_markers(robot_xy, raw_candidates, self._selected, full=False)
         self._status_message = "validating_candidates"
-        best, path = self._pick_navigable_candidate(robot_xy, raw_candidates)
+        valid_candidates = self._build_valid_candidates(robot_xy, raw_candidates)
+        if (
+            self.direction_lock_enabled
+            and self.active_area_id
+            and self.force_active_sector_goal
+            and not self._valid_candidates_in_active_sector(valid_candidates)
+        ):
+            forced_far = self._force_validate_farthest_in_active_sector(
+                raw_candidates, robot_xy
+            )
+            if forced_far is not None:
+                valid_candidates = self._merge_valid_candidate_cache([forced_far], now)
+                self._last_valid_candidates = valid_candidates
+                self._last_valid_count = len(valid_candidates)
+        self._last_valid_candidates = valid_candidates
         self._update_candidate_debug(raw_candidates)
+
+        for c in valid_candidates:
+            if not c.sector_id:
+                c.sector_id = self._sector_id_for_goal(c.goal_xy)
+            dist = self._distance_to_robot(c.goal_xy)
+            c.travel_cost_penalty = self._travel_cost_penalty(dist)
+
+        candidate_pool = valid_candidates
+        best: Optional[ExploreCandidate] = None
+        path: List[Tuple[float, float]] = []
+
+        if self.direction_lock_enabled and self.active_area_id:
+            active_valid = [
+                c for c in candidate_pool
+                if self._candidate_in_active_sector(c)
+            ]
+            if (
+                not active_valid
+                and self.force_active_sector_goal
+                and self.force_farthest_when_no_best
+            ):
+                forced_far = self._force_validate_farthest_in_active_sector(
+                    raw_candidates, robot_xy
+                )
+                if forced_far is not None:
+                    active_valid = [forced_far]
+                    self._valid_candidates_cache[forced_far.candidate_id] = (
+                        now,
+                        forced_far,
+                    )
+                    self._last_valid_candidates = self._merge_valid_candidate_cache(
+                        [forced_far], now
+                    )
+                    self._last_valid_count = len(self._last_valid_candidates)
+            if (
+                not active_valid
+                and self.force_active_sector_goal
+                and self.active_sector_recovery_enabled
+            ):
+                st_pre = self.sector_states.get(self.active_area_id)
+                cycles_pre = st_pre.no_candidate_cycles if st_pre is not None else 0
+                if cycles_pre >= self.expand_after_no_candidate_cycles:
+                    self._last_pick_stats = {
+                        **getattr(self, "_last_pick_stats", {}),
+                        "recovery_attempted": True,
+                    }
+                    active_valid = self._recover_candidates_in_active_sector(
+                        raw_candidates,
+                        robot_xy,
+                    )
+            if active_valid:
+                candidate_pool = active_valid
+                st = self.sector_states.get(self.active_area_id)
+                if st is not None:
+                    st.no_candidate_cycles = 0
+                    st.last_update_time = now
+            else:
+                st = self.sector_states.get(self.active_area_id)
+                if st is not None:
+                    st.no_candidate_cycles += 1
+                    st.last_update_time = now
+                self._status_message = "active_sector_no_candidate"
+                self._last_selection_explanation = (
+                    f"active sector {self.active_area_id} has no valid/recovered candidate; "
+                    f"no_candidate_cycles={st.no_candidate_cycles if st else 'n/a'}"
+                )
+                reason = self._sector_exhaust_reason(self.active_area_id)
+                if reason and self.sector_select_by_count:
+                    old_sector = self.active_area_id
+                    switched = self._switch_active_sector_by_candidate_count(
+                        sector_pool,
+                        old_sector,
+                        self._sector_ids_with_raw_candidates(sector_pool),
+                        reason,
+                        respect_cooldown=False,
+                    )
+                    if switched:
+                        self._selected = None
+                        self._last_select_time = 0.0
+                        return
+                self._selected = None
+                self._publish_markers(robot_xy, raw_candidates, None)
+                return
+
+        best, path = self._pick_best_from_pool(robot_xy, candidate_pool)
+        if best is not None and best.source.get("fast_validation"):
+            fast_best = best
+            projected_goal = tuple(best.goal_xy)
+            self._reset_candidate_to_raw(best)
+            full_deadline = time.time() + max(0.35, float(self.max_validate_sec_per_tick) * 0.5)
+            if time.time() < full_deadline and self._process_raw_candidate(
+                best, robot_xy, fast=False
+            ):
+                path = best.source.get("planned_path")
+                if isinstance(path, list):
+                    path = list(path)
+            elif getattr(fast_best, "forced_pick", False):
+                best = fast_best
+                best.goal_xy = projected_goal
+                path = best.source.get("planned_path") or []
+                if isinstance(path, list):
+                    path = list(path)
+                self.get_logger().info(
+                    f"FORCE_FARTHEST_ACTIVE keep fast-validated id={best.candidate_id}"
+                )
+            else:
+                best = None
+                path = []
+        if best is None and self.direction_lock_enabled and self.active_area_id:
+            if self.force_farthest_when_no_best and self.force_active_sector_goal:
+                forced_far = self._force_validate_farthest_in_active_sector(
+                    raw_candidates, robot_xy
+                )
+                if forced_far is not None:
+                    best, path = self._pick_best_from_pool(robot_xy, [forced_far])
         if path:
             self._last_path = path
 
-        valid_pool = list(self._last_valid_candidates or [])
+        # sector 中途切换：若已有 best 则继续发布；仅超时且无 best 时中断
+        if self._active_sector_timed_out(now) and best is None:
+            self._maybe_force_active_sector_timeout()
+            if best is None and self.force_farthest_when_no_best:
+                forced_far = self._force_validate_farthest_in_active_sector(
+                    raw_candidates, robot_xy
+                )
+                if forced_far is not None:
+                    best, path = self._pick_best_from_pool(robot_xy, [forced_far])
+                    if path:
+                        self._last_path = path
+            if best is None:
+                self._publish_markers(robot_xy, raw_candidates, None)
+                return
 
-        # 低于 min_hint_score 时的强制选点已在 _pick_best_valid_candidate 内统一完成
-        selected = self._choose_sticky_candidate(best, valid_pool or raw_candidates, now)
+        sticky_pool = list(candidate_pool or raw_candidates)
+        if self._selected is not None:
+            sticky_pool.append(self._selected)
+        for vc in self._last_valid_candidates or []:
+            sticky_pool.append(vc)
+        selected = self._choose_sticky_candidate(best, sticky_pool, now)
         self._selected = selected
         if selected is None:
             if not self._last_valid_candidates:
@@ -3547,7 +4749,8 @@ class ExploreGoalSelector(Node):
                 path_len = len(selected.source.get("planned_path") or self._last_path or [])
                 self.get_logger().info(
                     f"HINT id={selected.candidate_id} mode={selected.mode} "
-                    f"score={selected.total_score:.3f} forced={getattr(selected, 'forced_below_threshold', False)} "
+                    f"score={selected.total_score:.3f} dist={self._distance_to_robot(selected.goal_xy):.2f}m "
+                    f"forced={getattr(selected, 'forced_below_threshold', False)} "
                     f"sector={selected.sector_id} active={self.active_area_id} "
                     f"goal=({selected.goal_xy[0]:.2f},{selected.goal_xy[1]:.2f}) path={path_len}"
                 )
@@ -3712,6 +4915,10 @@ class ExploreGoalSelector(Node):
             },
             "direction_lock": {
                 "enabled": self.direction_lock_enabled,
+                "active_sector": self.active_area_id,
+                "reason": self._last_direction_reason,
+                "elapsed_sec": round(self._active_sector_elapsed_sec(), 1),
+                "switch_count": self.active_area_switch_count,
                 "active_area_id": self.active_area_id,
                 "active_elapsed_sec": round(self._active_sector_elapsed_sec(), 1),
                 "max_active_sec": self.max_active_sector_sec,
@@ -3721,15 +4928,28 @@ class ExploreGoalSelector(Node):
                 "visited_reasons": sorted(list(self.sector_visited_reasons)),
                 "active_sector_recovery": {
                     "enabled": self.active_sector_recovery_enabled,
-                    "attempted": bool(self.active_area_id and getattr(self, "_last_pick_stats", {}).get("recovery_attempted", False)),
+                    "attempted": bool(
+                        self.active_area_id
+                        and getattr(self, "_last_pick_stats", {}).get("recovery_attempted", False)
+                    ),
                     "expand_after": self.expand_after_no_candidate_cycles,
                     "radii": self.projection_radius_schedule_m,
+                    "last_debug": self._last_recovery_debug[:12],
+                    "recovered_count": len(self._last_recovery_candidates),
                 },
+            },
+            "sector_counts": self._last_sector_counts,
+            "active_sector_recovery": {
+                "active_sector": self.active_area_id,
+                "enabled": self.active_sector_recovery_enabled,
+                "last_debug": self._last_recovery_debug[:12],
+                "recovered_count": len(self._last_recovery_candidates),
             },
         }
 
     def _publish_state_tick(self) -> None:
         try:
+            self._maybe_force_active_sector_timeout()
             self._update_robot_pose()
             payload = self._build_state_payload()
             self.pub_state.publish(String(data=json.dumps(payload, ensure_ascii=False)))

@@ -991,6 +991,7 @@ class RunQwenApiLidarNav(Node):
             "action": self.explore_phase_reason or self.phase,
             "phase": self.phase,
             "point_kind": "path" if self.path_point else "none",
+            "path_point_locked": self.path_point is not None,
             "cmd_vx": float(cmd.linear.x),
             "cmd_wz": float(cmd.angular.z),
             "path_confidence": self.path_confidence,
@@ -1000,8 +1001,6 @@ class RunQwenApiLidarNav(Node):
         if self.path_point is not None:
             payload["waypoint_u"] = self.path_point[0]
             payload["waypoint_v"] = self.path_point[1]
-            payload["u"] = self.path_point[0]
-            payload["v"] = self.path_point[1]
         self.state_pub.publish(String(data=json.dumps(payload, ensure_ascii=False)))
 
     def _handle_path_result(self, result: Dict[str, Any]) -> None:
@@ -1023,6 +1022,17 @@ class RunQwenApiLidarNav(Node):
             self.phase = PHASE_EXPLORE_ALIGN
             self.explore_phase_reason = "path_accepted"
             self.publish_stop()
+            self.state_pub.publish(String(data=json.dumps({
+                "step": self.step_count,
+                "action": "path_accepted",
+                "phase": self.phase,
+                "point_kind": "path",
+                "path_point_locked": True,
+                "path_point": [float(wu), float(wv)],
+                "path_confidence": conf,
+                "waypoint_u": float(wu),
+                "waypoint_v": float(wv),
+            }, ensure_ascii=False)))
             self.get_logger().info(
                 f"[explore] path waypoint=({wu:.0f},{wv:.0f}), confidence={conf:.2f}"
             )

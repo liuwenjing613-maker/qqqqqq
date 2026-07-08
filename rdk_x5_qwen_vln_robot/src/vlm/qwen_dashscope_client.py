@@ -143,13 +143,10 @@ def build_prompt(
         "- Choose a visible traversable route that can lead the robot to another area.\n"
         "- The waypoint should be near the centerline of that visible route, in the middle of the obstacle-free path.\n"
         "- If multiple routes are visible, prefer the route with the widest clearance and clearest forward continuation.\n"
-        "- Prefer the lower half of the image: ground, floor, corridor centerline, or largest open region.\n"
-        "- When the central forward path is open, waypoint_u should usually be between 0.40 and 0.60.\n"
-        "- waypoint_v should usually be between 0.55 and 0.75 for indoor floor navigation.\n"
+        "- Prefer the higher half of the image: ground, floor, corridor centerline, or largest open region.\n"
         "- Avoid obstacles, walls, furniture, object bodies, clutter, narrow gaps, and floor regions immediately blocked by objects.\n"
         "- A large uniform wall-like surface, cabinet face, door face, vertical plane, or close obstacle is NOT a traversable path.\n"
         '- If most of the image is one uniform wall-like color/texture and no clear free-floor region is visible, use mode="NONE".\n'
-        "- If the lower half of the image has no safe connected floor/path region, use mode=\"NONE\".\n"
         "- If unsure whether a region is floor or wall, prefer mode=\"NONE\" instead of placing a waypoint on a wall.\n"
         '- If no safe traversable path is visible, use mode="NONE" with all coordinates null.\n'
         "- Do NOT return TARGET mode or invent a target point in path task.\n"
@@ -157,7 +154,7 @@ def build_prompt(
         "- For mode=PATH, confidence means how clear, safe, and useful the navigable path is.\n"
         "\n"
         "PATH visual gates (ALL must pass for mode=PATH):\n"
-        "- GATE_FLOOR: the lower half shows a connected traversable floor/ground region, not only a vertical wall.\n"
+        "- GATE_FLOOR: the higher half shows a connected traversable floor/ground region, not only a vertical wall.\n"
         "- GATE_ROUTE: a clear corridor, doorway, aisle, or open passage is visible.\n"
         "- GATE_NOT_WALL: waypoint is NOT on wall, cabinet, door, furniture, legs, clutter, shadow, border, or vertical plane.\n"
         "- GATE_CENTERLINE: waypoint is on the centerline of the widest obstacle-free path.\n"
