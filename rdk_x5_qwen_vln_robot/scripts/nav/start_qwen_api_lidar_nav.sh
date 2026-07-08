@@ -15,6 +15,11 @@ CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
 RUN_CHASSIS="${RUN_CHASSIS:-1}"
 # Set RUN_FOXGLOVE_VIZ=0 to skip Foxglove viz (bridge + annotated topics).
 RUN_FOXGLOVE_VIZ="${RUN_FOXGLOVE_VIZ:-1}"
+# Set RUN_VIDEO_CAPTURE=0 to skip first-person video recording.
+RUN_VIDEO_CAPTURE="${RUN_VIDEO_CAPTURE:-1}"
+CAPTURE_SAVE_DIR="${CAPTURE_SAVE_DIR:-$PROJECT_DIR/capture_video}"
+CAPTURE_FPS="${CAPTURE_FPS:-20}"
+CAPTURE_PID=""
 
 # Chassis port/PWM from qwen yaml (aligned with nav_yolo_lidar_semantic_explore.yaml).
 # shellcheck source=scripts/lib/load_chassis_from_config.sh
@@ -51,7 +56,10 @@ mkdir -p logs data/images/qwen_api_lidar_debug
 echo "===== Qwen cloud API + LiDAR (rdk_x5_qwen_vln_robot) ====="
 echo "PROJECT_DIR=$PROJECT_DIR"
 echo "INSTRUCTION=$INSTRUCTION"
-echo "cmd_topic=$CMD_TOPIC RUN_CHASSIS=$RUN_CHASSIS CHASSIS_PORT=${CHASSIS_PORT:-unset} RUN_FOXGLOVE_VIZ=$RUN_FOXGLOVE_VIZ"
+echo "cmd_topic=$CMD_TOPIC RUN_CHASSIS=$RUN_CHASSIS CHASSIS_PORT=${CHASSIS_PORT:-unset} RUN_FOXGLOVE_VIZ=$RUN_FOXGLOVE_VIZ RUN_VIDEO_CAPTURE=$RUN_VIDEO_CAPTURE"
+if [ "$RUN_VIDEO_CAPTURE" = "1" ]; then
+  echo "video save dir: $CAPTURE_SAVE_DIR (files: qwen_nav_YYYYMMDD_HHMMSS.mp4)"
+fi
 if [ "$CMD_TOPIC" != "/cmd_vel" ]; then
   echo "NOTE: cmd_topic=$CMD_TOPIC (dry-run). Chassis bridge listens to /cmd_vel only — robot will NOT move."
   echo "      Set cmd_topic: /cmd_vel in configs/qwen_api_lidar_nav.yaml when ready for real driving."
@@ -110,6 +118,23 @@ for topic in /image_raw /scan; do
   [ "$ok" -eq 1 ] || { echo "ERROR: $topic not available"; exit 1; }
   echo " $topic OK"
 done
+
+if [ "$RUN_VIDEO_CAPTURE" = "1" ]; then
+  mkdir -p "$CAPTURE_SAVE_DIR"
+  echo "[5.4/7] start first-person video capture..."
+  python3 "$PROJECT_DIR/debug_tools/capture_qwen_api_lidar_video.py" \
+    --image-topic /image_raw \
+    --cmd-topic "$CMD_TOPIC" \
+    --state-topic /qwen_api_state \
+    --json-topic /qwen_api_json \
+    --save-dir "$CAPTURE_SAVE_DIR" \
+    --record-fps "$CAPTURE_FPS" \
+    > "$PROJECT_DIR/logs/qwen_api_lidar_capture.log" 2>&1 &
+  CAPTURE_PID=$!
+  export CAPTURE_PID
+  echo "  capture pid=$CAPTURE_PID log=$PROJECT_DIR/logs/qwen_api_lidar_capture.log"
+  echo "  videos -> $CAPTURE_SAVE_DIR/qwen_nav_*.mp4"
+fi
 
 # Foxglove bridge is slow (ros2 launch); start early while chassis/nav still booting.
 if [ "$RUN_FOXGLOVE_VIZ" = "1" ]; then
@@ -187,10 +212,29 @@ echo "  ros2 topic echo /qwen_api_json"
 echo "  ros2 topic echo /qwen_api_state"
 echo "  ros2 topic echo $CMD_TOPIC"
 echo "  ros2 topic echo /cmd_vel_sent"
-echo "Waiting for nav to exit; Ctrl+C or nav crash -> stop all (camera/lidar/chassis/viz)."
+echo "Waiting for nav to exit; Ctrl+C or nav crash -> stop all (camera/lidar/chassis/viz/capture)."
+if [ "$RUN_VIDEO_CAPTURE" = "1" ]; then
+  echo "  Video saves on ARRIVED/SUCCESS or Ctrl+C -> $CAPTURE_SAVE_DIR"
+fi
 
 wait "$NAV_PID" 2>/dev/null || true
 NAV_EXIT=$?
+
+if [ -n "${CAPTURE_PID:-}" ] && kill -0 "$CAPTURE_PID" 2>/dev/null; then
+  echo "Nav exited; stopping video capture (saving if needed)..."
+  kill -TERM "$CAPTURE_PID" 2>/dev/null || true
+  wait "$CAPTURE_PID" 2>/dev/null || true
+fi
+
+if [ "$RUN_VIDEO_CAPTURE" = "1" ]; then
+  latest_video="$(ls -1t "$CAPTURE_SAVE_DIR"/qwen_nav_*.* 2>/dev/null | head -1 || true)"
+  if [ -n "$latest_video" ]; then
+    echo "Latest video: $latest_video"
+  else
+    echo "No video file found under $CAPTURE_SAVE_DIR (see logs/qwen_api_lidar_capture.log)"
+  fi
+fi
+
 if [ "$NAV_EXIT" -ne 0 ]; then
   echo "Nav exited with code $NAV_EXIT"
 fi

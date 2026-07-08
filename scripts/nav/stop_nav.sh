@@ -30,6 +30,21 @@ pkill -f ydlidar_ros2_driver_node || true
 pkill -f m1_pwm_cmd_vel_bridge.py || true
 pkill -f cmd_vel_to_rosmaster.py || true
 pkill -f foxglove_bridge || true
+pkill -TERM -f cmd_vel_priority_mux.py 2>/dev/null || true
+pkill -TERM -f teleop_twist_joy 2>/dev/null || true
+pkill -TERM -f "joy/joy_node" 2>/dev/null || true
+pkill -TERM -f "lib/joy/joy_node" 2>/dev/null || true
+pkill -TERM -f simple_scan_filter.py 2>/dev/null || true
+pkill -TERM -f static_transform_publisher 2>/dev/null || true
+pkill -TERM -f capture_navigation_video.py 2>/dev/null || true
+sleep 1
+pkill -KILL -f cmd_vel_priority_mux.py 2>/dev/null || true
+pkill -KILL -f teleop_twist_joy 2>/dev/null || true
+pkill -KILL -f "joy/joy_node" 2>/dev/null || true
+pkill -KILL -f "lib/joy/joy_node" 2>/dev/null || true
+pkill -KILL -f simple_scan_filter.py 2>/dev/null || true
+pkill -KILL -f static_transform_publisher 2>/dev/null || true
+pkill -KILL -f capture_navigation_video.py 2>/dev/null || true
 
 timeout 1 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
   "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \

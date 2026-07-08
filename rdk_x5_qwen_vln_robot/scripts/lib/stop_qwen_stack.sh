@@ -5,11 +5,28 @@
 # This ensures correct paths even if the qwen project folder was moved.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_dir.sh"
 
+stop_video_capture() {
+  if [ -n "${CAPTURE_PID:-}" ] && kill -0 "$CAPTURE_PID" 2>/dev/null; then
+    echo "[cleanup] stopping video capture pid=$CAPTURE_PID (saving video)..."
+    kill -TERM "$CAPTURE_PID" 2>/dev/null || true
+    wait "$CAPTURE_PID" 2>/dev/null || true
+    return 0
+  fi
+  if pgrep -f "capture_qwen_api_lidar_video.py" >/dev/null 2>&1; then
+    echo "[cleanup] stopping video capture by name (saving video)..."
+    pkill -TERM -f "capture_qwen_api_lidar_video.py" 2>/dev/null || true
+    sleep 1
+    pkill -KILL -f "capture_qwen_api_lidar_video.py" 2>/dev/null || true
+  fi
+}
+
 stop_qwen_stack() {
   if [ "${_QWEN_STACK_CLEANUP_DONE:-0}" = "1" ]; then
     return 0
   fi
   _QWEN_STACK_CLEANUP_DONE=1
+
+  stop_video_capture
 
   echo "[cleanup] stopping Qwen API + LiDAR stack..."
 

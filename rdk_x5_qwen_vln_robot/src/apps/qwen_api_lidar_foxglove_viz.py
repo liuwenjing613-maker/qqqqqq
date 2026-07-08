@@ -224,6 +224,8 @@ class QwenApiLidarFoxgloveViz(Node):
         scale_x = float(w) / max(1.0, float(self.image_width))
         scale_y = float(h) / max(1.0, float(self.image_height))
         data = self._merged()
+        phase = str(data.get("phase", ""))
+        point_kind = str(data.get("point_kind", ""))
 
         def px_u(u_val: Any) -> Optional[int]:
             if u_val is None:
@@ -239,27 +241,35 @@ class QwenApiLidarFoxgloveViz(Node):
         raw_u = data.get("raw_u")
         v = data.get("v")
         path_point = data.get("path_point")
-        if path_point is None and data.get("waypoint_u") is not None:
-            path_point = [data.get("waypoint_u"), data.get("waypoint_v")]
+        path_locked = (
+            (
+                bool(data.get("path_point_locked"))
+                or phase in ("EXPLORE_ALIGN", "EXPLORE_FORWARD")
+            )
+            and isinstance(path_point, (list, tuple))
+            and len(path_point) >= 2
+            and path_point[0] is not None
+            and path_point[1] is not None
+        )
 
         cx = int(w / 2)
         cy = int(h / 2)
 
-        fu, fv = px_u(filtered_u), px_v(v)
-        if fu is not None and fv is not None:
-            cv2.drawMarker(vis, (fu, fv), (0, 0, 255), cv2.MARKER_CROSS, 28, 2)
-            cv2.circle(vis, (fu, fv), 10, (0, 0, 255), 1, cv2.LINE_AA)
-
-        if path_point and path_point[0] is not None and path_point[1] is not None:
+        if path_locked:
             pu, pv = px_u(path_point[0]), px_v(path_point[1])
             if pu is not None and pv is not None:
-                cv2.drawMarker(vis, (pu, pv), (0, 255, 0), cv2.MARKER_DIAMOND, 24, 2)
-                cv2.circle(vis, (pu, pv), 12, (0, 255, 0), 2, cv2.LINE_AA)
-                cv2.line(vis, (cx, cy), (pu, pv), (0, 255, 0), 2, cv2.LINE_AA)
+                # Locked Qwen path waypoint: orange cross only (no line to center).
+                cv2.drawMarker(vis, (pu, pv), (0, 165, 255), cv2.MARKER_CROSS, 28, 2)
+                cv2.circle(vis, (pu, pv), 10, (0, 165, 255), 1, cv2.LINE_AA)
+        elif point_kind != "path":
+            fu, fv = px_u(filtered_u), px_v(v)
+            if fu is not None and fv is not None:
+                cv2.drawMarker(vis, (fu, fv), (0, 0, 255), cv2.MARKER_CROSS, 28, 2)
+                cv2.circle(vis, (fu, fv), 10, (0, 0, 255), 1, cv2.LINE_AA)
 
-        ru = px_u(raw_u)
-        if ru is not None and fv is not None and (fu is None or abs(ru - fu) > 2):
-            cv2.drawMarker(vis, (ru, fv), (255, 128, 0), cv2.MARKER_TILTED_CROSS, 20, 2)
+            ru = px_u(raw_u)
+            if ru is not None and fv is not None and (fu is None or abs(ru - fu) > 2):
+                cv2.drawMarker(vis, (ru, fv), (255, 128, 0), cv2.MARKER_TILTED_CROSS, 20, 2)
 
         cv2.drawMarker(vis, (cx, cy), (0, 255, 255), cv2.MARKER_CROSS, 18, 1)
 
@@ -269,15 +279,24 @@ class QwenApiLidarFoxgloveViz(Node):
 
         lines = [
             f"action={data.get('action', data.get('state', 'n/a'))}  servo={data.get('servo_state', 'n/a')}",
-            f"status={data.get('status', 'n/a')}  mode={data.get('qwen_mode', 'n/a')}  kind={data.get('point_kind', 'n/a')}",
+            f"phase={phase or 'n/a'}  status={data.get('status', 'n/a')}  mode={data.get('qwen_mode', 'n/a')}  kind={point_kind or 'n/a'}",
             f"usable={data.get('usable')}  conf={_fmt(data.get('confidence'), 2)}  step={data.get('step', 'n/a')}",
-            f"u raw={_fmt(raw_u, 1)} filt={_fmt(filtered_u, 1)} v={_fmt(v, 1)}  ex={_fmt(data.get('center_error'), 3)}",
+        ]
+        if path_locked:
+            lines.append(
+                f"path_locked=({_fmt(path_point[0], 1)}, {_fmt(path_point[1], 1)}) conf={_fmt(data.get('path_confidence'), 2)}"
+            )
+        else:
+            lines.append(
+                f"u raw={_fmt(raw_u, 1)} filt={_fmt(filtered_u, 1)} v={_fmt(v, 1)}  ex={_fmt(data.get('center_error'), 3)}"
+            )
+        lines.extend([
             f"reason={data.get('reason') or '-'}",
             f"coord_reason={data.get('coord_reason') or '-'}",
             f"front={_fmt(data.get('front_distance'))}m  target={_fmt(data.get('target_distance_fused', data.get('target_distance')))}m",
             f"target_raw={_fmt(data.get('target_distance_raw'))}m  arrive={_fmt(data.get('target_distance_arrive'))}m",
             f"vx={_fmt(data.get('cmd_vx'), 3)}  wz={_fmt(data.get('cmd_wz'), 3)}  latency={_fmt(data.get('latency_sec'), 2)}s",
-        ]
+        ])
         _draw_text_block(vis, lines)
 
         hud = {k: data.get(k) for k in (

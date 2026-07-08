@@ -295,8 +295,11 @@ class SharedNavSemanticExplore(Node):
             explore_cfg.get("step_goal_distance_m", bearing_cfg.get("step_distance_m", 0.45))
         )
         self.explore_observe_after_reach_sec = float(explore_cfg.get("observe_after_reach_sec", 1.2))
-        self.explore_observe_scan_deg = float(explore_cfg.get("observe_scan_deg", 90.0))
+        self.explore_observe_scan_deg = float(explore_cfg.get("observe_scan_deg", 360.0))
         self.explore_observe_scan_wz = float(explore_cfg.get("observe_scan_wz", 0.05))
+        self.explore_observe_scan_once = bool(explore_cfg.get("observe_scan_once", True))
+        self.explore_observe_turn_dir = float(explore_cfg.get("observe_scan_turn_dir", 1.0))
+        self.explore_idle_between_goals = bool(explore_cfg.get("idle_until_next_goal", True))
         self.explore_blacklist_ttl_sec = float(explore_cfg.get("blacklist_ttl_sec", 180.0))
         self.explore_blacklist_on_arrived = bool(explore_cfg.get("blacklist_on_arrived", False))
         self.explore_min_travel_before_reach_m = float(
@@ -339,6 +342,11 @@ class SharedNavSemanticExplore(Node):
         self.observe_update_active = False
         self.observe_update_start: Optional[float] = None
         self.observe_scan_accum_rad = 0.0
+        self.observe_scan_complete = False
+        self.explore_waiting_next_goal = False
+        self._observe_scan_complete_time: Optional[float] = None
+        self._observe_odom_last_yaw: Optional[float] = None
+        self._observe_odom_fallback_time: Optional[float] = None
         self.explore_phase = "EXPLORE_SELECT"
         self.explore_phase_start = 0.0
         self.explore_burst_start_xy: Optional[Tuple[float, float]] = None
@@ -439,7 +447,9 @@ class SharedNavSemanticExplore(Node):
                 f"semantic_explore enabled hint={self.explore_hint_topic} planner={self.planner_mode} "
                 f"follow_planned_path={self.follow_planned_path} "
                 f"goal_frame={self.explore_map_frame} control_frame={self.explore_control_frame} "
-                f"tf_buffer={'ok' if self.tf_buffer is not None else 'missing'}"
+                f"tf_buffer={'ok' if self.tf_buffer is not None else 'missing'} "
+                f"observe_scan_deg={self.explore_observe_scan_deg} once={self.explore_observe_scan_once} "
+                f"idle_between_goals={self.explore_idle_between_goals}"
             )
         self.get_logger().info(f"topics image={self.image_topic} scan={self.scan_topic} cmd={self.cmd_topic}")
         if voter_cfg["enabled"]:
@@ -533,6 +543,53 @@ class SharedNavSemanticExplore(Node):
         self._birth_odom_accum_rad += delta
         self._birth_odom_last_yaw = self.latest_odom_yaw
         self.fsm.birth_scan_yaw_accumulated_rad = self._birth_odom_accum_rad
+
+    def _reset_observe_yaw_tracking(self) -> None:
+        self.observe_scan_accum_rad = 0.0
+        self.observe_scan_complete = False
+        self._observe_scan_complete_time = None
+        self._observe_odom_last_yaw = self.latest_odom_yaw
+        self._observe_odom_fallback_time = None
+
+    def _update_observe_yaw_accum(self, wz_estimate: float) -> None:
+        """Accumulate yaw at goal using odom when available (accurate one-turn stop)."""
+        now = time.time()
+        if self.latest_odom_yaw is None:
+            if self._observe_odom_fallback_time is not None:
+                dt = max(0.0, now - self._observe_odom_fallback_time)
+                self.observe_scan_accum_rad += abs(wz_estimate) * dt
+            self._observe_odom_fallback_time = now
+            return
+        self._observe_odom_fallback_time = None
+        if self._observe_odom_last_yaw is None:
+            self._observe_odom_last_yaw = self.latest_odom_yaw
+            return
+        delta = abs(self._normalize_yaw_delta(self._observe_odom_last_yaw, self.latest_odom_yaw))
+        self._observe_odom_last_yaw = self.latest_odom_yaw
+        self.observe_scan_accum_rad += delta
+
+    def _explore_observe_scan_target_rad(self) -> float:
+        deg = float(self.explore_observe_scan_deg)
+        if self.explore_observe_scan_once:
+            if deg <= 0.0:
+                deg = 360.0
+        return math.radians(max(0.0, deg))
+
+    def _semantic_explore_idle_wait(self, now: float) -> Optional[Tuple[ServoCommand, str]]:
+        """Between explore goals: hold still and wait for selector hint (no search spin)."""
+        if not self.semantic_explore_enabled or not self.explore_idle_between_goals:
+            return None
+        if self.active_explore_goal is not None or self.observe_update_active:
+            return None
+        if not self.explore_waiting_next_goal:
+            return None
+        if self.valid_explore_hint(now):
+            return ServoCommand(), "semantic_explore_waiting_adopt"
+        hint = self.latest_explore_hint or {}
+        hint_age = now - float(self.latest_explore_hint_time or 0.0)
+        if hint_age < 4.0 and str(hint.get("mode", "")) == "none":
+            return ServoCommand(), "semantic_explore_waiting_candidate"
+        return ServoCommand(), "semantic_explore_idle_wait"
 
     def bbox_cb(self, msg: String) -> None:
         self.last_bbox_time = time.time()
@@ -677,6 +734,10 @@ class SharedNavSemanticExplore(Node):
         self.explore_burst_start_xy = None
         self.explore_goal_traveled_m = 0.0
         self.observe_update_active = False
+        self.observe_scan_complete = False
+        self._observe_odom_last_yaw = None
+        self._observe_odom_fallback_time = None
+        self.explore_waiting_next_goal = False
         self._clear_active_planned_path()
 
     @staticmethod
@@ -892,6 +953,12 @@ class SharedNavSemanticExplore(Node):
         )
         self.active_explore_goal = None
         self.observe_update_active = False
+        self.observe_scan_complete = False
+        self._observe_scan_complete_time = None
+        self._observe_odom_last_yaw = None
+        self._observe_odom_fallback_time = None
+        if reason in ("arrived_but_no_target", "goal_timeout"):
+            self.explore_waiting_next_goal = True
         self.explore_phase = "EXPLORE_SELECT"
         self.explore_phase_start = now
         self.explore_burst_start_xy = None
@@ -979,20 +1046,27 @@ class SharedNavSemanticExplore(Node):
             if not self.observe_update_active:
                 self.observe_update_active = True
                 self.observe_update_start = now
-                self.observe_scan_accum_rad = 0.0
+                self._reset_observe_yaw_tracking()
             elapsed = now - (self.observe_update_start or now)
-            if elapsed < 0.3:
+            if elapsed < 0.15:
                 return ServoCommand(), "observe_update_stop"
-            scan_target = math.radians(self.explore_observe_scan_deg)
-            if self.observe_scan_accum_rad < scan_target:
-                wz = self.explore_observe_scan_wz
-                self.observe_scan_accum_rad += abs(wz) * (1.0 / max(float(section(self.cfg, "rates").get("decision_hz", 10)), 1.0))
-                return ServoCommand(vx=0.0, wz=wz), "observe_update"
-            if elapsed < self.explore_observe_after_reach_sec:
+            scan_target = self._explore_observe_scan_target_rad()
+            turn_sign = 1.0 if self.explore_observe_turn_dir >= 0.0 else -1.0
+            wz_cmd = turn_sign * abs(self.explore_observe_scan_wz)
+            if scan_target > 0.0 and self.observe_scan_accum_rad < scan_target:
+                self._update_observe_yaw_accum(wz_cmd)
+                if self.observe_scan_accum_rad < scan_target:
+                    return ServoCommand(vx=0.0, wz=wz_cmd), "observe_update"
+            if not self.observe_scan_complete:
+                self.observe_scan_complete = True
+                self._observe_scan_complete_time = now
+            hold_start = self._observe_scan_complete_time or now
+            if now - hold_start < self.explore_observe_after_reach_sec:
                 return ServoCommand(), "observe_update_wait"
             if self.target_ok(self.last_target):
                 self.active_explore_goal = None
                 self.observe_update_active = False
+                self.explore_waiting_next_goal = True
                 return None
             self._reject_candidate(active, now, "arrived_but_no_target")
             return None
@@ -1396,12 +1470,17 @@ class SharedNavSemanticExplore(Node):
                 explore_cmd = self.command_from_explore_hint(now)
                 if explore_cmd is not None:
                     return explore_cmd
+                idle_cmd = self._semantic_explore_idle_wait(now)
+                if idle_cmd is not None:
+                    return idle_cmd
                 hint = self.latest_explore_hint or {}
                 hint_age = now - float(self.latest_explore_hint_time or 0.0)
                 if self.valid_explore_hint(now):
                     return ServoCommand(), "semantic_explore_waiting_adopt"
                 if hint_age < 4.0 and str(hint.get("mode", "")) == "none":
                     return ServoCommand(), "semantic_explore_waiting_candidate"
+                if self.explore_idle_between_goals:
+                    return ServoCommand(), "semantic_explore_idle_wait"
             return self.resolve_search_cmd(now)
         if state == NavState.CANDIDATE_LOCK:
             if (
@@ -1450,6 +1529,12 @@ class SharedNavSemanticExplore(Node):
                 if explore_cmd is not None:
                     cmd, reason = explore_cmd
                     return cmd, f"lost_recovery_{reason}"
+                idle_cmd = self._semantic_explore_idle_wait(now)
+                if idle_cmd is not None:
+                    cmd, reason = idle_cmd
+                    return cmd, f"lost_recovery_{reason}"
+                if self.explore_idle_between_goals:
+                    return ServoCommand(), "lost_recovery_semantic_explore_idle_wait"
             cmd, reason = self.resolve_search_cmd(now)
             return cmd, f"lost_recovery_{reason}"
         if state == NavState.BLOCKED:

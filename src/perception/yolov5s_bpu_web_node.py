@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.nav.nav_video_overlay import NavOverlayContext, annotate_nav_frame, safe_json_load
+from src.perception.bpu_utilization import BpuUtilizationReader
 
 
 from src.perception.coco_classes import COCO_CLASS_NAMES, coco_class_csv, is_all_coco_mode
@@ -154,6 +155,8 @@ class Yolov5sBpuWebNode(Node):
         self.last_infer_ms = 0.0
         self.overlay_ctx = NavOverlayContext()
         self.semantic_depth_overlay = bool(getattr(args, "semantic_depth_overlay", False))
+        self.bpu_util_overlay = bool(getattr(args, "bpu_util_overlay", True))
+        self.bpu_util = BpuUtilizationReader() if self.bpu_util_overlay else None
         self._semantic_obs_by_class: dict = {}
 
         self.model = self.load_model(args)
@@ -251,6 +254,8 @@ class Yolov5sBpuWebNode(Node):
             f"YOLOv5s-BPU | targets={','.join(sorted(self.target_classes))} "
             f"| fps={self.current_fps:.1f} | infer={self.last_infer_ms:.1f}ms"
         ]
+        if self.bpu_util is not None:
+            lines.append(self.bpu_util.format_line())
         if self.semantic_depth_overlay and isinstance(best_target, dict):
             depth = self._depth_for_detection(
                 str(best_target.get("class_name", "")),
@@ -589,6 +594,8 @@ def parse_args():
     ap.add_argument("--nav-point-topic", default="/nav_target_point")
     ap.add_argument("--semantic-depth-overlay", action="store_true")
     ap.add_argument("--semantic-obs-topic", default="/semantic_observations")
+    ap.add_argument("--bpu-util-overlay", action="store_true", default=True)
+    ap.add_argument("--no-bpu-util-overlay", action="store_false", dest="bpu_util_overlay")
 
     return ap.parse_args()
 

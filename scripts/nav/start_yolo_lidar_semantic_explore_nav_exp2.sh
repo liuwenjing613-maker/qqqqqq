@@ -46,6 +46,32 @@ if [ -n "$_CAMERA_OVERRIDE" ]; then
   export CAMERA_DEV="$_CAMERA_OVERRIDE"
 fi
 
+sync_joy_scales_from_explore_config() {
+  # Match teleop_twist_joy limits to autonomous explore step speeds in yaml.
+  eval "$(python3 - "$CONFIG" <<'PY'
+import sys
+import yaml
+
+cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+safety = cfg.get("safety") or {}
+projection = cfg.get("safe_goal_projection") or {}
+planner = cfg.get("planner") or {}
+bearing = projection.get("bearing_first") or planner.get("bearing_first") or {}
+
+max_vx = float(safety.get("max_cmd_vx_explore", safety.get("max_cmd_vx", 0.04)))
+max_wz = float(safety.get("max_cmd_wz_explore", safety.get("max_cmd_wz", 0.05)))
+bearing_vx = float(bearing.get("max_vx", max_vx))
+bearing_wz = float(bearing.get("max_wz", max_wz))
+joy_vx = min(bearing_vx, max_vx)
+joy_wz = min(bearing_wz, max_wz)
+print(f'export JOY_SCALE_LINEAR_X="{joy_vx}"')
+print(f'export JOY_SCALE_ANGULAR_YAW="{joy_wz}"')
+PY
+)"
+}
+
+sync_joy_scales_from_explore_config
+
 SEMANTIC_EXPLORE_ENABLED="$(python3 - "$CONFIG" <<'PY'
 import sys, yaml
 with open(sys.argv[1], encoding="utf-8") as f:
@@ -113,6 +139,7 @@ wait_joy_control_stack_ready() {
       && pgrep -f "joy/joy_node" >/dev/null 2>&1 \
       && pgrep -f "teleop_twist_joy" >/dev/null 2>&1; then
       echo "[joy] OK: mux + joy + teleop ready"
+      echo "[joy] teleop scale linear=${JOY_SCALE_LINEAR_X:-?} angular=${JOY_SCALE_ANGULAR_YAW:-?} (matched to explore speeds)"
       echo "[joy] Foxglove cmd plot uses /cmd_vel_sent (real clipped velocity)"
       return 0
     fi
@@ -403,6 +430,7 @@ if [ "${DETECTOR_BACKEND:-yolov5s_bpu}" = "yolov5s_bpu" ]; then
     --nms-thres "$YOLOV5S_NMS_THRESHOLD" \
     --max-hz "$YOLOV5S_MAX_HZ" \
     --cmd-vel-topic "$_YOLO_CMD_VEL_TOPIC" \
+    --bpu-util-overlay \
     --semantic-depth-overlay \
     --semantic-obs-topic /semantic_observations \
     > logs/semantic_explore_yolov5s_bpu.log 2>&1 &
@@ -468,6 +496,7 @@ ensure_foxglove_bridge || true
 echo "[8/8] semantic_explore_nav started"
 if [ "$JOY_ENABLED" = "1" ]; then
   echo "  Joystick: ${JOY_DEV} -> ${CMD_VEL_JOY_TOPIC} (highest priority)"
+  echo "  Joy scale: linear=${JOY_SCALE_LINEAR_X} angular=${JOY_SCALE_ANGULAR_YAW} (same as explore step)"
   echo "  Nav cmd: ${CMD_VEL_AUTONOMY_TOPIC} -> mux -> ${CMD_VEL_OUTPUT_TOPIC}"
   echo "  Real velocity plot: /cmd_vel_sent"
 fi
@@ -486,6 +515,9 @@ echo "    /explore_selection_process (robot cyan, link line, pending orange, sta
 echo "    /explore_astar_markers    (cyan A* path + waypoints)"
 echo "    /explore_path             (nav_msgs/Path)"
 echo "    /explore_frontiers        (blue frontier clusters)"
+echo "    /explore_projection_markers (purple/orange active-sector recovery projection markers)"
 echo "  Layout: ${PROJECT_DIR}/configs/foxglove_semantic_explore_nav.layout.json"
 echo "  Foxglove HUD: Layout -> Import layout, left column TOP strip = 'HUD status' (/explore_hud.data)"
+echo "  /explore_hud (active sector count/recovery/timeout status)"
+echo "  /explore_state_json (sector_counts, active_sector_recovery, direction_lock)"
 echo "  If HUD missing: drag splitter DOWN from top edge of 3D panel, or Add panel -> Raw messages -> /explore_hud.data"

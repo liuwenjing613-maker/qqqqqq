@@ -1,0 +1,186 @@
+{
+  "session_id": "session_20260709_025334",
+  "frame_id": "map",
+  "map_name": "semantic_explore_live",
+  "quality": {
+    "loop_xy_error_m": 2.0188,
+    "loop_yaw_error_deg": 119.52,
+    "result": "fail"
+  },
+  "landmarks": [
+    {
+      "landmark_id": "lm_0001",
+      "class_name": "chair",
+      "frame_id": "map",
+      "x": 3.6958570391985472,
+      "y": -0.3948840882132323,
+      "confidence": 0.721813976764679,
+      "seen_count": 62,
+      "first_seen_time": 1783536817.636558,
+      "last_seen_time": 1783536842.9922342,
+      "state": "confirmed",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000007",
+        "obs_000011",
+        "obs_000016",
+        "obs_000018",
+        "obs_000019",
+        "obs_000021",
+        "obs_000023",
+        "obs_000029",
+        "obs_000032",
+        "obs_000033",
+        "obs_000035",
+        "obs_000041",
+        "obs_000044",
+        "obs_000045",
+        "obs_000054",
+        "obs_000056",
+        "obs_000060",
+        "obs_000062",
+        "obs_000072",
+        "obs_000083",
+        "obs_000086",
+        "obs_000090",
+        "obs_000093",
+        "obs_000095",
+        "obs_000104",
+        "obs_000108",
+        "obs_000110",
+        "obs_000118",
+        "obs_000121",
+        "obs_000124",
+        "obs_000136",
+        "obs_000142",
+        "obs_000144",
+        "obs_000146",
+        "obs_000149",
+        "obs_000152",
+        "obs_000155",
+        "obs_000158",
+        "obs_000160",
+        "obs_000162",
+        "obs_000167",
+        "obs_000171",
+        "obs_000179",
+        "obs_000181",
+        "obs_000183",
+        "obs_000186",
+        "obs_000188",
+        "obs_000189",
+        "obs_000193",
+        "obs_000202",
+        "obs_000207",
+        "obs_000216",
+        "obs_000224",
+        "obs_000225",
+        "obs_000227",
+        "obs_000239",
+        "obs_000242",
+        "obs_000250",
+        "obs_000254",
+        "obs_000256",
+        "obs_000257",
+        "obs_000259"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    },
+    {
+      "landmark_id": "lm_0002",
+      "class_name": "chair",
+      "frame_id": "map",
+      "x": 2.0663100047413323,
+      "y": -0.5709545982098033,
+      "confidence": 0.721813976764679,
+      "seen_count": 2,
+      "first_seen_time": 1783536827.681737,
+      "last_seen_time": 1783536839.2560983,
+      "state": "candidate",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000117",
+        "obs_000226"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    },
+    {
+      "landmark_id": "lm_0003",
+      "class_name": "bottle",
+      "frame_id": "map",
+      "x": -0.48287810177178175,
+      "y": 2.141105067216456,
+      "confidence": 0.2396428883075714,
+      "seen_count": 1,
+      "first_seen_time": 1783536850.9418995,
+      "last_seen_time": 1783536850.9418995,
+      "state": "candidate",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000265"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    }
+  ],
+  "viewpoints": [
+    {
+      "node_id": "vp_000001",
+      "stamp": 1783536843.2832725,
+      "frame_id": "odom",
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0,
+      "observed_classes": [
+        "chair",
+        "person"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000002",
+      "stamp": 1783536863.5139072,
+      "frame_id": "map",
+      "x": -0.005776257400294502,
+      "y": -0.003152754893449458,
+      "yaw": 1.6967426916646957,
+      "observed_classes": [
+        "bottle",
+        "chair"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    }
+  ],
+  "observation_count": 266
+}
