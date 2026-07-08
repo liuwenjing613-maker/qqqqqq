@@ -1,0 +1,22 @@
+[INFO] [1783496593.265358656] [yolo_world_to_bbox_json]: ===== yolo_world_to_bbox_json =====
+[INFO] [1783496593.267699409] [yolo_world_to_bbox_json]: image_topic=/image_raw det_topic=/hobot_yolo_world
+[INFO] [1783496593.269828077] [yolo_world_to_bbox_json]: out_topic=/target_bbox_json target_classes=['bottle']
+[INFO] [1783496593.271968663] [yolo_world_to_bbox_json]: min_score=0.002 max_area_ratio=0.24 require_red_verify=False
+[INFO] [1783496777.490561996] [yolo_world_to_bbox_json]: summary: dets=0 published=0
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/src/perception/yolo_world_to_bbox_json.py", line 318, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/src/perception/yolo_world_to_bbox_json.py", line 307, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException

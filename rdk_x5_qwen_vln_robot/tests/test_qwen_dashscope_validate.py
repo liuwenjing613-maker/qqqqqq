@@ -18,6 +18,8 @@ def test_build_prompt_target_contains_target_mode():
     assert "TARGET|PATH|NONE" in prompt
     assert "TARGET_TASK_FIRST" in prompt
     assert "Do NOT return PATH mode" in prompt
+    assert "GATE_CENTER_STRICT" in prompt
+    assert "visual gates" in prompt.lower()
 
 
 def test_build_prompt_path_contains_path_mode():
@@ -25,7 +27,8 @@ def test_build_prompt_path_contains_path_mode():
     assert "PATH_TASK_FIRST" in prompt
     assert "Do NOT return TARGET mode" in prompt
     assert "wall_like_no_floor" in prompt
-    assert "wall-like surface" in prompt.lower() or "wall-like" in prompt.lower()
+    assert "GATE_STATE_SAFE" in prompt
+    assert "GATE_FLOOR" in prompt
     assert "Do NOT output motion commands" in prompt
 
 

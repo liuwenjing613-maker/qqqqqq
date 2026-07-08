@@ -56,5 +56,7 @@ def test_ollama_path_prompt_wall_rules():
         task_mode="path",
     )
     assert "wall_like_no_floor" in prompt
-    assert "Wall-like recovery rule" in prompt
+    assert "GATE_STATE_SAFE" in prompt
+    assert "GATE_FLOOR" in prompt
+    assert "visual gates" in prompt.lower()
     assert "mode=NONE" in prompt

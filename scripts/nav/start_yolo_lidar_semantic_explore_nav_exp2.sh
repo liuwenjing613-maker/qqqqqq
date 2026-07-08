@@ -27,6 +27,10 @@ source_stage10_env() {
 
 source_ros_env
 
+# shellcheck source=scripts/lib/ros_dds_env.sh
+source "${PWD}/scripts/lib/ros_dds_env.sh"
+prepare_ros_dds_env
+
 CONFIG="${1:-configs/nav_yolo_lidar_semantic_explore_exp2.yaml}"
 USER_INSTRUCTION="${2:-}"
 NAV_ONLY="${NAV_ONLY:-0}"
@@ -64,6 +68,10 @@ source "${PWD}/scripts/lib/start_joy_teleop.sh"
 source "${PWD}/scripts/lib/camera_stack.sh"
 
 start_cmd_vel_mux() {
+  if pgrep -f "cmd_vel_priority_mux.py" >/dev/null 2>&1; then
+    echo "[joy] reuse existing cmd_vel mux"
+    return 0
+  fi
   echo "[joy] starting cmd_vel priority mux (joy > autonomy)..."
   python3 -u "$PROJECT_DIR/scripts/control/cmd_vel_priority_mux.py" \
     --autonomy-topic "$CMD_VEL_AUTONOMY_TOPIC" \
@@ -74,7 +82,44 @@ start_cmd_vel_mux() {
     --axis-angular "${JOY_AXIS_ANGULAR:-0}" \
     --joy-deadzone "${JOY_DEADZONE:-0.08}" \
     > "$PROJECT_DIR/logs/semantic_explore_cmd_vel_mux.log" 2>&1 &
-  sleep 1
+  sleep 0.3
+}
+
+JOY_STACK_ASYNC_STARTED=0
+
+start_joy_control_stack_async() {
+  if [ "$JOY_ENABLED" != "1" ]; then
+    return 0
+  fi
+  if [ "$JOY_STACK_ASYNC_STARTED" = "1" ]; then
+    return 0
+  fi
+  JOY_STACK_ASYNC_STARTED=1
+  export CMD_VEL_AUTONOMY_TOPIC
+  echo "[joy] starting mux + joystick in background (parallel with camera/YOLO/mapper)..."
+  (
+    start_cmd_vel_mux || exit 1
+    JOY_TELEOP_BLOCKING=0 start_joy_teleop "$PROJECT_DIR/logs/semantic_explore_joy_teleop.log"
+  ) >>"$PROJECT_DIR/logs/semantic_explore_joy_stack.log" 2>&1 &
+}
+
+wait_joy_control_stack_ready() {
+  if [ "$JOY_ENABLED" != "1" ]; then
+    return 0
+  fi
+  local i
+  for i in $(seq 1 6); do
+    if pgrep -f "cmd_vel_priority_mux.py" >/dev/null 2>&1 \
+      && pgrep -f "joy/joy_node" >/dev/null 2>&1 \
+      && pgrep -f "teleop_twist_joy" >/dev/null 2>&1; then
+      echo "[joy] OK: mux + joy + teleop ready"
+      echo "[joy] Foxglove cmd plot uses /cmd_vel_sent (real clipped velocity)"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "[joy] WARN: joy stack still warming up; nav continues (see logs/semantic_explore_joy_stack.log)"
+  return 0
 }
 
 ensure_joy_control_stack() {
@@ -83,16 +128,12 @@ ensure_joy_control_stack() {
     return 0
   fi
   export CMD_VEL_AUTONOMY_TOPIC
-  start_cmd_vel_mux || {
-    echo "[joy] ERROR: cmd_vel mux failed; see logs/semantic_explore_cmd_vel_mux.log"
-    return 1
-  }
-  start_joy_teleop "$PROJECT_DIR/logs/semantic_explore_joy_teleop.log" || {
-    echo "[joy] ERROR: joy teleop failed; see logs/semantic_explore_joy_teleop.log"
-    return 1
-  }
-  echo "[joy] OK: teleop -> ${CMD_VEL_JOY_TOPIC}, nav -> ${CMD_VEL_AUTONOMY_TOPIC}, chassis -> ${CMD_VEL_OUTPUT_TOPIC}"
-  echo "[joy] Foxglove cmd plot uses /cmd_vel_sent (real clipped velocity)"
+  if [ "$JOY_STACK_ASYNC_STARTED" != "1" ]; then
+    start_joy_control_stack_async
+    sleep 0.5
+  fi
+  wait_joy_control_stack_ready
+  return 0
 }
 
 echo "===== semantic_explore_nav ====="
@@ -293,24 +334,20 @@ if [ "$NAV_ONLY" = "1" ]; then
   echo "[semantic_explore] waiting for TF stable before explore nodes..."
   wait_tf_before_explore_nodes || exit 1
   wait_map_topic_ready 30 || echo "[semantic_explore] WARN: continuing without latched /map (volatile sub may still work)"
-  ensure_joy_control_stack || exit 1
+  ensure_joy_control_stack
+  if [ "$JOY_ENABLED" = "1" ]; then
+    export CMD_VEL_AUTONOMY_TOPIC
+  fi
   if [ "$SEMANTIC_EXPLORE_ENABLED" = "1" ]; then
     python3 -u "$PROJECT_DIR/src/planning/explore_goal_selector_exp2.py" \
       --config "$CONFIG" \
       --instruction "$INSTRUCTION" \
       > "$PROJECT_DIR/logs/semantic_explore_selector.log" 2>&1 &
   fi
-  if [ "$JOY_ENABLED" = "1" ]; then
-    CMD_VEL_AUTONOMY_TOPIC="$CMD_VEL_AUTONOMY_TOPIC" python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
-      --config "$CONFIG" \
-      --instruction "$INSTRUCTION" \
-      > "$PROJECT_DIR/logs/semantic_explore_nav.log" 2>&1 &
-  else
-    python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
-      --config "$CONFIG" \
-      --instruction "$INSTRUCTION" \
-      > "$PROJECT_DIR/logs/semantic_explore_nav.log" 2>&1 &
-  fi
+  python3 -u "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
+    --config "$CONFIG" \
+    --instruction "$INSTRUCTION" \
+    > "$PROJECT_DIR/logs/semantic_explore_nav.log" 2>&1 &
   echo "[semantic_explore] started nav-only stack"
   exit 0
 fi
@@ -333,6 +370,8 @@ wait_topic_exists /tf 40 || exit 1
 
 echo "[semantic_explore] waiting for SLAM TF chain (map<-odom, odom<-base_link) before perception stack..."
 wait_tf_before_explore_nodes || exit 1
+
+start_joy_control_stack_async
 
 echo "[2/8] Start camera + image bridge..."
 ensure_camera_image_stream logs/semantic_explore_camera.log || {
@@ -371,13 +410,13 @@ else
   source_stage10_env
   ros2 run hobot_yolo_world hobot_yolo_world \
     --ros-args \
-    -p feed_type:="$YOLO_FEED_TYPE" \
-    -p ros_img_sub_topic_name:="$YOLO_IMAGE_TOPIC" \
-    -p ros_string_sub_topic_name:=/target_words \
-    -p ai_msg_pub_topic_name:="$DET_TOPIC" \
-    -p texts:="$TARGET_WORDS" \
-    -p score_threshold:="$SCORE_THRESHOLD" \
-    -p iou_threshold:="$YOLO_IOU_THRESHOLD" \
+    -p "feed_type:=${YOLO_FEED_TYPE}" \
+    -p "ros_img_sub_topic_name:=${YOLO_IMAGE_TOPIC}" \
+    -p "ros_string_sub_topic_name:=/target_words" \
+    -p "ai_msg_pub_topic_name:=${DET_TOPIC}" \
+    -p "texts:=${TARGET_WORDS}" \
+    -p "score_threshold:=${SCORE_THRESHOLD}" \
+    -p "iou_threshold:=${YOLO_IOU_THRESHOLD}" \
     > logs/semantic_explore_yolo_world.log 2>&1 &
   sleep 4
   python3 "$PROJECT_DIR/src/perception/yolo_world_to_bbox_json.py" \
@@ -414,18 +453,14 @@ else
 fi
 
 echo "[6/8] Start semantic explore nav (no separate chassis; SLAM stack owns it)..."
-ensure_joy_control_stack || exit 1
+ensure_joy_control_stack
 if [ "$JOY_ENABLED" = "1" ]; then
-  CMD_VEL_AUTONOMY_TOPIC="$CMD_VEL_AUTONOMY_TOPIC" python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
-    --config "$CONFIG" \
-    --instruction "$INSTRUCTION" \
-    > logs/semantic_explore_nav.log 2>&1 &
-else
-  python3 "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
-    --config "$CONFIG" \
-    --instruction "$INSTRUCTION" \
-    > logs/semantic_explore_nav.log 2>&1 &
+  export CMD_VEL_AUTONOMY_TOPIC
 fi
+python3 -u "$PROJECT_DIR/src/apps/run_shared_nav_semantic_explore_exp2.py" \
+  --config "$CONFIG" \
+  --instruction "$INSTRUCTION" \
+  > logs/semantic_explore_nav.log 2>&1 &
 
 echo "[7/8] Foxglove bridge..."
 ensure_foxglove_bridge || true
@@ -452,3 +487,5 @@ echo "    /explore_astar_markers    (cyan A* path + waypoints)"
 echo "    /explore_path             (nav_msgs/Path)"
 echo "    /explore_frontiers        (blue frontier clusters)"
 echo "  Layout: ${PROJECT_DIR}/configs/foxglove_semantic_explore_nav.layout.json"
+echo "  Foxglove HUD: Layout -> Import layout, left column TOP strip = 'HUD status' (/explore_hud.data)"
+echo "  If HUD missing: drag splitter DOWN from top edge of 3D panel, or Add panel -> Raw messages -> /explore_hud.data"

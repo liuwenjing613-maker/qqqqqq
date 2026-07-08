@@ -388,23 +388,50 @@ class QwenOllamaClient:
         else:
             coord_help = f"Use pixel coordinates for the image you see ({model_w}x{model_h}).\n"
 
+        decision_order = (
+            "Decision order (strict):\n"
+            "1. Run the visual gates for this task mode first.\n"
+            "2. Only if ALL required gates pass, output TARGET or PATH.\n"
+            "3. If ANY gate fails, output mode=NONE. Do not guess.\n"
+            "Never mix a target point and a path waypoint in one response.\n"
+        )
+        visual_gate_shared = (
+            "Visual gate (shared): GATE_IMAGE — image has enough scene detail to judge.\n"
+        )
+
         if task_mode == "target":
             task = (
                 f"Target object: {target}\n"
-                "If the exact target is clearly visible: mode=TARGET with object center u/v.\n"
-                "If not visible: mode=NONE with all coordinates null. Do NOT output a path waypoint.\n"
+                "Run TARGET visual gates first.\n"
+                "TARGET gates (all must pass): GATE_CATEGORY, GATE_ON_BODY, GATE_CENTER_STRICT, GATE_NOT_PATH.\n"
+                "Center-strict: estimate visible target bbox; output geometric center on object body.\n"
+                "Do not output cap, handle, label, edge, floor, shadow, path point, or image center unless target is there.\n"
+                "For bottle/cup: center of main body; ignore cap/strap/label for horizontal center.\n"
+                "If all gates pass and target is clearly visible: mode=TARGET with object center u/v.\n"
+                "If any gate fails or target not visible: mode=NONE. Do NOT output a path waypoint.\n"
+            )
+            mode_rules = (
+                "TARGET mode: target_visible=true; waypoint_visible=false; waypoint_u/v=null.\n"
+                "Confidence for TARGET should usually be 0.8 to 1.0.\n"
             )
         else:
             task = (
                 f"Mission target (may be hidden): {target}\n"
                 "Analyze only safe traversable free space. Do NOT guess target location.\n"
-                "Use mode=PATH only when a clearly visible traversable floor, corridor, doorway, aisle, or open passage exists.\n"
-                "The waypoint must be on the center of that safe free path, preferably in the lower half of the image.\n"
+                "Run PATH visual gates first.\n"
+                "PATH gates (all must pass): GATE_FLOOR, GATE_ROUTE, GATE_NOT_WALL, GATE_CENTERLINE, GATE_STATE_SAFE.\n"
+                "Use mode=PATH only when all gates pass and a clearly visible traversable floor, corridor, doorway, aisle, or open passage exists.\n"
+                "Waypoint on centerline of widest free path; prefer lower half (waypoint_v ~0.55-0.75, waypoint_u ~0.40-0.60 when center open).\n"
                 "Do NOT put waypoint on walls, vertical surfaces, cabinets, doors, furniture, object bodies, shadows, reflections, or image borders.\n"
-                "If the view is dominated by one uniform wall-like surface, vertical plane, cabinet/door surface, or close obstacle, and no clear floor/path boundary is visible, use mode=NONE.\n"
-                "If the lower half of the image does not contain a safe connected free-floor region, use mode=NONE.\n"
-                "If no safe path exists: mode=NONE with all coordinates null.\n"
-                "For NONE caused by wall/no-floor/no-path, set reason to one short phrase such as wall_like_no_floor or no_traversable_path.\n"
+                "If view is dominated by uniform wall-like surface with no floor/path boundary: mode=NONE.\n"
+                "If lower half has no safe connected free-floor region: mode=NONE.\n"
+                "If any gate fails or no safe path: mode=NONE with all coordinates null.\n"
+                "For NONE, set reason to gate_floor_failed, gate_not_wall, wall_like_no_floor, or no_traversable_path.\n"
+            )
+            mode_rules = (
+                "PATH mode: target_visible=false; u/v=null; waypoint_visible=true with waypoint_u/waypoint_v.\n"
+                "Do NOT output motion commands; only PATH or NONE.\n"
+                "Wall-like recovery: uniform vertical same-color region is NOT a path. If unsure floor vs wall, choose NONE.\n"
             )
 
         return (
@@ -413,9 +440,9 @@ class QwenOllamaClient:
             + "JSON shape:\n"
             + shape
             + "\n"
-            "PATH waypoints must be on floor/corridor center, not walls or obstacles.\n"
-            "Wall-like recovery rule: a large uniform same-color vertical region is NOT a path. "
-            "If unsure whether it is floor or wall, choose NONE rather than placing a waypoint.\n"
+            + decision_order
+            + visual_gate_shared
+            + mode_rules
             + task
         )
 

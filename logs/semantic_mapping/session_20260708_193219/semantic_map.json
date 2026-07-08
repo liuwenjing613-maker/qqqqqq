@@ -1,0 +1,150 @@
+{
+  "session_id": "session_20260708_193219",
+  "frame_id": "map",
+  "map_name": "semantic_explore_live",
+  "quality": {
+    "loop_xy_error_m": 4.3475,
+    "loop_yaw_error_deg": 2.37,
+    "result": "fail"
+  },
+  "landmarks": [
+    {
+      "landmark_id": "lm_0001",
+      "class_name": "bottle",
+      "frame_id": "map",
+      "x": 0.2296558422456803,
+      "y": 1.4140395442012785,
+      "confidence": 0.40375086665153503,
+      "seen_count": 5,
+      "first_seen_time": 1783510375.3775725,
+      "last_seen_time": 1783510435.7276754,
+      "state": "confirmed",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000003",
+        "obs_000005",
+        "obs_000020",
+        "obs_000023",
+        "obs_000024"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    },
+    {
+      "landmark_id": "lm_0002",
+      "class_name": "bottle",
+      "frame_id": "map",
+      "x": -0.49934536195694446,
+      "y": 0.5169864371679888,
+      "confidence": 0.335591584444046,
+      "seen_count": 2,
+      "first_seen_time": 1783510432.411102,
+      "last_seen_time": 1783510433.3138514,
+      "state": "candidate",
+      "sources": [
+        "yolov5s_bpu"
+      ],
+      "obs_ids": [
+        "obs_000017",
+        "obs_000018"
+      ],
+      "covariance_xy": [
+        0.35,
+        0.0,
+        0.35
+      ],
+      "best_image_path": null,
+      "note": ""
+    }
+  ],
+  "viewpoints": [
+    {
+      "node_id": "vp_000001",
+      "stamp": 1783510366.9556835,
+      "frame_id": "map",
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0,
+      "observed_classes": [
+        "chair"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000002",
+      "stamp": 1783510376.087976,
+      "frame_id": "map",
+      "x": 0.07007984286848022,
+      "y": 0.03982346459889802,
+      "yaw": 1.5156169712352743,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000003",
+      "stamp": 1783510376.916111,
+      "frame_id": "map",
+      "x": 0.06965931552391916,
+      "y": 0.04381994079623819,
+      "yaw": 1.9042003179788576,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000004",
+      "stamp": 1783510432.411102,
+      "frame_id": "map",
+      "x": 0.1517010687103267,
+      "y": -1.0191495075812826,
+      "yaw": 1.5711769120443881,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    },
+    {
+      "node_id": "vp_000005",
+      "stamp": 1783510435.7276754,
+      "frame_id": "map",
+      "x": 0.076271524935935,
+      "y": -0.7602136412695674,
+      "yaw": 1.7184302411439059,
+      "observed_classes": [
+        "bottle"
+      ],
+      "image_path": null,
+      "view_fov_deg": 70.0,
+      "view_range_m": 3.0,
+      "visited": true,
+      "note": ""
+    }
+  ],
+  "observation_count": 24
+}
