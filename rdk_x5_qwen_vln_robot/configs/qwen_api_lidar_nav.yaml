@@ -79,11 +79,11 @@ target_distance_filter:
 # center_deadband: 中间距（归一化）。|ex| 在此范围内只直走 wz=0，超出才开始转向。
 #   1280 宽时 0.10 ≈ 目标 u 在 512~768（±128px）内保持直行。
 # straight_hysteresis: 滞后，防止在边界附近因 Qwen 抖动来回切换直走/转向。
-# angle_servo (scheme B): θ = clamp(0, gain × e^power, max_turn_deg), e = max(0, |ex|-deadband)
-#   每帧千问只设定本帧转角（替换上一帧未转完的预算，不累加）；控制环以 turn_wz 消化 remaining_yaw。
+# angle_servo: 1° budget ONLY during TARGET_SERVO (locked target track).
+# Explore 360° scan / path forward use continuous wz from explore block — not this.
 servo:
   creep_mode: true
-  creep_vx: 0.04
+  creep_vx: 0.05
   creep_turn_vx: 0.0
   max_vx: 0.04
   steer_vx: 0.04
@@ -143,7 +143,7 @@ lidar_arrive_enable: false
 # --- Lost-target search ---
 search:
   scan_wz: 0.02
-  lost_stop_sec: 1.2
+  lost_stop_sec: 0.5
   scan_flip_interval_sec: 5.0
   search_resume_sec: 3.0
 
@@ -190,9 +190,9 @@ gimbal:
 # --- Chassis bridge (identical to semantic_explore chassis block) ---
 chassis:
   bridge: pwm
-  port: /dev/ttyUSB1
+  port: /dev/ttyUSB0
   max_vx: 0.06
-  max_wz: 0.02
+  max_wz: 0.06
   watchdog_timeout: 0.5
   control_rate_hz: 20.0
   wheel_layout: fl-rl-fr-rr
@@ -223,22 +223,26 @@ chassis:
     base_yaw_offset: 0.0
     use_vy: false
 
-# --- Explore loop: 360° target scan -> path waypoint -> forward -> rescan ---
+# --- Explore loop ---
+# 360° scan for bottle -> ask path -> if NO_SAFE_PATH: odom +90° & re-ask until PATH
+# -> forward explore_distance_m -> 360° scan again
 explore:
   enable: true
 
-  # Full 360° scan: complete by accumulated /odom yaw (same method as mapping birth scan).
+  # Full 360° scan for TARGET (bottle); odom yaw accumulation.
   full_scan_use_odom_yaw: true
   full_scan_odom_stale_sec: 0.5
-  full_scan_wz: 0.02
+  full_scan_wz: 0.06
   full_scan_turns: 1.0
   full_scan_margin: 1.08
-  # 0 = use qwen.qwen_interval_sec (same as track/forward)
   full_scan_query_interval_sec: 0
-  # Safety cap if chassis wz does not match command (seconds)
-  full_scan_max_sec: 45.0
+  full_scan_max_sec: 15.0
 
-  # Qwen path waypoint (0.0 = accept PATH when waypoint coords are valid)
+  # After NO_SAFE_PATH: rotate this many degrees (odom), photo, ask path; repeat until PATH.
+  path_yaw_step_deg: 90.0
+  path_yaw_wz: 0.06
+  path_yaw_max_sec: 20.0
+
   path_confidence_threshold: 0.0
   path_turn_threshold: 0.16
   path_kp_turn: 0.02

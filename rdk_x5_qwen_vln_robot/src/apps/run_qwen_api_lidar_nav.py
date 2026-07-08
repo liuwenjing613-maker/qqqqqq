@@ -58,6 +58,7 @@ _TRACK_HOLD_REASONS = frozenset({
     "INFERRED_FORWARD_STEER",
     "INFERRED_TURN_ONLY",
     "TARGET_SCAN_360",
+    "PATH_YAW_STEP",
     "EXPLORE_ALIGN",
     "EXPLORE_FORWARD",
 })
@@ -70,6 +71,7 @@ _ANGLE_TRACK_REASONS = frozenset({
 })
 
 PHASE_TARGET_SCAN_360 = "TARGET_SCAN_360"
+PHASE_PATH_YAW_STEP = "PATH_YAW_STEP"
 PHASE_TARGET_SERVO = "TARGET_SERVO"
 PHASE_ASK_QWEN_PATH = "ASK_QWEN_PATH"
 PHASE_EXPLORE_ALIGN = "EXPLORE_ALIGN"
@@ -79,8 +81,14 @@ PHASE_FAILED = "FAILED"
 
 _EXPLORE_TRACK_REASONS = frozenset({
     "TARGET_SCAN_360",
+    "PATH_YAW_STEP",
     "EXPLORE_ALIGN",
     "EXPLORE_FORWARD",
+})
+
+_ODOM_YAW_PHASES = frozenset({
+    PHASE_TARGET_SCAN_360,
+    PHASE_PATH_YAW_STEP,
 })
 
 
@@ -167,6 +175,12 @@ class RunQwenApiLidarNav(Node):
         self.full_scan_odom_stale_sec = float(
             _nested_get(cfg, "explore", "full_scan_odom_stale_sec", 0.5)
         )
+        self.path_yaw_step_deg = float(_nested_get(cfg, "explore", "path_yaw_step_deg", 90.0))
+        self.path_yaw_wz = float(
+            _nested_get(cfg, "explore", "path_yaw_wz", _nested_get(cfg, "explore", "full_scan_wz", 0.06))
+        )
+        self.path_yaw_max_sec = float(_nested_get(cfg, "explore", "path_yaw_max_sec", 20.0))
+        self.path_yaw_target_rad = math.radians(max(self.path_yaw_step_deg, 1.0))
         self.odom_topic = str(_nested_get(cfg, "odom", "odom_topic", cfg.get("odom_topic", "/odom")))
         # Legacy log hint only (2π/wz); do not use for phase transition.
         self.full_scan_sec = 2.0 * math.pi / max(abs(self.full_scan_wz), 1e-3)
@@ -182,6 +196,8 @@ class RunQwenApiLidarNav(Node):
         self._scan_odom_last_yaw: Optional[float] = None
         self._scan_odom_fallback_time: Optional[float] = None
         self.scan_last_query_time = 0.0
+        self.path_yaw_integrated = 0.0
+        self.path_yaw_start_time: Optional[float] = None
         self.path_point: Optional[Tuple[float, float]] = None
         self.path_confidence = 0.0
         self.explore_start_time: Optional[float] = None
@@ -387,11 +403,34 @@ class RunQwenApiLidarNav(Node):
         t = time.time() if now is None else now
         return (t - self.latest_odom_time) > self.full_scan_odom_stale_sec
 
-    def _sync_scan_odom_yaw(self, prev_phase: str) -> None:
+    def _phase_yaw_wz(self, phase: str) -> float:
+        if phase == PHASE_PATH_YAW_STEP:
+            return float(self.path_yaw_wz)
+        return float(self.full_scan_wz)
+
+    def _yaw_integrated_for_phase(self, phase: str) -> float:
+        if phase == PHASE_PATH_YAW_STEP:
+            return float(self.path_yaw_integrated)
+        return float(self.scan_yaw_integrated)
+
+    def _set_yaw_integrated_for_phase(self, phase: str, value: float) -> None:
+        if phase == PHASE_PATH_YAW_STEP:
+            self.path_yaw_integrated = float(value)
+        else:
+            self.scan_yaw_integrated = float(value)
+
+    def _add_yaw_integrated_for_phase(self, phase: str, delta: float) -> None:
+        self._set_yaw_integrated_for_phase(
+            phase,
+            self._yaw_integrated_for_phase(phase) + float(delta),
+        )
+
+    def _sync_explore_odom_yaw(self, prev_phase: str) -> None:
+        phase = self.phase
         if not self.full_scan_use_odom_yaw:
             return
-        if self.phase != PHASE_TARGET_SCAN_360:
-            if prev_phase == PHASE_TARGET_SCAN_360:
+        if phase not in _ODOM_YAW_PHASES:
+            if prev_phase in _ODOM_YAW_PHASES:
                 self._scan_odom_last_yaw = None
                 self._scan_odom_fallback_time = None
             return
@@ -399,21 +438,25 @@ class RunQwenApiLidarNav(Node):
             now = time.time()
             if self._scan_odom_fallback_time is not None:
                 dt = max(0.0, now - self._scan_odom_fallback_time)
-                wz = min(abs(float(self.full_scan_wz)), self.chassis_max_wz)
-                self.scan_yaw_integrated += wz * dt
+                wz = min(abs(self._phase_yaw_wz(phase)), self.chassis_max_wz)
+                self._add_yaw_integrated_for_phase(phase, wz * dt)
             self._scan_odom_fallback_time = now
             return
 
         self._scan_odom_fallback_time = None
 
-        just_entered = prev_phase != PHASE_TARGET_SCAN_360
+        just_entered = prev_phase != phase
         if just_entered or self._scan_odom_last_yaw is None:
             self._scan_odom_last_yaw = self.latest_odom_yaw
             return
 
         delta = abs(self._normalize_yaw_delta(self._scan_odom_last_yaw, self.latest_odom_yaw))
-        self.scan_yaw_integrated += delta
+        self._add_yaw_integrated_for_phase(phase, delta)
         self._scan_odom_last_yaw = self.latest_odom_yaw
+
+    def _sync_scan_odom_yaw(self, prev_phase: str) -> None:
+        """Backward-compat alias for tests."""
+        self._sync_explore_odom_yaw(prev_phase)
 
     def _set_desired(self, cmd: Twist, reason: str, *, fresh: bool = True) -> None:
         self.desired_cmd = cmd
@@ -423,6 +466,27 @@ class RunQwenApiLidarNav(Node):
             self.last_desired_cmd.linear.x = float(cmd.linear.x)
             self.last_desired_cmd.angular.z = float(cmd.angular.z)
             self.last_fresh_cmd_time = time.time()
+
+    def _set_motion_cmd(self, cmd: Twist, reason: str, *, clear_angle: bool = False) -> None:
+        """Set cmd_vel intent; optionally drop angle-servo budget (explore/scan)."""
+        if clear_angle:
+            self.servo.clear_remaining()
+        self._set_desired(cmd, reason, fresh=True)
+
+    def _apply_angle_servo_wz(self, cmd: Twist) -> None:
+        """1° open-loop budget applies only while tracking a locked Qwen target."""
+        if not self.servo.angle_servo_enabled:
+            return
+        if self.desired_reason not in _ANGLE_TRACK_REASONS:
+            return
+        now = time.time()
+        if self._last_control_time is None:
+            dt = 1.0 / max(self.control_hz, 1e-3)
+        else:
+            dt = clamp(now - self._last_control_time, 0.001, 0.2)
+        self._last_control_time = now
+        ex_for_step = None if self.servo.angle_wait_turn_complete else self.last_target_ex
+        cmd.angular.z = self.servo.step_remaining(dt, ex=ex_for_step)
 
     def publish_stop(self) -> None:
         self.servo.clear_remaining()
@@ -482,26 +546,20 @@ class RunQwenApiLidarNav(Node):
             self.cmd_pub.publish(Twist())
             return
         cmd, _mode = self._cmd_with_hold()
-        turn_busy = self.servo.angle_servo_enabled and self.servo.is_turn_busy()
+        turn_busy = (
+            self.servo.angle_servo_enabled
+            and self.desired_reason in _ANGLE_TRACK_REASONS
+            and self.servo.is_turn_busy()
+        )
         if turn_busy and self.desired_reason == "TURN_ONLY":
             cmd.linear.x = 0.0
-        if self.servo.angle_servo_enabled and (
-            self.desired_reason in _ANGLE_TRACK_REASONS or turn_busy
-        ):
-            now = time.time()
-            if self._last_control_time is None:
-                dt = 1.0 / max(self.control_hz, 1e-3)
-            else:
-                dt = clamp(now - self._last_control_time, 0.001, 0.2)
-            self._last_control_time = now
-            ex_for_step = None if self.servo.angle_wait_turn_complete else self.last_target_ex
-            cmd.angular.z = self.servo.step_remaining(dt, ex=ex_for_step)
+        self._apply_angle_servo_wz(cmd)
         if self._turn_was_busy and not turn_busy:
             self.next_query_time = 0.0
         self._turn_was_busy = turn_busy
         if (
             self.explore_enable
-            and self.phase == PHASE_TARGET_SCAN_360
+            and self.phase in _ODOM_YAW_PHASES
             and not self.full_scan_use_odom_yaw
         ):
             now = time.time()
@@ -511,7 +569,7 @@ class RunQwenApiLidarNav(Node):
                 dt = clamp(now - self._last_scan_integrate_time, 0.001, 0.2)
                 self._last_scan_integrate_time = now
                 effective_wz = min(abs(float(cmd.angular.z)), self.chassis_max_wz)
-                self.scan_yaw_integrated += effective_wz * dt
+                self._add_yaw_integrated_for_phase(self.phase, effective_wz * dt)
         self.cmd_pub.publish(cmd)
 
     def _scan_is_fresh(self) -> bool:
@@ -829,6 +887,37 @@ class RunQwenApiLidarNav(Node):
         msg.angular.z = self.full_scan_wz
         return msg
 
+    def _path_yaw_cmd(self) -> Twist:
+        msg = Twist()
+        msg.linear.x = 0.0
+        msg.angular.z = self.path_yaw_wz
+        return msg
+
+    def _path_yaw_turn_complete(self, now: float) -> bool:
+        if self.path_yaw_integrated >= self.path_yaw_target_rad:
+            return True
+        if self.path_yaw_start_time is not None and (now - self.path_yaw_start_time) >= self.path_yaw_max_sec:
+            self.get_logger().warn(
+                f"[explore] path yaw timeout yaw={math.degrees(self.path_yaw_integrated):.0f}deg "
+                f"target={math.degrees(self.path_yaw_target_rad):.0f}deg"
+            )
+            return True
+        return False
+
+    def _start_path_yaw_step(self) -> None:
+        self.phase = PHASE_PATH_YAW_STEP
+        now = time.time()
+        self.path_yaw_integrated = 0.0
+        self.path_yaw_start_time = now
+        self._scan_odom_last_yaw = None
+        self._scan_odom_fallback_time = None
+        self.explore_phase_reason = "path_yaw_step_start"
+        self.publish_stop()
+        self.get_logger().info(
+            f"[explore] rotate {self.path_yaw_step_deg:.0f}deg by odom, then ask Qwen path again "
+            f"wz={self.path_yaw_wz:+.3f}"
+        )
+
     def _compute_path_align_cmd(self, waypoint_u: float) -> Tuple[str, Twist]:
         ex = (float(waypoint_u) - self.image_width * 0.5) / max(float(self.image_width), 1.0)
         cmd = Twist()
@@ -860,7 +949,7 @@ class RunQwenApiLidarNav(Node):
         if sub_phase == "EXPLORE_ALIGN":
             self.phase = PHASE_EXPLORE_ALIGN
             self.explore_phase_reason = "align_to_path"
-            self._set_desired(cmd, "EXPLORE_ALIGN", fresh=True)
+            self._set_motion_cmd(cmd, "EXPLORE_ALIGN", clear_angle=True)
             self._publish_explore_state(cmd)
             return
 
@@ -892,7 +981,8 @@ class RunQwenApiLidarNav(Node):
             return
 
         cmd.linear.x = self.explore_vx
-        self._set_desired(cmd, "EXPLORE_FORWARD", fresh=True)
+        cmd.angular.z = 0.0
+        self._set_motion_cmd(cmd, "EXPLORE_FORWARD", clear_angle=True)
         self._publish_explore_state(cmd)
 
     def _publish_explore_state(self, cmd: Twist) -> None:
@@ -942,7 +1032,7 @@ class RunQwenApiLidarNav(Node):
         self.get_logger().info(
             f"[explore] NO_SAFE_PATH mode={mode} conf={conf:.2f} usable={result.get('usable')}"
         )
-        self._start_target_scan_360()
+        self._start_path_yaw_step()
 
     def _resolve_infer_mode(self) -> str:
         if not self.explore_enable:
@@ -1138,7 +1228,7 @@ class RunQwenApiLidarNav(Node):
                     self._start_target_scan_360()
                 cmd = self._full_scan_cmd()
                 wz_out = float(cmd.angular.z)
-                self._set_desired(cmd, "TARGET_SCAN_360", fresh=True)
+                self._set_motion_cmd(cmd, "TARGET_SCAN_360", clear_angle=True)
                 action, servo_state, reason = "TARGET_SCAN_360", "TARGET_SCAN_360", "ignore_inferred_use_scan"
             else:
                 snap_u = self.servo.angle_servo_enabled and self.servo.angle_wait_turn_complete
@@ -1202,7 +1292,7 @@ class RunQwenApiLidarNav(Node):
                     action, servo_state, reason = "TARGET_SCAN_360", "TARGET_SCAN_360", "target_lost_rescan"
                     cmd = self._full_scan_cmd()
                     wz_out = float(cmd.angular.z)
-                    self._set_desired(cmd, "TARGET_SCAN_360", fresh=True)
+                    self._set_motion_cmd(cmd, "TARGET_SCAN_360", clear_angle=True)
             elif lost_duration < self.lost_stop_sec:
                 self.servo.clear_remaining()
                 cmd = Twist()
@@ -1221,7 +1311,7 @@ class RunQwenApiLidarNav(Node):
                     self.servo.clear_remaining()
                     search_direction = self.scan_direction
                     wz_out = float(cmd.angular.z)
-                    self._set_desired(cmd, "SEARCH_SCAN", fresh=True)
+                    self._set_motion_cmd(cmd, "SEARCH_SCAN", clear_angle=True)
                     action, servo_state, reason = (
                         "SEARCH_SCAN",
                         "SEARCH_SCAN",
@@ -1236,7 +1326,7 @@ class RunQwenApiLidarNav(Node):
                 self.servo.clear_remaining()
                 search_direction = self.scan_direction
                 wz_out = float(cmd.angular.z)
-                self._set_desired(cmd, "SEARCH_SCAN", fresh=True)
+                self._set_motion_cmd(cmd, "SEARCH_SCAN", clear_angle=True)
                 action, servo_state, reason = "SEARCH_SCAN", "SEARCH_SCAN", target.get("reason", "qwen_no_valid_point")
 
         cmd_age = self._cmd_age()
@@ -1316,11 +1406,31 @@ class RunQwenApiLidarNav(Node):
 
         if self.explore_enable:
             prev_phase = self._scan_prev_phase
-            self._sync_scan_odom_yaw(prev_phase)
+            self._sync_explore_odom_yaw(prev_phase)
             self._scan_prev_phase = self.phase
 
             if self.phase in (PHASE_EXPLORE_ALIGN, PHASE_EXPLORE_FORWARD):
                 self._explore_motion_tick(now)
+                return
+
+            if self.phase == PHASE_PATH_YAW_STEP:
+                if self._path_yaw_turn_complete(now):
+                    self.publish_stop()
+                    self.phase = PHASE_ASK_QWEN_PATH
+                    self.explore_phase_reason = "ASK_QWEN_PATH_AFTER_YAW"
+                    self.next_query_time = 0.0
+                    self.get_logger().info(
+                        f"[explore] path yaw step done "
+                        f"yaw={math.degrees(self.path_yaw_integrated):.0f}deg, ask Qwen path"
+                    )
+                    if self.require_lidar and not self._scan_is_fresh():
+                        self.publish_stop()
+                        self.next_query_time = now + self.lidar_wait_backoff_sec
+                        return
+                    self._submit_infer(frame)
+                    return
+
+                self._set_motion_cmd(self._path_yaw_cmd(), "PATH_YAW_STEP", clear_angle=True)
                 return
 
             if self.phase == PHASE_TARGET_SCAN_360:
@@ -1340,7 +1450,7 @@ class RunQwenApiLidarNav(Node):
                     self._submit_infer(frame)
                     return
 
-                self._set_desired(self._full_scan_cmd(), "TARGET_SCAN_360", fresh=True)
+                self._set_motion_cmd(self._full_scan_cmd(), "TARGET_SCAN_360", clear_angle=True)
                 if (now - self.scan_last_query_time) >= self.full_scan_query_interval_sec:
                     if self.require_lidar and not self._scan_is_fresh():
                         self.publish_stop()

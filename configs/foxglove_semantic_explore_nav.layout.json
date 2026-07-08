@@ -65,7 +65,7 @@
             "robot": { "visible": true },
             "links": { "visible": true },
             "pending": { "visible": true },
-            "status": { "visible": true }
+            "status": { "visible": false }
           }
         },
         "/explore_astar_markers": {
@@ -98,7 +98,12 @@
           "gradient": ["#888888", "#ffcc00"]
         },
         "/explore_memory_markers_exp2": {
-          "visible": true
+          "visible": true,
+          "namespaces": {
+            "direction_decision": { "visible": false },
+            "sector_labels": { "visible": true },
+            "visited_goals": { "visible": true }
+          }
         },
         "/semantic_landmarks": {
           "visible": true,
@@ -116,6 +121,14 @@
       },
       "layers": {}
     },
+    "RawMessages!explore_hud": {
+      "topicPath": "/explore_hud",
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "expansion": { "data": "e" }
+    },
     "Image!yolo_annotated": {
       "imageMode": {
         "imageTopic": "/yolov5s_bpu/annotated/compressed"
@@ -129,20 +142,20 @@
       "maxValue": 1
     },
     "RawMessages!explore_summary": {
-      "topicPath": "/explore_state_json.data",
+      "topicPath": "/explore_state_json",
       "diffEnabled": false,
       "diffMethod": "custom",
       "diffTopicPath": "",
       "showFullMessageForDiff": false,
-      "expansion": "all"
+      "expansion": { "data": "e" }
     },
     "RawMessages!explore_hint": {
-      "topicPath": "/explore_goal_hint.data",
+      "topicPath": "/explore_goal_hint",
       "diffEnabled": false,
       "diffMethod": "custom",
       "diffTopicPath": "",
       "showFullMessageForDiff": false,
-      "expansion": "all"
+      "expansion": { "data": "e" }
     },
     "RawMessages!nav_state": {
       "topicPath": "/nav_state",
@@ -153,27 +166,21 @@
       "expansion": { "data": "e" }
     },
     "RawMessages!semantic_map_json": {
-      "topicPath": "/semantic_map_json.data",
+      "topicPath": "/semantic_map_json",
       "diffEnabled": false,
       "diffMethod": "custom",
       "diffTopicPath": "",
       "showFullMessageForDiff": false,
-      "expansion": "none"
+      "expansion": { "data": "e" }
     },
     "Plot!cmd_vx": {
-      "title": "cmd_vel (vx / wz)",
+      "title": "cmd_vel.linear.x (actual)",
       "paths": [
         {
           "timestampMethod": "receiveTime",
-          "value": "/cmd_vel.linear.x",
+          "value": "/cmd_vel_sent.linear.x",
           "enabled": true,
           "color": "#4e98e2"
-        },
-        {
-          "timestampMethod": "receiveTime",
-          "value": "/cmd_vel.angular.z",
-          "enabled": true,
-          "color": "#e2984e"
         }
       ],
       "showXAxisLabels": true,
@@ -185,19 +192,24 @@
       "xAxisVal": "timestamp",
       "sidebarDimension": 240
     },
-    "Plot!explore_phase": {
-      "title": "explore_phase",
+    "Plot!cmd_wz": {
+      "title": "cmd_vel.angular.z (actual)",
       "paths": [
         {
           "timestampMethod": "receiveTime",
-          "value": "/nav_state.explore_phase",
+          "value": "/cmd_vel_sent.angular.z",
           "enabled": true,
-          "color": "#7ad64b"
+          "color": "#4e98e2"
         }
       ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
       "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
     }
   },
   "globalVariables": {},
@@ -206,7 +218,12 @@
   "playbackConfig": { "speed": 1 },
   "layout": {
     "direction": "row",
-    "first": "3D!semantic_explore",
+    "first": {
+      "direction": "column",
+      "first": "RawMessages!explore_hud",
+      "second": "3D!semantic_explore",
+      "splitPercentage": 20
+    },
     "second": {
       "direction": "column",
       "first": "Image!yolo_annotated",
@@ -223,7 +240,7 @@
           "first": {
             "direction": "row",
             "first": "Plot!cmd_vx",
-            "second": "Plot!explore_phase",
+            "second": "Plot!cmd_wz",
             "splitPercentage": 55
           },
           "second": {

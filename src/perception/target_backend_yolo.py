@@ -33,12 +33,17 @@ def parse_target_classes(value):
     """
     解析 target_classes 字符串。
     空字符串或 None 表示不过滤类别（返回 []，由 _matches_target_class 放行全部）。
+    all_coco / all 表示全部 COCO 80 类。
     """
     if value is None:
         return []
     text = str(value).strip()
     if not text:
         return []
+    from src.perception.coco_classes import COCO_CLASS_NAMES, is_all_coco_mode
+
+    if is_all_coco_mode(text):
+        return list(COCO_CLASS_NAMES)
     return [part.strip() for part in text.split(",") if part.strip()]
 
 

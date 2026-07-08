@@ -24,27 +24,19 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.nav.nav_video_overlay import NavOverlayContext, annotate_nav_frame, safe_json_load
 
 
-COCO_NAMES = [
-    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light",
-    "fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow",
-    "elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee",
-    "skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard",
-    "tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple",
-    "sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch",
-    "potted plant","bed","dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone",
-    "microwave","oven","toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear",
-    "hair drier","toothbrush"
-]
+from src.perception.coco_classes import COCO_CLASS_NAMES, coco_class_csv, is_all_coco_mode
 
 
 def parse_target_classes(text):
     text = (text or "").lower()
+    if is_all_coco_mode(text.strip()):
+        return set(COCO_CLASS_NAMES)
     out = set()
 
     # 直接 COCO 类别
     for part in text.replace(";", ",").split(","):
         p = part.strip()
-        if p in COCO_NAMES:
+        if p in COCO_CLASS_NAMES:
             out.add(p)
 
     # 简单自然语言映射
@@ -412,10 +404,10 @@ class Yolov5sBpuWebNode(Node):
         candidates = []
 
         for cls_id, score, x1, y1, x2, y2 in dets:
-            if cls_id < 0 or cls_id >= len(COCO_NAMES):
+            if cls_id < 0 or cls_id >= len(COCO_CLASS_NAMES):
                 continue
 
-            name = COCO_NAMES[cls_id]
+            name = COCO_CLASS_NAMES[cls_id]
 
             x1 = max(0, min(int(x1), image_w - 1))
             y1 = max(0, min(int(y1), image_h - 1))

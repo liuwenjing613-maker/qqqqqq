@@ -21,9 +21,6 @@ RUN_FOXGLOVE_VIZ="${RUN_FOXGLOVE_VIZ:-1}"
 source "$PROJECT_DIR/scripts/lib/load_chassis_from_config.sh"
 load_chassis_from_config "$CONFIG"
 
-# shellcheck source=scripts/lib/set_gimbal_forward.sh
-source "$PROJECT_DIR/scripts/lib/set_gimbal_forward.sh"
-
 CMD_TOPIC="$(python3 - "$CONFIG" <<'PY'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1])) or {}
@@ -64,7 +61,7 @@ if [ ! -e "${CHASSIS_PORT:-/dev/ttyUSB2}" ]; then
   echo "      Update chassis.port in $CONFIG before real driving."
 fi
 
-echo "[1/8] stop competing nav processes..."
+echo "[1/7] stop competing nav processes..."
 pkill -f "$PROJECT_DIR/src/apps/run_qwen_api_lidar_nav.py" || true
 pkill -f "run_shared_nav" || true
 pkill -f "run_yolo_lidar" || true
@@ -73,16 +70,11 @@ pkill -f "hobot_usb_cam" || true
 pkill -f "compressed_to_raw_image.py" || true
 sleep 2
 
-echo "[2/8] set gimbal forward (level, facing ahead)..."
-set_gimbal_forward "$CONFIG" || {
-  echo "WARN: gimbal forward failed; check gimbal block in $CONFIG and /dev/rosmaster"
-}
-
-echo "[3/8] publish zero cmd_vel once..."
+echo "[2/7] publish zero cmd_vel once..."
 timeout 1 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
   "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 >/dev/null 2>&1 || true
 
-echo "[4/8] start camera + image bridge (use original repo camera_stack, 1280x720)..."
+echo "[3/7] start camera + image bridge (use original repo camera_stack, 1280x720)..."
 _saved_project_dir="$PROJECT_DIR"
 PROJECT_DIR="$RDK_ORIGINAL_ROOT"
 # shellcheck source=/root/rdk_x5_vln_robot/scripts/lib/camera_stack.sh
@@ -102,13 +94,13 @@ LIDAR_PID=""
 NAV_PID=""
 FOXGLOVE_VIZ_PID=""
 
-echo "[5/8] start lidar (read-only call to original repo launch)..."
+echo "[4/7] start lidar (read-only call to original repo launch)..."
 ros2 launch "$RDK_ORIGINAL_ROOT/lidar/launch/tmini_plus.launch.py" \
   > "$PROJECT_DIR/logs/qwen_api_lidar_scan.log" 2>&1 &
 LIDAR_PID=$!
 sleep 3
 
-echo "[6/8] wait for /image_raw and /scan..."
+echo "[5/7] wait for /image_raw and /scan..."
 for topic in /image_raw /scan; do
   ok=0
   for i in $(seq 1 15); do
@@ -123,11 +115,11 @@ done
 if [ "$RUN_FOXGLOVE_VIZ" = "1" ]; then
   # shellcheck source=scripts/lib/ensure_foxglove_bridge.sh
   source "$PROJECT_DIR/scripts/lib/ensure_foxglove_bridge.sh"
-  echo "[6.5/8] pre-start Foxglove bridge (parallel with chassis/nav boot)..."
+  echo "[5.5/7] pre-start Foxglove bridge (parallel with chassis/nav boot)..."
   ensure_foxglove_bridge "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_bridge.log" || {
     echo "WARN: Foxglove bridge not ready; viz may lag. See logs/qwen_api_lidar_foxglove_bridge.log"
   }
-  echo "[6.6/8] pre-start Foxglove viz node (annotated image/markers)..."
+  echo "[5.6/7] pre-start Foxglove viz node (annotated image/markers)..."
   start_qwen_api_foxglove_viz_node "$CONFIG" "$PROJECT_DIR/logs/qwen_api_lidar_foxglove_viz.log" || {
     echo "WARN: Foxglove viz node failed; see logs/qwen_api_lidar_foxglove_viz.log"
     FOXGLOVE_VIZ_PID=""
@@ -136,7 +128,7 @@ if [ "$RUN_FOXGLOVE_VIZ" = "1" ]; then
 fi
 
 if [ "$RUN_CHASSIS" = "1" ]; then
-  echo "[7/8] start chassis bridge (from qwen yaml chassis block)..."
+  echo "[6/7] start chassis bridge (from qwen yaml chassis block)..."
   python3 "$RDK_ORIGINAL_ROOT/debug_tools/m1_runtime_sanitize.py" --port "$CHASSIS_PORT" \
     > "$PROJECT_DIR/logs/qwen_api_lidar_sanitize.log" 2>&1 || {
     echo "WARN: M1 sanitize failed; see $PROJECT_DIR/logs/qwen_api_lidar_sanitize.log"
@@ -149,10 +141,10 @@ if [ "$RUN_CHASSIS" = "1" ]; then
   PROJECT_DIR="$_saved_project_dir"
   sleep 1
 else
-  echo "[7/8] RUN_CHASSIS=0, skip chassis bridge (robot will not move)."
+  echo "[6/7] RUN_CHASSIS=0, skip chassis bridge (robot will not move)."
 fi
 
-echo "[8/8] start Qwen API LiDAR nav node..."
+echo "[7/7] start Qwen API LiDAR nav node..."
 python3 - "$CONFIG" <<'PY' || true
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1])) or {}
