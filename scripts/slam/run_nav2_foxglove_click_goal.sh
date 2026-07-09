@@ -342,7 +342,9 @@ main() {
     log "AUTO_TEST_CLICK: publish test point (0.5, 0.0) -> ${GOAL_POINT_TOPIC}"
     (
       source_ros
-      bash "$PROJECT_DIR/scripts/slam/test_publish_foxglove_point.sh" 0.5 0.0
+      ros2 topic pub --once "$GOAL_POINT_TOPIC" geometry_msgs/msg/PointStamped \
+        "{header: {frame_id: 'map'}, point: {x: 0.5, y: 0.0, z: 0.0}}" \
+        >/dev/null 2>&1
     ) || true
     sleep 5
     if source_ros && timeout 3 ros2 topic echo /foxglove_click_planned_path --once 2>/dev/null | grep -q "poses:"; then
