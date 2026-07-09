@@ -178,19 +178,10 @@ cmd_hold:
   stale_max_wz: 0.04
   stop_after_sec: 4.0
 
-# --- Camera gimbal (before chassis bridge; shares M1 serial port) ---
-gimbal:
-  enabled: true
-  port: /dev/rosmaster
-  yaw_id: 2
-  pitch_id: 3
-  yaw_angle: 80
-  pitch_angle: 40
-
 # --- Chassis bridge (identical to semantic_explore chassis block) ---
 chassis:
   bridge: pwm
-  port: /dev/ttyUSB0
+  port: /dev/ttyUSB2
   max_vx: 0.06
   max_wz: 0.06
   watchdog_timeout: 0.5
@@ -208,9 +199,9 @@ chassis:
   # Short breakaway pulse: max(target_cmd, kick_*) for kick_duration (must be >= cruise).
   kick_start:
     enable: true
-    kick_vx: 0.07
-    kick_wz: 0.24
-    kick_duration: 0.05
+    kick_vx: 0.10
+    kick_wz: 0.30
+    kick_duration: 0.08
     kick_cooldown: 0.55
   # Odom calibration (same as scripts/lib/slam_calibrated_env.sh used during mapping).
   odom:
@@ -224,19 +215,19 @@ chassis:
     use_vy: false
 
 # --- Explore loop ---
-# 360° scan for bottle -> ask path -> if NO_SAFE_PATH: odom +90° & re-ask until PATH
-# -> forward explore_distance_m -> 360° scan again
+# 360° scan for bottle -> ask path -> if NO_SAFE_PATH or obstacle: odom +90° & re-ask until PATH
+# -> forward explore_distance_m (1m) -> 360° scan again; during path explore also watch for bottle
 explore:
   enable: true
 
   # Full 360° scan for TARGET (bottle); odom yaw accumulation.
   full_scan_use_odom_yaw: true
   full_scan_odom_stale_sec: 0.5
-  full_scan_wz: 0.04
+  full_scan_wz: 0.045
   full_scan_turns: 1.0
   full_scan_margin: 1.08
   full_scan_query_interval_sec: 0
-  full_scan_max_sec: 15.0
+  full_scan_max_sec: 34.0
 
   # After NO_SAFE_PATH: rotate this many degrees (odom), photo, ask path; repeat until PATH.
   path_yaw_step_deg: 90.0
@@ -246,11 +237,13 @@ explore:
   path_confidence_threshold: 0.0
   path_turn_threshold: 0.16
   path_kp_turn: 0.02
+  path_align_min_wz: 0.02
 
-  # Explore forward
-  explore_distance_m: 1.5
+  # Explore forward (straight segment after path lock)
+  explore_distance_m: 1.0
   explore_vx: 0.06
   explore_max_sec: 40.0
 
-  # LiDAR safety during explore forward
+  # LiDAR safety during explore forward: stop -> odom +path_yaw_step_deg -> re-ask path
   explore_hard_stop_distance: 0.45
+  obstacle_yaw_step_deg: 90.0

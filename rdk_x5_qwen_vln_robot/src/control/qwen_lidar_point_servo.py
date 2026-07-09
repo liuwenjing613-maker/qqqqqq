@@ -284,7 +284,11 @@ class QwenLidarPointServo:
         if front >= self.slow_distance:
             return vx
         span = max(self.slow_distance - self.hard_stop_distance, 1e-6)
-        return min(vx, self.max_vx * (front - self.hard_stop_distance) / span)
+        scaled = min(vx, self.max_vx * (front - self.hard_stop_distance) / span)
+        # Near target: do not crawl below creep_vx (static friction / PWM deadband).
+        if self.creep_mode and scaled > 0.0:
+            scaled = max(scaled, self.creep_vx)
+        return scaled
 
     def compute_point_servo(
         self,

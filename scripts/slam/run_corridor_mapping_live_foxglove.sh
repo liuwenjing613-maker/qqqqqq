@@ -253,7 +253,7 @@ main() {
     log "[5/6] foxglove_bridge port ${FOXGLOVE_PORT}"
     if ! ensure_foxglove_port_free "${FOXGLOVE_PORT}" 12; then
       log "ERROR: Foxglove port ${FOXGLOVE_PORT} busy; /scan will NOT show in Foxglove"
-      log "HINT: stop nav2/semantic explore, or: bash scripts/slam/stop_click_nav_stack.sh"
+      log "HINT: stop nav2/semantic explore, or: pkill -f run_nav2_foxglove_click_goal.sh"
       FOXGLOVE_STARTED=0
     else
       start_background foxglove_bridge \
