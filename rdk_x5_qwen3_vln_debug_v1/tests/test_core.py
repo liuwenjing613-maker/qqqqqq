@@ -13,7 +13,7 @@ from qwen_vln.types import ModelResult, PromptMode, VlnState
 
 
 class ParserTest(unittest.TestCase):
-    def test_visible_point(self):
+    def test_visible_point_norm1000_to_pixel(self):
         raw = json.dumps(
             {
                 "result": "TARGET_VISIBLE",
@@ -25,14 +25,46 @@ class ParserTest(unittest.TestCase):
             }
         )
         result = parse_model_output(raw, PromptMode.OBSERVE, 640, 480)
-        self.assertEqual(result.point.x, 120)
-        self.assertEqual(result.point.y, 80)
+        # round(120/1000*639)=77, round(80/1000*479)=38
+        self.assertEqual(result.point.x, 77)
+        self.assertEqual(result.point.y, 38)
+
+    def test_norm1000_corners_map_to_image_corners(self):
+        raw = json.dumps(
+            {
+                "result": "TARGET_VISIBLE",
+                "point": {"x": 1000, "y": 1000},
+                "point_role": "target",
+                "confidence": 0.9,
+                "label": "bottle",
+                "reason_code": "exact_target_visible",
+            }
+        )
+        result = parse_model_output(raw, PromptMode.OBSERVE, 960, 1280)
+        self.assertEqual(result.point.x, 959)
+        self.assertEqual(result.point.y, 1279)
+
+    def test_norm1000_center_maps_near_image_center(self):
+        raw = json.dumps(
+            {
+                "result": "TARGET_VISIBLE",
+                "point": {"x": 476, "y": 458},
+                "point_role": "target",
+                "confidence": 0.95,
+                "label": "bottle",
+                "reason_code": "exact_target_visible",
+            }
+        )
+        result = parse_model_output(raw, PromptMode.OBSERVE, 960, 1280)
+        # round(476/1000*959)=456, round(458/1000*1279)=586
+        self.assertEqual(result.point.x, 456)
+        self.assertEqual(result.point.y, 586)
 
     def test_out_of_bounds_rejected(self):
         raw = json.dumps(
             {
                 "result": "TARGET_VISIBLE",
-                "point": {"x": 1000, "y": 80},
+                "point": {"x": 1001, "y": 80},
                 "point_role": "target",
                 "confidence": 0.9,
                 "label": "bottle",
@@ -41,6 +73,20 @@ class ParserTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             parse_model_output(raw, PromptMode.OBSERVE, 640, 480)
+
+    def test_unit_interval_rejected(self):
+        raw = json.dumps(
+            {
+                "result": "TARGET_VISIBLE",
+                "point": {"x": 0.48, "y": 0.46},
+                "point_role": "target",
+                "confidence": 0.9,
+                "label": "bottle",
+                "reason_code": "exact_target_visible",
+            }
+        )
+        with self.assertRaises(ValueError):
+            parse_model_output(raw, PromptMode.OBSERVE, 960, 1280)
 
     def test_wrong_result_for_mode_rejected(self):
         raw = json.dumps(
@@ -156,8 +202,8 @@ class PromptTest(unittest.TestCase):
             540,
         )
         self.assertIn("960 x 540", prompt)
-        self.assertIn("[0, 959]", prompt)
-        self.assertIn("[0, 539]", prompt)
+        self.assertIn("[0, 1000]", prompt)
+        self.assertIn("Never output absolute pixel coordinates", prompt)
         self.assertIn("TARGET_NOT_VISIBLE", prompt)
         self.assertIn("JSON", prompt)
 

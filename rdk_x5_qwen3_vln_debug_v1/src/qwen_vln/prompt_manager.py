@@ -54,6 +54,8 @@ class PromptManager:
             instruction_json=json.dumps(instruction, ensure_ascii=False),
             width=image_width,
             height=image_height,
+            # Pixel extremes are only used as negative examples in the prompt.
+            # Model outputs use the Qwen3-VL relative grid [0, 1000].
             max_x=image_width - 1,
             max_y=image_height - 1,
             json_template=_JSON_TEMPLATE,

@@ -271,7 +271,12 @@ ros2 topic pub --once /qwen_vln/command std_msgs/msg/String "{data: 'reset'}"
 }
 ```
 
-坐标必须是送入 API 的缩放图像中的真实像素坐标。解析器不会偷偷把 0～1 或 0～1000 坐标换算成像素，以免第一阶段把提示词问题掩盖掉。
+`point` 使用 Qwen3-VL 相对坐标网格 `[0, 1000]`（不是像素，也不是 0～1）。
+解析器会换算为送入 API 的缩放图像像素：
+
+`pixel = round(coord / 1000 * (size - 1))`
+
+其中 `size` 为图像宽或高。0～1 归一化坐标会被拒绝。
 
 ---
 

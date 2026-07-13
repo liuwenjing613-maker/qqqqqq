@@ -7,10 +7,11 @@ Use this exact field structure:
 $json_template
 
 Coordinate rules:
-- point.x is an integer pixel coordinate in [0, $max_x].
-- point.y is an integer pixel coordinate in [0, $max_y].
-- Coordinates must refer to this exact input image.
-- Never output normalized 0-1 coordinates and never output 0-1000 coordinates.
+- point.x and point.y use the Qwen3-VL relative grid: integers in [0, 1000].
+- (0, 0) is the top-left corner of this image; (1000, 1000) is the bottom-right corner.
+- Coordinates must refer to this exact input image ($width x $height pixels).
+- Never output absolute pixel coordinates such as $max_x or $max_y.
+- Never output normalized 0-1 coordinates.
 - If a point is not allowed for the selected result, point must be null.
 
 Global safety rules:

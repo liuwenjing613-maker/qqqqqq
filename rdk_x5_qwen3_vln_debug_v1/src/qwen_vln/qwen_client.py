@@ -128,7 +128,35 @@ def _extract_json(text: str) -> Dict[str, Any]:
         return value
 
 
+_NORM1000_MAX = 1000.0
+
+
+def _looks_like_unit_interval(x: float, y: float) -> bool:
+    """Reject 0-1 normalized coords that would collapse under norm1000 mapping."""
+    if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+        return False
+    # Exact 0/1 integers are valid edge cells on the 0-1000 grid.
+    return not (x in (0.0, 1.0) and y in (0.0, 1.0) and float(x).is_integer() and float(y).is_integer())
+
+
+def _norm1000_to_pixel(coord: float, size: int) -> int:
+    """Map Qwen3-VL relative coord in [0, 1000] onto pixel index in [0, size-1]."""
+    if size <= 0:
+        raise ValueError(f"image size must be positive, got {size}")
+    pixel = int(round(coord / _NORM1000_MAX * (size - 1)))
+    return min(max(pixel, 0), size - 1)
+
+
+def pixel_to_norm1000(pixel: int, size: int) -> int:
+    """Inverse map for feeding previous points back into prompts."""
+    if size <= 1:
+        return 0
+    value = int(round(float(pixel) / float(size - 1) * _NORM1000_MAX))
+    return min(max(value, 0), int(_NORM1000_MAX))
+
+
 def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
+    """Parse model point as Qwen3-VL 0-1000 relative coords, then convert to pixels."""
     if value is None:
         return None
     if isinstance(value, dict):
@@ -140,15 +168,22 @@ def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
     if isinstance(x_raw, bool) or isinstance(y_raw, bool):
         raise ValueError("point coordinates cannot be booleans")
     try:
-        x, y = int(round(float(x_raw))), int(round(float(y_raw)))
+        x_norm, y_norm = float(x_raw), float(y_raw)
     except (TypeError, ValueError) as exc:
         raise ValueError("point coordinates must be numeric") from exc
-    if not (0 <= x < width and 0 <= y < height):
+    if _looks_like_unit_interval(x_norm, y_norm):
         raise ValueError(
-            f"point ({x}, {y}) is outside image bounds {width}x{height}; "
-            "normalized or 0-1000 coordinates are not accepted"
+            f"point ({x_norm}, {y_norm}) looks like normalized 0-1 coordinates; "
+            "expected Qwen3-VL relative coordinates in [0, 1000]"
         )
-    return PixelPoint(x=x, y=y)
+    if not (0.0 <= x_norm <= _NORM1000_MAX and 0.0 <= y_norm <= _NORM1000_MAX):
+        raise ValueError(
+            f"point ({x_norm}, {y_norm}) is outside the Qwen3-VL relative grid [0, 1000]"
+        )
+    return PixelPoint(
+        x=_norm1000_to_pixel(x_norm, width),
+        y=_norm1000_to_pixel(y_norm, height),
+    )
 
 
 def parse_model_output(raw_text: str, mode: PromptMode, image_width: int, image_height: int) -> ModelResult:

@@ -26,7 +26,7 @@ from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import Float32, String
 
 from qwen_vln.prompt_manager import PromptManager
-from qwen_vln.qwen_client import ClientConfig, QwenVisionClient
+from qwen_vln.qwen_client import ClientConfig, QwenVisionClient, pixel_to_norm1000
 from qwen_vln.state_machine import NavigationStateMachine, StateMachineConfig
 from qwen_vln.types import ModelResult, PromptMode
 from qwen_vln.visualizer import ResultVisualizer
@@ -318,11 +318,16 @@ class QwenVlnDebugNode(Node):
             header = copy.deepcopy(self.latest_header)
 
         height, width = frame.shape[:2]
-        previous = (
-            "none"
-            if self.latest_result is None or self.latest_result.point is None
-            else f"({self.latest_result.point.x}, {self.latest_result.point.y})"
-        )
+        if self.latest_result is None or self.latest_result.point is None:
+            previous = "none"
+        else:
+            # Feed previous point back in the same 0-1000 protocol the model outputs.
+            prev_w = self.latest_result.image_width or width
+            prev_h = self.latest_result.image_height or height
+            previous = (
+                f"({pixel_to_norm1000(self.latest_result.point.x, prev_w)}, "
+                f"{pixel_to_norm1000(self.latest_result.point.y, prev_h)})"
+            )
         prompt = self.prompt_manager.build(
             mode,
             self.fsm.instruction,
