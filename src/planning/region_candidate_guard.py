@@ -7,6 +7,12 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from src.planning.robot_trajectory_store import (
+    TrajectorySession,
+    TrajectoryVertex,
+    compute_trajectory_region_metrics,
+)
+
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
@@ -73,6 +79,15 @@ class GuardedRegionMetrics:
     near_robot_penalty: float = 0.0
     recent_observation_penalty: float = 0.0
     distance_to_nearest_observation_pose_m: float = float("inf")
+    nearest_trajectory_distance_m: float = float("inf")
+    nearby_trajectory_vertex_count: int = 0
+    nearby_recent_trajectory_count: int = 0
+    last_nearby_visit_age_s: float = float("inf")
+    trajectory_density_score: float = 0.0
+    trajectory_novelty_score: float = 1.0
+    trajectory_revisit_penalty: float = 0.0
+    geo_score_before_trajectory: float = 0.0
+    geo_score_after_trajectory: float = 0.0
     geo_score: float = 0.0
     geo_rank: int = 0
     score_components: Dict[str, float] = field(default_factory=dict)
@@ -290,6 +305,55 @@ def apply_near_region_guard(
     return metrics
 
 
+def apply_trajectory_metrics(
+    region: Any,
+    metrics: GuardedRegionMetrics,
+    trajectory_session: Optional[TrajectorySession],
+    observation_poses: Sequence[Dict[str, Any]],
+    cfg: Dict[str, Any],
+    now_s: float,
+) -> GuardedRegionMetrics:
+    tcfg = cfg.get("trajectory", {})
+    if not bool(tcfg.get("enabled", True)):
+        metrics.trajectory_novelty_score = 1.0
+        metrics.trajectory_revisit_penalty = 0.0
+        return metrics
+
+    vertices: Sequence[TrajectoryVertex] = (
+        trajectory_session.vertices if trajectory_session is not None else []
+    )
+    trm = compute_trajectory_region_metrics(
+        region.centroid_x,
+        region.centroid_y,
+        vertices,
+        observation_poses,
+        cfg,
+        now_s,
+    )
+    metrics.nearest_trajectory_distance_m = trm.nearest_trajectory_distance_m
+    metrics.nearby_trajectory_vertex_count = trm.nearby_trajectory_vertex_count
+    metrics.nearby_recent_trajectory_count = trm.nearby_recent_trajectory_count
+    metrics.last_nearby_visit_age_s = trm.last_nearby_visit_age_s
+    metrics.trajectory_density_score = trm.trajectory_density_score
+    metrics.trajectory_novelty_score = trm.trajectory_novelty_score
+    metrics.trajectory_revisit_penalty = trm.trajectory_revisit_penalty
+    if trm.distance_to_nearest_observation_pose_m < metrics.distance_to_nearest_observation_pose_m:
+        metrics.distance_to_nearest_observation_pose_m = trm.distance_to_nearest_observation_pose_m
+
+    if bool(tcfg.get("hard_reject_heavily_revisited", False)):
+        heavily = (
+            metrics.trajectory_revisit_penalty >= 0.85
+            and metrics.trajectory_density_score >= 0.75
+            and metrics.nearby_recent_trajectory_count >= 3
+            and metrics.nearest_trajectory_distance_m
+            <= float(tcfg.get("strong_revisit_distance_m", 0.45))
+        )
+        if heavily:
+            metrics.snapshot_eligible = False
+            metrics.stability_rejection_reasons.append("REGION_HEAVILY_REVISITED")
+    return metrics
+
+
 def compute_geometric_score(
     region: Any,
     metrics: GuardedRegionMetrics,
@@ -302,6 +366,8 @@ def compute_geometric_score(
 ) -> GuardedRegionMetrics:
     gcfg = _geo_cfg(cfg)
     if not bool(gcfg.get("enabled", True)):
+        metrics.geo_score_before_trajectory = 0.5
+        metrics.geo_score_after_trajectory = 0.5
         metrics.geo_score = 0.5
         return metrics
 
@@ -317,6 +383,7 @@ def compute_geometric_score(
     dp = _clamp(1.0 - dist_diff / max(pref_tol, 0.01))
     pers = _clamp(metrics.persistence_cycles / 5.0)
     completeness = _clamp(min(1.0, region.unknown_gain_ratio if region.unknown_gain_ratio > 0 else ug))
+    novelty = _clamp(metrics.trajectory_novelty_score)
 
     metrics.score_components = {
         "unknown_gain": round(ug, 4),
@@ -325,11 +392,13 @@ def compute_geometric_score(
         "distance_preference": round(dp, 4),
         "persistence": round(pers, 4),
         "region_completeness": round(completeness, 4),
+        "trajectory_novelty": round(novelty, 4),
     }
 
     sel_p = _clamp(track.selection_count * float(cfg.get("region_history", {}).get("selection_penalty_per_count", 0.08)))
     visit_p = _clamp(track.visit_count * float(cfg.get("region_history", {}).get("visit_penalty_per_count", 0.15)))
     nav_p = _clamp(track.navigation_failure_count * float(cfg.get("region_history", {}).get("navigation_failure_penalty_per_count", 0.25)))
+    revisit_p = _clamp(metrics.trajectory_revisit_penalty)
 
     metrics.penalty_components = {
         "near_robot": round(metrics.near_robot_penalty, 4),
@@ -337,25 +406,34 @@ def compute_geometric_score(
         "selection_count": round(sel_p, 4),
         "visit_count": round(visit_p, 4),
         "navigation_failure": round(nav_p, 4),
+        "trajectory_revisit": round(revisit_p, 4),
     }
 
-    pos = (
-        weights.get("unknown_gain", 0.25) * ug
-        + weights.get("clearance", 0.20) * cl
-        + weights.get("frontier_size", 0.15) * fs
-        + weights.get("distance_preference", 0.15) * dp
-        + weights.get("persistence", 0.15) * pers
-        + weights.get("region_completeness", 0.10) * completeness
+    pos_base = (
+        weights.get("unknown_gain", 0.22) * ug
+        + weights.get("clearance", 0.18) * cl
+        + weights.get("frontier_size", 0.12) * fs
+        + weights.get("distance_preference", 0.13) * dp
+        + weights.get("persistence", 0.12) * pers
+        + weights.get("region_completeness", 0.08) * completeness
     )
-    pen = (
+    pen_base = (
         penalties.get("near_robot", 0.15) * metrics.near_robot_penalty
         + penalties.get("recent_observation", 0.20) * metrics.recent_observation_penalty
         + penalties.get("selection_count", 0.15) * sel_p
         + penalties.get("visit_count", 0.15) * visit_p
         + penalties.get("navigation_failure", 0.20) * nav_p
     )
+    metrics.geo_score_before_trajectory = _clamp(pos_base - pen_base)
+
+    pos = pos_base + weights.get("trajectory_novelty", 0.15) * novelty
+    pen = pen_base + penalties.get("trajectory_revisit", 0.15) * revisit_p
     metrics.geo_score = _clamp(pos - pen)
-    metrics.score_explanation = f"pos={pos:.3f} pen={pen:.3f}"
+    metrics.geo_score_after_trajectory = metrics.geo_score
+    metrics.score_explanation = (
+        f"pos={pos:.3f} pen={pen:.3f} "
+        f"before_traj={metrics.geo_score_before_trajectory:.3f}"
+    )
     return metrics
 
 
@@ -425,6 +503,7 @@ def guard_regions_for_cycle(
     now_s: float,
     cfg: Dict[str, Any],
     observation_poses: Sequence[Dict[str, Any]],
+    trajectory_session: Optional[TrajectorySession] = None,
 ) -> Tuple[Dict[str, RegionTrack], List[Tuple[Any, GuardedRegionMetrics, RegionTrack]]]:
     """Full guard pipeline for accepted regions."""
     tracks, mapping, _ = match_regions_to_tracks(list(regions), tracks, cycle_id, now_s, cfg)
@@ -440,7 +519,18 @@ def guard_regions_for_cycle(
         m.snapshot_eligible = region.accepted and m.stable
         m = apply_near_region_guard(region, m, best_gain, cfg)
         m = apply_history_penalties(region, track, m, observation_poses, cfg)
-        m = compute_geometric_score(region, m, track, cfg, max_unknown_gain=best_gain, max_frontier_cells=max_cells, max_clearance=max_clear)
+        m = apply_trajectory_metrics(
+            region, m, trajectory_session, observation_poses, cfg, now_s
+        )
+        m = compute_geometric_score(
+            region,
+            m,
+            track,
+            cfg,
+            max_unknown_gain=best_gain,
+            max_frontier_cells=max_cells,
+            max_clearance=max_clear,
+        )
         out.append((region, m, track))
 
     ranked = rank_geometric_candidates([(r, m) for r, m, _ in out], cfg)

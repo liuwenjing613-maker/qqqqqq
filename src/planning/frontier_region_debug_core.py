@@ -144,6 +144,15 @@ class FrontierRegion:
     near_robot_penalty: float = 0.0
     recent_observation_penalty: float = 0.0
     distance_to_nearest_observation_pose_m: float = float("inf")
+    nearest_trajectory_distance_m: float = float("inf")
+    nearby_trajectory_vertex_count: int = 0
+    nearby_recent_trajectory_count: int = 0
+    last_nearby_visit_age_s: float = float("inf")
+    trajectory_density_score: float = 0.0
+    trajectory_novelty_score: float = 1.0
+    trajectory_revisit_penalty: float = 0.0
+    geo_score_before_trajectory: float = 0.0
+    geo_score_after_trajectory: float = 0.0
     geo_score: float = 0.0
     geo_rank: int = 0
     score_components: Dict[str, float] = field(default_factory=dict)
@@ -1168,6 +1177,10 @@ def validate_config(cfg: Dict[str, Any]) -> List[str]:
         if bearing < 0 or bearing > 180:
             errors.append("region_merge.max_bearing_difference_deg must be in [0, 180]")
 
+    from src.planning.robot_trajectory_store import validate_trajectory_config
+
+    errors.extend(validate_trajectory_config(cfg))
+
     return errors
 
 
@@ -1183,6 +1196,7 @@ def render_annotated_map(
     result: FrontierAnalysisResult,
     cycle_id: int,
     cfg: Optional[Dict[str, Any]] = None,
+    trajectory_overlay: Optional[Dict[str, Any]] = None,
 ) -> Optional[np.ndarray]:
     if not _CV2_AVAILABLE or cv2 is None:
         return None
@@ -1199,6 +1213,39 @@ def render_annotated_map(
     if result.filtered_frontier_mask is not None:
         fm = result.filtered_frontier_mask
         img[fm] = (0, 255, 255)
+
+    overlay = trajectory_overlay or {}
+    visited_data = overlay.get("visited_area_data")
+    if visited_data is not None and len(visited_data) == h * w:
+        for idx, val in enumerate(visited_data):
+            if val >= 100:
+                r = idx // w
+                c = idx % w
+                img[r, c] = (200, 180, 120)
+
+    vertices = overlay.get("vertices") or []
+    if len(vertices) >= 2:
+        pts = []
+        for v in vertices:
+            if isinstance(v, dict):
+                vx = float(v.get("x", 0.0))
+                vy = float(v.get("y", 0.0))
+            else:
+                vx = float(v[0])
+                vy = float(v[1])
+            vr, vc = world_to_grid(float(vx), float(vy), meta)
+            iy = grid_row_to_image_y(vr, h)
+            pts.append((int(vc), int(iy)))
+        for i in range(len(pts) - 1):
+            cv2.line(img, pts[i], pts[i + 1], (0, 140, 255), 2, cv2.LINE_AA)
+
+    obs_poses = overlay.get("observation_poses") or []
+    for pose in obs_poses:
+        ox = float(pose.get("x", 0.0))
+        oy = float(pose.get("y", 0.0))
+        orow, ocol = world_to_grid(ox, oy, meta)
+        oiy = grid_row_to_image_y(orow, h)
+        cv2.circle(img, (ocol, oiy), 4, (255, 0, 255), -1)
 
     for region in result.regions + result.rejected_regions:
         color = (0, 200, 0) if region.accepted else (0, 0, 255)
@@ -1220,18 +1267,46 @@ def render_annotated_map(
     if robot is not None:
         rr, rc = world_to_grid(robot.x, robot.y, meta)
         iy = grid_row_to_image_y(rr, h)
-        cv2.circle(img, (rc, iy), 4, (255, 0, 0), -1)
+        cv2.circle(img, (rc, iy), 5, (255, 0, 0), -1)
         arrow_len = 8
         ex = int(rc + arrow_len * math.cos(robot.yaw_rad))
         ey = int(iy - arrow_len * math.sin(robot.yaw_rad))
-        cv2.arrowedLine(img, (rc, iy), (ex, ey), (255, 0, 0), 1, tipLength=0.3)
+        cv2.arrowedLine(img, (rc, iy), (ex, ey), (255, 0, 0), 2, tipLength=0.3)
 
+    legend_y = h - 5
+    legend_lines = [
+        "TRAVELED PATH",
+        "VISITED CORRIDOR",
+        "OBSERVATION POSE",
+        "ROBOT",
+        "CANDIDATE REGION",
+    ]
+    for i, line in enumerate(legend_lines):
+        cv2.putText(
+            img,
+            line,
+            (5, max(15, legend_y - (len(legend_lines) - i) * 12)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.32,
+            (30, 30, 30),
+            1,
+            cv2.LINE_AA,
+        )
+
+    traj_id = overlay.get("trajectory_session_id", "")
+    traj_rev = overlay.get("trajectory_revision", 0)
+    traj_vcount = overlay.get("trajectory_vertex_count", len(vertices))
+    traj_len = overlay.get("trajectory_length_m", 0.0)
+    header = (
+        f"cycle={cycle_id} {meta.width}x{meta.height} res={meta.resolution:.3f} | "
+        f"{traj_id} rev={traj_rev} vtx={traj_vcount} len={traj_len:.2f}m"
+    )
     cv2.putText(
         img,
-        f"cycle={cycle_id} {meta.width}x{meta.height} res={meta.resolution:.3f}",
+        header,
         (5, 15),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.4,
+        0.35,
         (255, 255, 255),
         1,
         cv2.LINE_AA,
@@ -1257,6 +1332,92 @@ def generate_snapshot_id(cycle_id: int, when: Optional[datetime] = None) -> str:
     return f"RS_{ts.strftime('%Y%m%dT%H%M%S')}_{cycle_id:04d}"
 
 
+def labeled_top_regions_for_snapshot(
+    result: FrontierAnalysisResult,
+    *,
+    top_k: int = 5,
+    minimum_eligible_score: float = 0.40,
+) -> List[Tuple[str, FrontierRegion]]:
+    """Return (label, region) pairs using the same labeling as snapshot payload."""
+    eligible = [
+        r for r in result.regions
+        if r.snapshot_eligible and r.stable and r.geo_score >= 0.0
+    ]
+    eligible.sort(key=lambda r: (r.geo_rank if r.geo_rank > 0 else 999, -r.geo_score))
+    eligible = [r for r in eligible if r.geo_score >= minimum_eligible_score]
+    if not eligible:
+        eligible = [r for r in result.regions if r.snapshot_eligible]
+    top = eligible[:top_k]
+    top.sort(key=lambda r: (r.geo_rank if r.geo_rank > 0 else 999, r.bearing_relative_deg, r.distance_to_robot_m))
+    labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    out: List[Tuple[str, FrontierRegion]] = []
+    for idx, region in enumerate(top):
+        label = labels[idx] if idx < len(labels) else f"R{idx}"
+        out.append((label, region))
+    return out
+
+
+def build_region_geometry_payload(
+    result: FrontierAnalysisResult,
+    meta: MapMetadata,
+    snapshot_id: str,
+    *,
+    top_k: int = 5,
+    minimum_eligible_score: float = 0.40,
+    map_fingerprints: Optional[Dict[str, str]] = None,
+    contract_cfg: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Internal frontier geometry for safe viewpoint generation (not for Qwen prompts)."""
+    from src.planning.exploration_contracts import (  # noqa: WPS433
+        EXPLORATION_CONTRACT_VERSION,
+        REGION_GEOMETRY_SCHEMA_VERSION,
+        build_region_geometry_fingerprint_from_entry,
+    )
+
+    regions_out: Dict[str, Any] = {}
+    for label, region in labeled_top_regions_for_snapshot(
+        result, top_k=top_k, minimum_eligible_score=minimum_eligible_score
+    ):
+        frontier_points = [
+            [round(x, 4), round(y, 4)] for x, y in (grid_to_world(r, c, meta) for r, c in region.frontier_cells)
+        ]
+        entry: Dict[str, Any] = {
+            "internal_region_id": region.region_id,
+            "track_id": region.track_id,
+            "centroid_x": region.centroid_x,
+            "centroid_y": region.centroid_y,
+            "frontier_cells_grid": [[int(r), int(c)] for r, c in region.frontier_cells],
+            "frontier_points_map": frontier_points,
+            "bbox_grid": [region.row_min, region.row_max, region.col_min, region.col_max],
+            "bearing_global_deg": region.bearing_global_deg,
+            "unknown_gain_cells": region.unknown_gain_cells,
+            "minimum_clearance_m": region.minimum_clearance_m,
+            "trajectory_novelty_score": region.trajectory_novelty_score,
+            "trajectory_revisit_penalty": region.trajectory_revisit_penalty,
+            "distance_to_nearest_observation_pose_m": region.distance_to_nearest_observation_pose_m,
+            "geo_score": region.geo_score,
+            "stable": region.stable,
+            "snapshot_eligible": region.snapshot_eligible,
+            "blacklisted": region.blacklisted,
+        }
+        entry["region_geometry_fingerprint"] = build_region_geometry_fingerprint_from_entry(
+            snapshot_id, label, entry, cfg=contract_cfg
+        )
+        regions_out[label] = entry
+    payload: Dict[str, Any] = {
+        "contract_version": EXPLORATION_CONTRACT_VERSION,
+        "region_geometry_schema_version": REGION_GEOMETRY_SCHEMA_VERSION,
+        "schema_version": REGION_GEOMETRY_SCHEMA_VERSION,
+        "snapshot_id": snapshot_id,
+        "regions": regions_out,
+    }
+    if map_fingerprints:
+        payload["map_fingerprint"] = map_fingerprints.get("map_fingerprint", "")
+        payload["map_metadata_fingerprint"] = map_fingerprints.get("map_metadata_fingerprint", "")
+        payload["map_data_fingerprint"] = map_fingerprints.get("map_data_fingerprint", "")
+    return payload
+
+
 def build_region_snapshot_payload(
     result: FrontierAnalysisResult,
     meta: MapMetadata,
@@ -1268,14 +1429,23 @@ def build_region_snapshot_payload(
     *,
     observation_meta: Optional[Dict[str, Any]] = None,
     top_k: int = 5,
+    trajectory_meta: Optional[Dict[str, Any]] = None,
+    map_data: Optional[Sequence[int]] = None,
+    contract_cfg: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    from src.planning.exploration_contracts import (  # noqa: WPS433
+        EXPLORATION_CONTRACT_VERSION,
+        REGION_SNAPSHOT_SCHEMA_VERSION,
+        TRAJECTORY_SCHEMA_VERSION,
+        build_map_fingerprint,
+    )
     eligible = [
         r for r in result.regions
         if r.snapshot_eligible and r.stable and r.geo_score >= 0.0
     ]
     eligible.sort(key=lambda r: (r.geo_rank if r.geo_rank > 0 else 999, -r.geo_score))
-    gcfg_min = 0.40  # caller should pass via regions already filtered
-    eligible = [r for r in eligible if r.geo_score >= gcfg_min or r.geo_score == 0.0]
+    gcfg_min = float((observation_meta or {}).get("minimum_eligible_score", 0.40))
+    eligible = [r for r in eligible if r.geo_score >= gcfg_min]
     if not eligible:
         eligible = [r for r in result.regions if r.snapshot_eligible]
     top = eligible[:top_k]
@@ -1317,6 +1487,15 @@ def build_region_snapshot_payload(
                 "centroid_drift_m": region.centroid_drift_m,
                 "bearing_drift_deg": region.bearing_drift_deg,
                 "distance_to_nearest_observation_pose_m": region.distance_to_nearest_observation_pose_m,
+                "nearest_trajectory_distance_m": region.nearest_trajectory_distance_m,
+                "nearby_trajectory_vertex_count": region.nearby_trajectory_vertex_count,
+                "nearby_recent_trajectory_count": region.nearby_recent_trajectory_count,
+                "trajectory_density_score": region.trajectory_density_score,
+                "trajectory_novelty_score": region.trajectory_novelty_score,
+                "trajectory_revisit_penalty": region.trajectory_revisit_penalty,
+                "last_nearby_visit_age_s": region.last_nearby_visit_age_s,
+                "geo_score_before_trajectory": region.geo_score_before_trajectory,
+                "geo_score_after_trajectory": region.geo_score_after_trajectory,
                 "near_robot_penalty": region.near_robot_penalty,
                 "recent_observation_penalty": region.recent_observation_penalty,
                 "visit_count": region.visited_count,
@@ -1331,7 +1510,11 @@ def build_region_snapshot_payload(
         )
 
     obs = observation_meta or {}
-    return {
+    traj = trajectory_meta or {}
+    payload: Dict[str, Any] = {
+        "contract_version": EXPLORATION_CONTRACT_VERSION,
+        "snapshot_schema_version": REGION_SNAPSHOT_SCHEMA_VERSION,
+        "schema_version": REGION_SNAPSHOT_SCHEMA_VERSION,
         "snapshot_id": snapshot_id,
         "cycle_id": result.cycle_id,
         "map_stamp": meta.stamp_sec,
@@ -1347,12 +1530,24 @@ def build_region_snapshot_payload(
         "rejected_reason_summary": rejection_summary,
         "annotated_map_file": annotated_map_file,
         "expires_after_s": expires_after_s,
+        "trajectory_session_id": traj.get("trajectory_session_id", ""),
+        "trajectory_revision": traj.get("trajectory_revision", 0),
+        "trajectory_length_m": traj.get("trajectory_length_m", 0.0),
+        "trajectory_raw_sample_count": traj.get("trajectory_raw_sample_count", 0),
+        "trajectory_vertex_count": traj.get("trajectory_vertex_count", 0),
+        "visited_corridor_radius_m": traj.get("visited_corridor_radius_m", 0.35),
+        "trajectory_path_topic": traj.get(
+            "trajectory_path_topic", "/qwen_explore_debug/trajectory_path"
+        ),
+        "visited_area_grid_topic": traj.get(
+            "visited_area_grid_topic", "/qwen_explore_debug/visited_area_grid"
+        ),
         "observation_window_id": obs.get("observation_window_id"),
         "full_scan_completed": obs.get("full_scan_completed", False),
         "accumulated_rotation_deg": obs.get("accumulated_rotation_deg", 0.0),
         "map_stable": obs.get("map_stable", False),
         "robot_settled": obs.get("robot_settled", False),
-        "geometric_scoring_version": "1.0",
+        "geometric_scoring_version": "1.1",
         "history_version": obs.get("history_version", "1.0"),
         "merge_summary": {
             "raw_cluster_count": result.stats.raw_cluster_count,
@@ -1362,3 +1557,21 @@ def build_region_snapshot_payload(
         },
         "guard_summary": obs.get("guard_summary", {}),
     }
+    payload["trajectory_schema_version"] = str(
+        traj.get("trajectory_schema_version", TRAJECTORY_SCHEMA_VERSION)
+    )
+    if map_data is not None:
+        fps = build_map_fingerprint(
+            frame_id=meta.frame_id,
+            width=meta.width,
+            height=meta.height,
+            resolution=meta.resolution,
+            origin_x=meta.origin_x,
+            origin_y=meta.origin_y,
+            origin_yaw=float(getattr(meta, "origin_yaw", 0.0)),
+            map_data=map_data,
+            map_stamp=meta.stamp_sec,
+            cfg=contract_cfg,
+        )
+        payload.update(fps)
+    return payload

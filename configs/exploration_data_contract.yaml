@@ -1,0 +1,32 @@
+contracts:
+  exploration_contract_version: "1.0"
+  region_snapshot_schema_version: "1.0"
+  region_geometry_schema_version: "1.0"
+  trajectory_schema_version: "1.0"
+  visual_context_schema_version: "1.0"
+  region_decision_schema_version: "1.0"
+  safe_viewpoint_schema_version: "1.0"
+  bundle_schema_version: "1.0"
+
+fingerprints:
+  algorithm: sha256
+  float_precision_digits: 6
+  sort_region_cells: true
+  include_map_stamp_in_map_fingerprint: true
+
+bundle_validation:
+  max_snapshot_age_s: 20.0
+  require_map_fingerprint: true
+  require_region_geometry_fingerprint: true
+  require_trajectory_revision_match: true
+  require_decision_revalidation: true
+  require_visual_context_for_visual_mode: true
+  require_region_stable: true
+  require_region_snapshot_eligible: true
+  reject_blacklisted_region: true
+
+safety:
+  allow_motion: false
+  allow_cmd_vel: false
+  allow_nav2: false
+  allow_goal_publish: false

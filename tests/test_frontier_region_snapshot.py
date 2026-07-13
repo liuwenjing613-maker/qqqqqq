@@ -21,6 +21,7 @@ from src.planning.frontier_region_debug_core import (  # noqa: E402
     MapHealthResult,
     MapMetadata,
     RobotPose2D,
+    build_region_geometry_payload,
     build_region_snapshot_payload,
     generate_snapshot_id,
 )
@@ -151,6 +152,25 @@ class TestRegionSnapshot(unittest.TestCase):
         self.assertEqual(parsed["robot_pose"]["x"], 0.03)
         self.assertEqual(len(parsed["accepted_regions"]), 1)
         self.assertEqual(parsed["accepted_regions"][0]["label"], "A")
+
+    def test_region_geometry_payload_includes_frontier_cells(self) -> None:
+        region = _region("R0124_01", 0.0, 1.0, 0.0, 1.0)
+        region.frontier_cells = [(10, 20), (10, 21), (11, 20)]
+        region.track_id = "T000001"
+        region.stable = True
+        payload = build_region_geometry_payload(
+            _result([region]),
+            _meta(),
+            "RS_geom_test",
+        )
+        self.assertEqual(payload["snapshot_id"], "RS_geom_test")
+        entry = payload["regions"]["A"]
+        self.assertEqual(entry["internal_region_id"], "R0124_01")
+        self.assertEqual(entry["track_id"], "T000001")
+        self.assertEqual(len(entry["frontier_cells_grid"]), 3)
+        self.assertEqual(len(entry["frontier_points_map"]), 3)
+        self.assertTrue(entry["stable"])
+        self.assertNotIn("label", entry)
 
 
 if __name__ == "__main__":

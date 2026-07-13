@@ -16,6 +16,10 @@ topics:
   rejected_region_markers: /qwen_explore_debug/rejected_region_markers
   annotated_map: /qwen_explore_debug/annotated_map/compressed
   region_snapshot_json: /qwen_explore_debug/region_snapshot_json
+  trajectory_path: /qwen_explore_debug/trajectory_path
+  trajectory_markers: /qwen_explore_debug/trajectory_markers
+  visited_area_grid: /qwen_explore_debug/visited_area_grid
+  trajectory_json: /qwen_explore_debug/trajectory_json
 
 frames:
   map: map
@@ -59,6 +63,7 @@ snapshot:
   expires_after_s: 300.0
   service_name: /qwen_explore_debug/capture_region_snapshot
   topic: /qwen_explore_debug/region_snapshot_json
+  write_region_geometry: true
 
 logging:
   root_dir: logs/qwen_region_explore
@@ -74,3 +79,108 @@ safety:
   motion_enabled: false
   qwen_enabled: false
   nav2_enabled: false
+
+region_tracking:
+  enabled: true
+  max_centroid_match_distance_m: 0.35
+  max_bearing_difference_deg: 25.0
+  max_cell_count_change_ratio: 0.60
+  min_bbox_iou: 0.05
+  max_missing_cycles: 2
+
+region_stability:
+  enabled: true
+  min_consecutive_cycles: 3
+  min_age_s: 2.0
+  max_centroid_drift_m: 0.20
+  max_bearing_drift_deg: 20.0
+  max_cell_count_change_ratio: 0.40
+
+near_region_guard:
+  hard_reject_distance_m: 0.60
+  soft_penalty_end_distance_m: 1.00
+  soft_penalty_max: 0.45
+  allow_near_region_if_persistent_cycles: 5
+  allow_near_region_if_unknown_gain_ratio_over_best: 0.85
+
+observation_gate:
+  require_observation_window: true
+  start_service: /qwen_explore_debug/start_observation_window
+  full_scan_threshold_deg: 350.0
+  max_translation_during_scan_m: 0.20
+  settle_time_s: 1.5
+  settle_max_translation_m: 0.05
+  settle_max_yaw_change_deg: 5.0
+  map_stable_cycles: 3
+  max_frontier_count_change_ratio: 0.15
+  max_accepted_region_count_change: 1
+  max_map_cell_change_ratio: 0.05
+  observation_timeout_s: 120.0
+
+region_history:
+  enabled: true
+  max_observation_poses: 50
+  hard_reject_recent_pose_radius_m: 0.60
+  strong_penalty_radius_m: 0.90
+  weak_penalty_radius_m: 1.20
+  recent_pose_penalty_max: 0.50
+  selection_penalty_per_count: 0.08
+  visit_penalty_per_count: 0.15
+  navigation_failure_penalty_per_count: 0.25
+  blacklist_after_navigation_failures: 3
+
+geometric_scoring:
+  enabled: true
+  weights:
+    unknown_gain: 0.22
+    clearance: 0.18
+    frontier_size: 0.12
+    distance_preference: 0.13
+    persistence: 0.12
+    region_completeness: 0.08
+    trajectory_novelty: 0.15
+  penalties:
+    near_robot: 0.15
+    recent_observation: 0.20
+    selection_count: 0.15
+    visit_count: 0.15
+    navigation_failure: 0.20
+    trajectory_revisit: 0.15
+  preferred_distance_m: 1.50
+  preferred_distance_tolerance_m: 1.00
+  minimum_eligible_score: 0.40
+  top_k_for_qwen: 5
+
+trajectory:
+  enabled: true
+  sample_period_s: 1.0
+  max_tf_age_s: 0.30
+  min_vertex_distance_m: 0.05
+  min_vertex_yaw_change_deg: 10.0
+  max_vertex_interval_s: 5.0
+  min_time_vertex_distance_m: 0.01
+  min_time_vertex_yaw_change_deg: 2.0
+  max_raw_samples: 20000
+  max_vertices: 10000
+  atomic_save_interval_s: 5.0
+  persist_across_node_restart: false
+  visited_corridor_radius_m: 0.35
+  recent_path_window_s: 60.0
+  local_region_analysis_radius_m: 0.80
+  strong_revisit_distance_m: 0.45
+  weak_revisit_distance_m: 1.20
+  hard_reject_heavily_revisited: false
+  publish_path: true
+  publish_markers: true
+  publish_visited_area_grid: true
+  publish_trajectory_json: true
+  draw_on_annotated_map: true
+  runtime_file: runtime/qwen_region_debug/trajectory_session.json
+  reset_service: /qwen_explore_debug/reset_trajectory_history
+
+data_contract:
+  config_file: configs/exploration_data_contract.yaml
+  exploration_contract_version: "1.0"
+  region_snapshot_schema_version: "1.0"
+  region_geometry_schema_version: "1.0"
+  trajectory_schema_version: "1.0"

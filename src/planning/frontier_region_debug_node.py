@@ -18,8 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import rclpy
 import yaml
-from geometry_msgs.msg import Point, Pose, Quaternion
-from nav_msgs.msg import OccupancyGrid
+from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
+from nav_msgs.msg import OccupancyGrid, Path as NavPath
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CompressedImage
@@ -38,6 +38,7 @@ from src.planning.frontier_region_debug_core import (  # noqa: E402
     RobotPose2D,
     _CV2_AVAILABLE,
     analyze_frontier_regions,
+    build_region_geometry_payload,
     build_region_snapshot_payload,
     generate_snapshot_id,
     grid_row_to_image_y,
@@ -48,6 +49,17 @@ from src.planning.frontier_region_debug_core import (  # noqa: E402
     validate_config,
     world_to_grid,
 )
+from src.planning.region_candidate_guard import (  # noqa: E402
+    ObservationWindow,
+    RegionTrack,
+    guard_regions_for_cycle,
+    track_to_dict,
+)
+from src.planning.region_history_store import (  # noqa: E402
+    ObservationPose,
+    RegionHistoryStore,
+)
+from src.planning.robot_trajectory_store import RobotTrajectoryStore  # noqa: E402
 
 try:
     import cv2  # type: ignore
@@ -57,6 +69,17 @@ except ImportError:  # pragma: no cover
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _observation_to_dict(obs: ObservationWindow) -> Dict[str, Any]:
+    return {
+        "state": obs.state,
+        "window_id": obs.window_id,
+        "accumulated_rotation_deg": obs.accumulated_rotation_deg,
+        "translation_during_scan_m": obs.translation_during_scan_m,
+        "settle_elapsed_s": obs.settle_elapsed_s,
+        "map_stable_cycle_count": obs.map_stable_cycle_count,
+    }
 
 
 def _quat_to_yaw(q: Quaternion) -> float:
@@ -98,6 +121,17 @@ class FrontierRegionDebugNode(Node):
         self._snapshot_count = 0
         self._latest_snapshot_id: Optional[str] = None
         self._tf_ok = False
+        self._tracks: Dict[str, RegionTrack] = {}
+        self._observation = ObservationWindow()
+        history_path = ROOT / "runtime/qwen_region_debug/region_history.json"
+        self._history = RegionHistoryStore.load(history_path)
+        self._history_path = history_path
+        self._last_guard_summary: Dict[str, Any] = {}
+        traj_cfg = cfg.get("trajectory", {})
+        traj_runtime = ROOT / str(traj_cfg.get("runtime_file", "runtime/qwen_region_debug/trajectory_session.json"))
+        self._trajectory = RobotTrajectoryStore(cfg, traj_runtime, map_frame=str(cfg.get("frames", {}).get("map", "map")))
+        self._trajectory_status = "INIT"
+        self._last_visited_grid_sig: Optional[Tuple[int, int, int, float, float]] = None
 
         topics = cfg["topics"]
         frames = cfg["frames"]
@@ -132,12 +166,40 @@ class FrontierRegionDebugNode(Node):
         )
         self.pub_snapshot = self.create_publisher(String, snap_topic, 10)
 
+        traj_topics = cfg.get("topics", {})
+        self.pub_trajectory_path = self.create_publisher(
+            NavPath, traj_topics.get("trajectory_path", "/qwen_explore_debug/trajectory_path"), 10
+        )
+        self.pub_trajectory_markers = self.create_publisher(
+            MarkerArray,
+            traj_topics.get("trajectory_markers", "/qwen_explore_debug/trajectory_markers"),
+            10,
+        )
+        self.pub_visited_area_grid = self.create_publisher(
+            OccupancyGrid,
+            traj_topics.get("visited_area_grid", "/qwen_explore_debug/visited_area_grid"),
+            10,
+        )
+        self.pub_trajectory_json = self.create_publisher(
+            String, traj_topics.get("trajectory_json", "/qwen_explore_debug/trajectory_json"), 10
+        )
+
         snap_cfg = cfg.get("snapshot", {})
         service_name = str(
             snap_cfg.get("service_name", "/qwen_explore_debug/capture_region_snapshot")
         )
         self._snapshot_expires_s = float(snap_cfg.get("expires_after_s", 300.0))
         self.create_service(Trigger, service_name, self._capture_snapshot_cb)
+        obs_service = str(cfg.get("observation_gate", {}).get(
+            "start_service", "/qwen_explore_debug/start_observation_window"
+        ))
+        self.create_service(Trigger, obs_service, self._start_observation_window_cb)
+        reset_service = str(
+            cfg.get("trajectory", {}).get(
+                "reset_service", "/qwen_explore_debug/reset_trajectory_history"
+            )
+        )
+        self.create_service(Trigger, reset_service, self._reset_trajectory_history_cb)
 
         log_cfg = cfg.get("logging", {})
         self._flush = bool(log_cfg.get("flush_every_record", True))
@@ -149,12 +211,21 @@ class FrontierRegionDebugNode(Node):
             self._jl_regions = JsonlWriter(run_dir / "regions.jsonl", self._flush)
             self._jl_rejections = JsonlWriter(run_dir / "rejections.jsonl", self._flush)
             self._jl_events = JsonlWriter(run_dir / "events.jsonl", self._flush)
+            self._jl_tracks = JsonlWriter(run_dir / "region_tracks.jsonl", self._flush)
+            self._jl_obs = JsonlWriter(run_dir / "observation_windows.jsonl", self._flush)
+            self._jl_geo = JsonlWriter(run_dir / "geometric_scores.jsonl", self._flush)
+            self._jl_traj = JsonlWriter(run_dir / "trajectory_samples.jsonl", self._flush)
         else:
             self._jl_health = self._jl_cycles = self._jl_regions = None
             self._jl_rejections = self._jl_events = None
+            self._jl_tracks = self._jl_obs = self._jl_geo = None
+            self._jl_traj = None
 
         period = float(cfg.get("node", {}).get("analysis_period_s", 1.0))
         self.create_timer(period, self._analysis_timer_cb)
+        if bool(cfg.get("trajectory", {}).get("enabled", True)):
+            traj_period = float(cfg.get("trajectory", {}).get("sample_period_s", 1.0))
+            self.create_timer(traj_period, self._trajectory_timer_cb)
         self.get_logger().info(
             f"Frontier region debug node started (observation-only, period={period}s)"
         )
@@ -165,6 +236,12 @@ class FrontierRegionDebugNode(Node):
         self._latest_meta = meta
 
     def _lookup_robot_pose(self) -> Tuple[Optional[RobotPose2D], Optional[str], List[Dict[str, Any]]]:
+        robot, code, errors, _, _ = self._lookup_robot_tf_detail()
+        return robot, code, errors
+
+    def _lookup_robot_tf_detail(
+        self,
+    ) -> Tuple[Optional[RobotPose2D], Optional[str], List[Dict[str, Any]], float, float]:
         errors: List[Dict[str, Any]] = []
         try:
             tf = self.tf_buffer.lookup_transform(
@@ -176,7 +253,17 @@ class FrontierRegionDebugNode(Node):
             t = tf.transform.translation
             q = tf.transform.rotation
             yaw = _quat_to_yaw(q)
-            return RobotPose2D(x=float(t.x), y=float(t.y), yaw_rad=yaw), None, errors
+            now_ns = self.get_clock().now().nanoseconds
+            tf_ns = tf.header.stamp.sec * 1_000_000_000 + tf.header.stamp.nanosec
+            tf_age_s = max(0.0, (now_ns - tf_ns) * 1e-9)
+            tf_stamp_sec = float(tf.header.stamp.sec) + float(tf.header.stamp.nanosec) * 1e-9
+            return (
+                RobotPose2D(x=float(t.x), y=float(t.y), yaw_rad=yaw),
+                None,
+                errors,
+                tf_stamp_sec,
+                tf_age_s,
+            )
         except TransformException as exc:
             msg = str(exc)
             if "extrapolation" in msg.lower():
@@ -186,10 +273,10 @@ class FrontierRegionDebugNode(Node):
             else:
                 code = "TF_MAP_BASE_MISSING"
             errors.append({"code": code, "detail": msg})
-            return None, code, errors
+            return None, code, errors, 0.0, 0.0
         except Exception as exc:  # pragma: no cover
             errors.append({"code": "TF_INVALID_QUATERNION", "detail": str(exc)})
-            return None, "TF_INVALID_QUATERNION", errors
+            return None, "TF_INVALID_QUATERNION", errors, 0.0, 0.0
 
     def _publish_heartbeat(
         self,
@@ -212,6 +299,20 @@ class FrontierRegionDebugNode(Node):
             "snapshot_service_ready": True,
             "latest_snapshot_id": self._latest_snapshot_id,
             "snapshot_count": self._snapshot_count,
+            "observation_state": self._observation.state,
+            "accumulated_rotation_deg": round(self._observation.accumulated_rotation_deg, 2),
+            "translation_during_scan_m": round(self._observation.translation_during_scan_m, 3),
+            "settle_elapsed_s": round(self._observation.settle_elapsed_s, 2),
+            "map_stable_cycle_count": self._observation.map_stable_cycle_count,
+            "snapshot_gate_ready": self._observation.snapshot_gate_ready(
+                self._last_guard_summary.get("snapshot_eligible_count", 0)
+            ),
+            "guard_summary": self._last_guard_summary,
+            "trajectory_session_id": self._trajectory.trajectory_session_id,
+            "trajectory_revision": self._trajectory.trajectory_revision,
+            "trajectory_vertex_count": len(self._trajectory.session.vertices),
+            "trajectory_length_m": round(self._trajectory.session.trajectory_length_m, 3),
+            "trajectory_status": self._trajectory_status,
             "timestamp": _utc_now_iso(),
         }
         msg = String()
@@ -274,6 +375,70 @@ class FrontierRegionDebugNode(Node):
 
             assert robot is not None
             result = analyze_frontier_regions(data, meta, robot, self.cfg, cycle_id=cycle)
+            self._history.apply_to_tracks(self._tracks)  # type: ignore[arg-type]
+            self._tracks, guarded = guard_regions_for_cycle(
+                result.regions,
+                self._tracks,
+                cycle,
+                now_sec,
+                self.cfg,
+                self._history.observation_poses,
+                trajectory_session=self._trajectory.session,
+            )
+            for region, metrics, track in guarded:
+                region.track_id = metrics.track_id
+                region.stable = metrics.stable
+                region.persistence_cycles = metrics.persistence_cycles
+                region.age_s = metrics.age_s
+                region.centroid_drift_m = metrics.centroid_drift_m
+                region.bearing_drift_deg = metrics.bearing_drift_deg
+                region.guard_cell_count_change_ratio = metrics.cell_count_change_ratio
+                region.stability_rejection_reasons = list(metrics.stability_rejection_reasons)
+                region.near_robot_penalty = metrics.near_robot_penalty
+                region.recent_observation_penalty = metrics.recent_observation_penalty
+                region.distance_to_nearest_observation_pose_m = metrics.distance_to_nearest_observation_pose_m
+                region.nearest_trajectory_distance_m = metrics.nearest_trajectory_distance_m
+                region.nearby_trajectory_vertex_count = metrics.nearby_trajectory_vertex_count
+                region.nearby_recent_trajectory_count = metrics.nearby_recent_trajectory_count
+                region.last_nearby_visit_age_s = metrics.last_nearby_visit_age_s
+                region.trajectory_density_score = metrics.trajectory_density_score
+                region.trajectory_novelty_score = metrics.trajectory_novelty_score
+                region.trajectory_revisit_penalty = metrics.trajectory_revisit_penalty
+                region.geo_score_before_trajectory = metrics.geo_score_before_trajectory
+                region.geo_score_after_trajectory = metrics.geo_score_after_trajectory
+                region.geo_score = metrics.geo_score
+                region.geo_rank = metrics.geo_rank
+                region.score_components = dict(metrics.score_components)
+                region.penalty_components = dict(metrics.penalty_components)
+                region.score_explanation = metrics.score_explanation
+                region.blacklisted = track.blacklisted
+                region.snapshot_eligible = metrics.snapshot_eligible and region.accepted
+                region.visited_count = track.visit_count
+                region.navigation_failure_count = track.navigation_failure_count
+            self._observation.update(robot, now_sec, result, result.map_health, self.cfg)
+            eligible = sum(1 for r in result.regions if r.snapshot_eligible and r.stable)
+            self._last_guard_summary = {
+                "track_count": len(self._tracks),
+                "stable_count": sum(1 for r in result.regions if r.stable),
+                "snapshot_eligible_count": eligible,
+                "near_hard_reject": sum(1 for r in result.regions if "REGION_TOO_CLOSE_HARD" in r.stability_rejection_reasons),
+                "near_soft_penalty": sum(1 for r in result.regions if r.near_robot_penalty > 0),
+                "recent_observation_penalty": sum(1 for r in result.regions if r.recent_observation_penalty > 0),
+            }
+            self._log_jsonl(self._jl_tracks, {"cycle_id": cycle, "tracks": [track_to_dict(t) for t in self._tracks.values()]})
+            self._log_jsonl(self._jl_obs, {"cycle_id": cycle, "observation": _observation_to_dict(self._observation)})
+            for region in result.regions:
+                self._log_jsonl(self._jl_geo, {
+                    "cycle_id": cycle,
+                    "region_id": region.region_id,
+                    "track_id": region.track_id,
+                    "geo_score": region.geo_score,
+                    "geo_rank": region.geo_rank,
+                    "score_components": region.score_components,
+                    "penalty_components": region.penalty_components,
+                    "snapshot_eligible": region.snapshot_eligible,
+                    "stability_rejection_reasons": region.stability_rejection_reasons,
+                })
             self._latest_result = result
             self._latest_robot = robot
             self._tf_ok = True
@@ -537,6 +702,209 @@ class FrontierRegionDebugNode(Node):
         h.frame_id = self.map_frame
         return h
 
+    def _trajectory_meta_dict(self) -> Dict[str, Any]:
+        tcfg = self.cfg.get("trajectory", {})
+        topics = self.cfg.get("topics", {})
+        return {
+            "trajectory_session_id": self._trajectory.trajectory_session_id,
+            "trajectory_revision": self._trajectory.trajectory_revision,
+            "trajectory_length_m": self._trajectory.session.trajectory_length_m,
+            "trajectory_raw_sample_count": len(self._trajectory.session.raw_samples),
+            "trajectory_vertex_count": len(self._trajectory.session.vertices),
+            "visited_corridor_radius_m": float(tcfg.get("visited_corridor_radius_m", 0.35)),
+            "trajectory_path_topic": topics.get(
+                "trajectory_path", "/qwen_explore_debug/trajectory_path"
+            ),
+            "visited_area_grid_topic": topics.get(
+                "visited_area_grid", "/qwen_explore_debug/visited_area_grid"
+            ),
+        }
+
+    def _trajectory_overlay_dict(self, meta: MapMetadata) -> Dict[str, Any]:
+        tcfg = self.cfg.get("trajectory", {})
+        overlay: Dict[str, Any] = {
+            "trajectory_session_id": self._trajectory.trajectory_session_id,
+            "trajectory_revision": self._trajectory.trajectory_revision,
+            "trajectory_vertex_count": len(self._trajectory.session.vertices),
+            "trajectory_length_m": self._trajectory.session.trajectory_length_m,
+            "vertices": [{"x": v.x, "y": v.y, "yaw_rad": v.yaw_rad} for v in self._trajectory.session.vertices],
+            "observation_poses": list(self._history.observation_poses),
+        }
+        if bool(tcfg.get("draw_on_annotated_map", True)) and self._latest_meta is not None:
+            overlay["visited_area_data"] = self._trajectory.build_visited_area_data(
+                width=meta.width,
+                height=meta.height,
+                resolution=meta.resolution,
+                origin_x=meta.origin_x,
+                origin_y=meta.origin_y,
+            )
+        return overlay
+
+    def _trajectory_timer_cb(self) -> None:
+        if not bool(self.cfg.get("trajectory", {}).get("enabled", True)):
+            return
+        now_sec = self.get_clock().now().nanoseconds * 1e-9
+        max_tf_age = float(self.cfg.get("trajectory", {}).get("max_tf_age_s", 0.30))
+        robot, tf_code, _, tf_stamp_sec, tf_age_s = self._lookup_robot_tf_detail()
+        if robot is None:
+            sample = self._trajectory.ingest_tf_missing(now_sec)
+            self._trajectory_status = tf_code or "TRAJECTORY_TF_MISSING"
+            self._log_jsonl(
+                self._jl_traj,
+                {
+                    "stamp_sec": now_sec,
+                    "status": self._trajectory_status,
+                    "valid": sample.valid,
+                    "rejection_reason": sample.rejection_reason,
+                },
+            )
+        else:
+            sample, vertex, status = self._trajectory.ingest_tf_pose(
+                stamp_sec=now_sec,
+                x=robot.x,
+                y=robot.y,
+                yaw_rad=robot.yaw_rad,
+                tf_stamp_sec=tf_stamp_sec,
+                tf_age_s=tf_age_s,
+                max_tf_age_s=max_tf_age,
+            )
+            self._trajectory_status = status
+            record: Dict[str, Any] = {
+                "stamp_sec": now_sec,
+                "status": status,
+                "valid": sample.valid,
+                "x": sample.x,
+                "y": sample.y,
+                "yaw_deg": math.degrees(sample.yaw_rad),
+                "rejection_reason": sample.rejection_reason,
+            }
+            if vertex is not None:
+                record["vertex_id"] = vertex.vertex_id
+                record["creation_reason"] = vertex.creation_reason
+            self._log_jsonl(self._jl_traj, record)
+            self._trajectory.maybe_save(now_sec)
+        self._publish_trajectory_diagnostics()
+
+    def _publish_trajectory_diagnostics(self) -> None:
+        tcfg = self.cfg.get("trajectory", {})
+        if self._latest_meta is None:
+            return
+        meta = self._latest_meta
+        stamp = self._stamp_header()
+
+        if bool(tcfg.get("publish_path", True)):
+            path_msg = NavPath()
+            path_msg.header = stamp
+            for v in self._trajectory.session.vertices:
+                ps = PoseStamped()
+                ps.header = stamp
+                ps.pose.position.x = v.x
+                ps.pose.position.y = v.y
+                ps.pose.position.z = 0.0
+                ps.pose.orientation.z = math.sin(v.yaw_rad / 2.0)
+                ps.pose.orientation.w = math.cos(v.yaw_rad / 2.0)
+                path_msg.poses.append(ps)
+            self.pub_trajectory_path.publish(path_msg)
+
+        if bool(tcfg.get("publish_markers", True)):
+            arr = MarkerArray()
+            arr.markers.append(self._delete_all_marker("trajectory", 0))
+            line = Marker()
+            line.header = stamp
+            line.ns = "trajectory"
+            line.id = 1
+            line.type = Marker.LINE_STRIP
+            line.action = Marker.ADD
+            line.scale.x = 0.06
+            line.color = ColorRGBA(r=0.0, g=0.55, b=1.0, a=0.95)
+            for v in self._trajectory.session.vertices:
+                line.points.append(Point(x=v.x, y=v.y, z=0.05))
+            arr.markers.append(line)
+
+            obs = Marker()
+            obs.header = stamp
+            obs.ns = "trajectory"
+            obs.id = 2
+            obs.type = Marker.SPHERE_LIST
+            obs.action = Marker.ADD
+            obs.scale.x = obs.scale.y = obs.scale.z = 0.12
+            obs.color = ColorRGBA(r=1.0, g=0.0, b=1.0, a=0.9)
+            for pose in self._history.observation_poses:
+                obs.points.append(
+                    Point(x=float(pose.get("x", 0)), y=float(pose.get("y", 0)), z=0.08)
+                )
+            arr.markers.append(obs)
+
+            text = Marker()
+            text.header = stamp
+            text.ns = "trajectory"
+            text.id = 3
+            text.type = Marker.TEXT_VIEW_FACING
+            text.action = Marker.ADD
+            text.pose.position.x = meta.origin_x + 0.2
+            text.pose.position.y = meta.origin_y + 0.2
+            text.pose.position.z = 0.5
+            text.scale.z = 0.14
+            text.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
+            text.text = (
+                f"{self._trajectory.trajectory_session_id}\n"
+                f"len={self._trajectory.session.trajectory_length_m:.2f}m\n"
+                f"raw={len(self._trajectory.session.raw_samples)} "
+                f"vtx={len(self._trajectory.session.vertices)}"
+            )
+            arr.markers.append(text)
+            self.pub_trajectory_markers.publish(arr)
+
+        if bool(tcfg.get("publish_visited_area_grid", True)):
+            sig = (
+                meta.width,
+                meta.height,
+                int(meta.resolution * 10000),
+                meta.origin_x,
+                meta.origin_y,
+            )
+            grid = OccupancyGrid()
+            grid.header = stamp
+            grid.info.resolution = meta.resolution
+            grid.info.width = meta.width
+            grid.info.height = meta.height
+            grid.info.origin.position.x = meta.origin_x
+            grid.info.origin.position.y = meta.origin_y
+            grid.info.origin.orientation.w = 1.0
+            grid.data = self._trajectory.build_visited_area_data(
+                width=meta.width,
+                height=meta.height,
+                resolution=meta.resolution,
+                origin_x=meta.origin_x,
+                origin_y=meta.origin_y,
+            )
+            self._last_visited_grid_sig = sig
+            self.pub_visited_area_grid.publish(grid)
+
+        if bool(tcfg.get("publish_trajectory_json", True)):
+            payload = self._trajectory.trajectory_json_payload()
+            msg = String()
+            msg.data = json.dumps(payload, ensure_ascii=False)
+            self.pub_trajectory_json.publish(msg)
+
+    def _reset_trajectory_history_cb(
+        self,
+        _request: Trigger.Request,
+        response: Trigger.Response,
+    ) -> Trigger.Response:
+        self._trajectory.reset()
+        self._trajectory.save_atomic()
+        self._trajectory_status = "RESET"
+        self._last_visited_grid_sig = None
+        self._publish_trajectory_diagnostics()
+        response.success = True
+        response.message = (
+            f"trajectory_reset session_id={self._trajectory.trajectory_session_id} "
+            f"revision={self._trajectory.trajectory_revision}"
+        )
+        self.get_logger().info(f"[TRAJECTORY_RESET] {response.message}")
+        return response
+
     def _delete_all_marker(self, ns: str, mid: int) -> Marker:
         m = Marker()
         m.header = self._stamp_header()
@@ -668,7 +1036,10 @@ class FrontierRegionDebugNode(Node):
             )
             return
         data, _ = occupancy_grid_to_array(self._latest_grid)  # type: ignore[arg-type]
-        img = render_annotated_map(data, meta, robot, result, cycle, self.cfg)
+        overlay = None
+        if bool(self.cfg.get("trajectory", {}).get("draw_on_annotated_map", True)):
+            overlay = self._trajectory_overlay_dict(meta)
+        img = render_annotated_map(data, meta, robot, result, cycle, self.cfg, overlay)
         if img is None:
             return
         img_path = self.run_dir / "latest_annotated_map.png"
@@ -681,6 +1052,26 @@ class FrontierRegionDebugNode(Node):
             msg.format = "png"
             msg.data = buf.tobytes()
             self.pub_annotated.publish(msg)
+
+    def _start_observation_window_cb(
+        self,
+        _request: Trigger.Request,
+        response: Trigger.Response,
+    ) -> Trigger.Response:
+        robot, _, _ = self._lookup_robot_pose()
+        if robot is None:
+            response.success = False
+            response.message = "SNAPSHOT_TF_INVALID"
+            return response
+        now_s = self.get_clock().now().nanoseconds * 1e-9
+        wid = f"OW_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}"
+        self._observation.start(wid, robot, now_s)
+        self.get_logger().info(
+            f"[OBSERVATION_WINDOW] started id={wid} state=OBSERVING rotation_deg=0"
+        )
+        response.success = True
+        response.message = f"observation_window_id={wid} state=OBSERVING"
+        return response
 
     def _capture_snapshot_cb(
         self,
@@ -705,9 +1096,16 @@ class FrontierRegionDebugNode(Node):
                 f"SNAPSHOT_ANALYSIS_NOT_READY status={self._latest_result.stats.status}"
             )
             return response
-        if not self._latest_result.regions:
+        eligible = [r for r in self._latest_result.regions if r.snapshot_eligible and r.stable]
+        require_obs = bool(self.cfg.get("observation_gate", {}).get("require_observation_window", True))
+        block = self._observation.snapshot_block_reason(len(eligible), require_obs)
+        if block:
             response.success = False
-            response.message = "SNAPSHOT_NO_ACCEPTED_REGION"
+            response.message = block
+            return response
+        if not eligible:
+            response.success = False
+            response.message = "SNAPSHOT_NO_STABLE_REGION"
             return response
         if self._latest_annotated_path is None or not self._latest_annotated_path.exists():
             response.success = False
@@ -732,10 +1130,41 @@ class FrontierRegionDebugNode(Node):
             capture_time,
             self._snapshot_expires_s,
             str(annotated_dest),
+            observation_meta={
+                "observation_window_id": self._observation.window_id,
+                "full_scan_completed": self._observation.accumulated_rotation_deg >= float(
+                    self.cfg.get("observation_gate", {}).get("full_scan_threshold_deg", 350.0)
+                ),
+                "accumulated_rotation_deg": self._observation.accumulated_rotation_deg,
+                "map_stable": self._observation.map_stable_cycle_count >= int(
+                    self.cfg.get("observation_gate", {}).get("map_stable_cycles", 3)
+                ),
+                "robot_settled": self._observation.state in ("MAP_STABILIZING", "READY_FOR_SNAPSHOT"),
+                "history_version": self._history.version,
+                "guard_summary": self._last_guard_summary,
+                "minimum_eligible_score": float(
+                    self.cfg.get("geometric_scoring", {}).get("minimum_eligible_score", 0.40)
+                ),
+            },
+            top_k=int(self.cfg.get("geometric_scoring", {}).get("top_k_for_qwen", 5)),
+            trajectory_meta=self._trajectory_meta_dict(),
         )
         (snap_dir / "region_snapshot.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        if bool(self.cfg.get("snapshot", {}).get("write_region_geometry", True)):
+            geo_payload = build_region_geometry_payload(
+                self._latest_result,
+                self._latest_meta,
+                snapshot_id,
+                top_k=int(self.cfg.get("geometric_scoring", {}).get("top_k_for_qwen", 5)),
+                minimum_eligible_score=float(
+                    self.cfg.get("geometric_scoring", {}).get("minimum_eligible_score", 0.40)
+                ),
+            )
+            (snap_dir / "region_geometry.json").write_text(
+                json.dumps(geo_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
         capture_meta = {
             "snapshot_id": snapshot_id,
             "cycle_id": self._latest_result.cycle_id,
@@ -754,6 +1183,26 @@ class FrontierRegionDebugNode(Node):
 
         self._snapshot_count += 1
         self._latest_snapshot_id = snapshot_id
+        known_cells = self._latest_result.map_health.free_cells + self._latest_result.map_health.occupied_cells
+        top_label = payload["accepted_regions"][0]["label"] if payload["accepted_regions"] else ""
+        top_track = payload["accepted_regions"][0].get("track_id", "") if payload["accepted_regions"] else ""
+        self._history.add_observation_pose(
+            ObservationPose(
+                observation_pose_id=f"OP_{snapshot_id}",
+                x=self._latest_robot.x,
+                y=self._latest_robot.y,
+                yaw=math.degrees(self._latest_robot.yaw_rad),
+                capture_time=capture_time,
+                snapshot_id=snapshot_id,
+                selected_track_id=top_track,
+                map_known_cell_count=known_cells,
+            ),
+            max_poses=int(self.cfg.get("region_history", {}).get("max_observation_poses", 50)),
+        )
+        self._trajectory.add_observation_pose_id(f"OP_{snapshot_id}")
+        if top_track:
+            self._history.update_track_stats(top_track, visit=True, capture_time=capture_time)
+        self._history.save_atomic(self._history_path)
         labels = [r["label"] for r in payload["accepted_regions"]]
         self.get_logger().info(
             "[REGION_SNAPSHOT]\n"

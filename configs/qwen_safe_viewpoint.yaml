@@ -1,0 +1,57 @@
+safe_viewpoint:
+  enabled: true
+  algorithm_version: phase3a_v1
+  schema_version: "1.0"
+  contract_version: "1.0"
+
+map:
+  free_max_value: 20
+  occupied_min_value: 65
+  unknown_value: -1
+
+robot:
+  footprint_radius_m: 0.23
+  safety_margin_m: 0.10
+  required_clearance_m: 0.33
+
+viewpoint_generation:
+  stand_off_distances_m: [0.45, 0.60, 0.75, 0.90]
+  lateral_offsets_m: [-0.30, -0.15, 0.0, 0.15, 0.30]
+  frontier_sample_spacing_m: 0.20
+  local_search_radius_m: 0.20
+  local_search_step_cells: 1
+  max_raw_candidates: 500
+
+viewpoint_validation:
+  minimum_footprint_free_ratio: 1.0
+  local_free_radius_m: 0.45
+  minimum_local_free_ratio: 0.80
+  min_frontier_distance_m: 0.35
+  max_frontier_distance_m: 1.10
+  min_robot_distance_m: 0.50
+  max_robot_distance_m: 2.50
+  preferred_robot_distance_m: 1.50
+  require_line_of_sight: true
+
+viewpoint_scoring:
+  sensor_fov_deg: 80.0
+  visible_unknown_radius_m: 2.00
+  weights:
+    clearance: 0.25
+    visible_unknown: 0.20
+    local_free_space: 0.15
+    frontier_distance_preference: 0.15
+    robot_distance_preference: 0.10
+    trajectory_novelty: 0.10
+    turn_cost: 0.05
+
+viewpoint_selection:
+  deduplication_distance_m: 0.20
+  deduplication_yaw_difference_deg: 20.0
+  max_output_candidates: 5
+
+safety:
+  allow_motion: false
+  allow_cmd_vel: false
+  allow_nav2: false
+  allow_goal_publish: false

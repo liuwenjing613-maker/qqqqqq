@@ -1,0 +1,48 @@
+visual_context:
+  enabled: true
+  image_topic: "/image_raw"
+  image_transport: raw
+  target_relative_angles_deg: [0, 45, 90, 135, 180, 225, 270, 315]
+  max_angle_error_deg: 12.0
+  max_tf_age_s: 0.30
+  complete_rotation_threshold_deg: 350.0
+  max_capture_duration_s: 90.0
+  allow_same_frame_for_multiple_views: false
+  save_frames: true
+  generate_contact_sheet: true
+  generate_decision_board: true
+  map_frame: map
+  robot_frame: base_link
+
+region_view_mapping:
+  max_primary_angle_difference_deg: 35.0
+  include_adjacent_views: true
+  max_secondary_angle_difference_deg: 70.0
+
+topics:
+  snapshot: /qwen_explore_debug/region_snapshot_json
+  capture_status: /qwen_explore/visual_capture_status
+  manifest_json: /qwen_explore/visual_context_manifest_json
+  region_view_mapping_json: /qwen_explore/region_view_mapping_json
+  contact_sheet: /qwen_explore/panorama_contact_sheet/compressed
+  decision_board: /qwen_explore/decision_board/compressed
+
+services:
+  start_capture: /qwen_explore/start_visual_context_capture
+  cancel_capture: /qwen_explore/cancel_visual_context_capture
+
+logging:
+  root_dir: logs/qwen_visual_context
+
+node:
+  name: region_visual_context
+
+safety:
+  allow_motion: false
+  allow_cmd_vel: false
+  allow_nav2: false
+
+data_contract:
+  config_file: configs/exploration_data_contract.yaml
+  exploration_contract_version: "1.0"
+  visual_context_schema_version: "1.0"

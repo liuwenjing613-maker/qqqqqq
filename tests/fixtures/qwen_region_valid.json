@@ -1,11 +1,16 @@
 {
   "snapshot_id": "RS_20260713T094328_0092",
+  "ranked_regions": ["B", "A"],
   "selected_region": "B",
   "fallback_regions": ["A"],
   "confidence": 0.78,
-  "reason_code": "UNEXPLORED_REGION_PRIORITY",
+  "reason_code": "BALANCED_EXPLORATION_VALUE",
   "evidence": [
-    "区域 B 的 unknown_gain_cells 更高",
-    "区域 B 的 frontier_cell_count 更大"
+    {
+      "region": "B",
+      "map_factors": ["unknown_gain更高", "区域稳定"],
+      "visual_factors": [],
+      "risks": ["path_checked=false"]
+    }
   ]
 }

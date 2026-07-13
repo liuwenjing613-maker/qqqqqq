@@ -30,9 +30,11 @@ from src.vlm.qwen_region_selector_core import (  # noqa: E402
     build_region_selection_prompt,
     decision_from_validation,
     decision_to_dict,
+    fuse_geometric_and_qwen_ranking,
     input_to_dict,
     labels_from_input,
     load_region_snapshot,
+    revalidate_decision,
     validate_qwen_decision,
     validate_region_snapshot,
 )
@@ -54,6 +56,7 @@ class QwenRegionSelectorNode(Node):
 
         self._latest_snapshot: Optional[Dict[str, Any]] = None
         self._latest_snapshot_time: float = 0.0
+        self._snapshot_at_request: Optional[Dict[str, Any]] = None
         self._latest_instruction: str = ""
         self._request_lock = threading.Lock()
         self._request_running = False
@@ -163,6 +166,7 @@ class QwenRegionSelectorNode(Node):
         shutil.copy2(map_path, call_dir / "annotated_map.png")
 
         t0 = time.perf_counter()
+        self._snapshot_at_request = json.loads(json.dumps(snap))
         api_result = call_qwen_region_selection(prompt, map_path, self.cfg)
         if api_result.error_code:
             err = {
@@ -181,12 +185,32 @@ class QwenRegionSelectorNode(Node):
             labels_from_input(inp),
         )
         decision = decision_from_validation(validation, inp.snapshot_id)
+        fusion = {}
+        if validation.decision_valid and validation.parsed:
+            fusion = fuse_geometric_and_qwen_ranking(inp.regions, validation.parsed, self.cfg)
+            rev_errors = revalidate_decision(
+                self._snapshot_at_request or snap,
+                self._latest_snapshot or snap,
+                fusion.get("algorithm_final_region"),
+                {r.label: {"stable": r.stable, "snapshot_eligible": r.snapshot_eligible} for r in inp.regions},
+                self.cfg,
+            )
+            if rev_errors:
+                validation.decision_valid = False
+                validation.errors.extend(rev_errors)
+                fusion["algorithm_final_region"] = None
         decision_dict = decision_to_dict(
             decision,
             decision_valid=validation.decision_valid,
             validation_errors=validation.errors,
             unsupported_visual_claims=validation.unsupported_visual_claims,
         )
+        decision_dict.update(fusion)
+        if fusion.get("algorithm_final_region"):
+            decision_dict["selected_region"] = fusion["algorithm_final_region"]
+            decision_dict["fallback_regions"] = [
+                x["label"] for x in fusion.get("fusion_scores", [])[1:3]
+            ]
 
         debug_payload = {
             "call_id": call_id,

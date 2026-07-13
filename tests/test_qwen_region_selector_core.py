@@ -71,9 +71,9 @@ class TestPrompt(unittest.TestCase):
     def test_prompt_contains_only_available_labels(self) -> None:
         inp, _ = load_region_snapshot(SNAPSHOT_PATH, "寻找绿色瓶子")
         prompt = build_region_selection_prompt(inp)
-        self.assertIn("Valid region labels ONLY: A, B", prompt)
+        self.assertIn("Valid labels ONLY: A, B", prompt)
         self.assertNotIn("Label C", prompt)
-        self.assertIn("MUST NOT output map coordinates", prompt)
+        self.assertIn("Do NOT output coordinates", prompt)
 
 
 class TestDecisionValidation(unittest.TestCase):

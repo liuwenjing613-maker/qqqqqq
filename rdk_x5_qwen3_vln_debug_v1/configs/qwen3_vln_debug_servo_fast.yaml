@@ -1,0 +1,56 @@
+qwen:
+  model: qwen3-vl-flash
+  api_key_env: DASHSCOPE_API_KEY
+  base_url_env: QWEN_BASE_URL
+  default_base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  timeout_sec: 20.0
+  max_retries: 0
+  temperature: 0.0
+  max_tokens: 24
+  enable_thinking: false
+  jpeg_quality: 72
+  min_pixels: 65536
+  max_pixels: 442368
+  vl_high_resolution_images: false
+warmup:
+  enabled: true
+prompts:
+  directory: prompts
+camera:
+  image_topic: /image_raw
+  input_transport: raw
+  expected_encoding: bgr8
+  api_max_width: 960
+  api_max_height: 0
+  subscriber_reliability: reliable
+bridge:
+  compressed_topic: /image
+  raw_topic: /image_raw
+  max_fps: 15.0
+  frame_id: usb_camera
+  publish_reliability: reliable
+visualization:
+  annotated_raw_topic: /qwen_vln/annotated_image
+  annotated_compressed_topic: /qwen_vln/annotated_image/compressed
+  jpeg_quality: 90
+  history_length: 1
+  publish_hz: 8.0
+  point_radius: 11
+  draw_center_line: true
+state_machine:
+  initial_instruction: find the bottle
+  observe_interval_sec: 1.0
+  track_interval_sec: 0.9
+  search_interval_sec: 1.2
+  verify_interval_sec: 9999.0
+  error_cooldown_sec: 3.0
+  auto_enter_search: true
+topics:
+  instruction: /qwen_vln/instruction
+  command: /qwen_vln/command
+  state: /qwen_vln/state
+  result_json: /qwen_vln/result_json
+  latency_ms: /qwen_vln/latency_ms
+  pixel_point: /qwen_vln/pixel_point
+  prompt_text: /qwen_vln/prompt_text
+  bridge_status: /image_raw_bridge/status

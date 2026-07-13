@@ -1,0 +1,74 @@
+{
+  "description": "Fictional consistent exploration bundle for unit tests — not from live robot",
+  "map_data": [
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, 0, 0, 0, 0, 0, -1, -1, -1, -1,
+    -1, 0, 0, 0, 0, 0, -1, -1, -1, -1,
+    -1, 0, 0, 0, 0, 0, -1, -1, -1, -1,
+    -1, 0, 0, 0, 0, 0, -1, -1, -1, -1,
+    -1, 0, 0, 0, 0, 0, -1, -1, -1, -1,
+    -1, 0, 0, 0, 0, 0, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+  ],
+  "selection_mode": "MAP_ONLY",
+  "decision_revalidation_passed": true,
+  "current_time": "2026-07-13T19:00:05+00:00",
+  "region_snapshot": {
+    "snapshot_id": "RS_20260713T190000_0092",
+    "capture_time": "2026-07-13T19:00:00+00:00",
+    "map_stamp": 1000.0,
+    "trajectory_session_id": "TRAJ_TEST_001",
+    "trajectory_revision": 15,
+    "robot_pose": {"x": 0.15, "y": 0.15, "yaw_deg": 0.0},
+    "map_metadata": {
+      "width": 10,
+      "height": 10,
+      "resolution": 0.05,
+      "origin_x": 0.0,
+      "origin_y": 0.0,
+      "origin_yaw": 0.0,
+      "frame_id": "map",
+      "stamp_sec": 1000.0
+    },
+    "accepted_regions": [
+      {"label": "B", "internal_region_id": "R0092_B", "track_id": "T000092", "geo_score": 0.72, "stable": true, "snapshot_eligible": true, "blacklisted": false}
+    ]
+  },
+  "region_geometry": {
+    "snapshot_id": "RS_20260713T190000_0092",
+    "regions": {
+      "B": {
+        "internal_region_id": "R0092_B",
+        "track_id": "T000092",
+        "centroid_x": 0.20,
+        "centroid_y": 0.20,
+        "frontier_cells_grid": [[1, 5], [2, 5], [3, 5]],
+        "frontier_points_map": [[0.275, 0.075], [0.275, 0.125], [0.275, 0.175]],
+        "bbox_grid": [1, 3, 5, 5],
+        "geo_score": 0.72,
+        "stable": true,
+        "snapshot_eligible": true,
+        "blacklisted": false
+      }
+    }
+  },
+  "fusion": {
+    "qwen_recommended_region": "A",
+    "algorithm_final_region": "B",
+    "decision_source": "GEOMETRIC_SAFETY_OVERRIDE",
+    "ranked_regions": ["A", "B", "C"]
+  },
+  "qwen_decision": {
+    "decision_id": "QD_TEST_001",
+    "snapshot_id": "RS_20260713T190000_0092",
+    "selected_region": "A",
+    "trajectory_revision": 15,
+    "decision_valid": true,
+    "nav2_called": false,
+    "ranked_regions": ["A", "B", "C"]
+  },
+  "visual_manifest": null,
+  "region_view_mapping": null
+}

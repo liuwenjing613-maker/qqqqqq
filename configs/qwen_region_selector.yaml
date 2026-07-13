@@ -41,6 +41,22 @@ ros:
 node:
   name: qwen_region_selector
 
+decision_fusion:
+  map_only_geo_weight: 0.85
+  map_only_qwen_weight: 0.15
+  visual_geo_weight: 0.65
+  visual_qwen_weight: 0.35
+  reject_if_geo_score_below: 0.40
+  max_allowed_geo_gap_without_visual_evidence: 0.20
+
+decision_revalidation:
+  max_snapshot_age_s: 20.0
+  max_robot_translation_m: 0.15
+  max_robot_yaw_change_deg: 20.0
+  max_map_cell_change_ratio: 0.10
+  require_selected_track_still_present: true
+  require_selected_track_still_stable: true
+
 safety:
   observation_only: true
   motion_enabled: false
