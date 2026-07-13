@@ -38,7 +38,6 @@ class ModelResult:
     result: str
     point: Optional[PixelPoint]
     point_role: str
-    confidence: float
     label: str
     reason_code: str
     raw_text: str = ""

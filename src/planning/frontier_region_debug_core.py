@@ -133,6 +133,22 @@ class FrontierRegion:
     source_cluster_ids: List[str] = field(default_factory=list)
     merge_reasons: List[Dict[str, Any]] = field(default_factory=list)
     snapshot_eligible: bool = False
+    track_id: str = ""
+    stable: bool = False
+    persistence_cycles: int = 0
+    age_s: float = 0.0
+    centroid_drift_m: float = 0.0
+    bearing_drift_deg: float = 0.0
+    guard_cell_count_change_ratio: float = 0.0
+    stability_rejection_reasons: List[str] = field(default_factory=list)
+    near_robot_penalty: float = 0.0
+    recent_observation_penalty: float = 0.0
+    distance_to_nearest_observation_pose_m: float = float("inf")
+    geo_score: float = 0.0
+    geo_rank: int = 0
+    score_components: Dict[str, float] = field(default_factory=dict)
+    penalty_components: Dict[str, float] = field(default_factory=dict)
+    score_explanation: str = ""
 
 
 @dataclass
@@ -1249,22 +1265,39 @@ def build_region_snapshot_payload(
     capture_time: str,
     expires_after_s: float = 300.0,
     annotated_map_file: str = "",
+    *,
+    observation_meta: Optional[Dict[str, Any]] = None,
+    top_k: int = 5,
 ) -> Dict[str, Any]:
-    accepted = sorted(result.regions, key=_snapshot_label_sort_key)
+    eligible = [
+        r for r in result.regions
+        if r.snapshot_eligible and r.stable and r.geo_score >= 0.0
+    ]
+    eligible.sort(key=lambda r: (r.geo_rank if r.geo_rank > 0 else 999, -r.geo_score))
+    gcfg_min = 0.40  # caller should pass via regions already filtered
+    eligible = [r for r in eligible if r.geo_score >= gcfg_min or r.geo_score == 0.0]
+    if not eligible:
+        eligible = [r for r in result.regions if r.snapshot_eligible]
+    top = eligible[:top_k]
+    top.sort(key=lambda r: (r.geo_rank if r.geo_rank > 0 else 999, r.bearing_relative_deg, r.distance_to_robot_m))
+
     labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     region_entries: List[Dict[str, Any]] = []
     rejection_summary: Dict[str, int] = {}
 
-    for region in result.rejected_regions:
+    for region in result.regions + result.rejected_regions:
         for reason in region.rejection_reasons:
             rejection_summary[reason.code] = rejection_summary.get(reason.code, 0) + 1
+        for code in region.stability_rejection_reasons:
+            rejection_summary[code] = rejection_summary.get(code, 0) + 1
 
-    for idx, region in enumerate(accepted):
+    for idx, region in enumerate(top):
         label = labels[idx] if idx < len(labels) else f"R{idx}"
         region_entries.append(
             {
                 "label": label,
                 "internal_region_id": region.region_id,
+                "track_id": region.track_id,
                 "source_cluster_ids": list(region.source_cluster_ids),
                 "merged": region.merged,
                 "merge_reasons": list(region.merge_reasons),
@@ -1272,14 +1305,32 @@ def build_region_snapshot_payload(
                 "centroid": {"x": region.centroid_x, "y": region.centroid_y},
                 "distance_m": region.distance_to_robot_m,
                 "unknown_gain_cells": region.unknown_gain_cells,
+                "unknown_gain_ratio": region.unknown_gain_ratio,
                 "minimum_clearance_m": region.minimum_clearance_m,
                 "mean_clearance_m": region.mean_clearance_m,
                 "frontier_cell_count": region.frontier_cell_count,
                 "path_checked": region.path_checked,
                 "reachable": region.reachable,
+                "stable": region.stable,
+                "snapshot_eligible": region.snapshot_eligible,
+                "persistence_cycles": region.persistence_cycles,
+                "centroid_drift_m": region.centroid_drift_m,
+                "bearing_drift_deg": region.bearing_drift_deg,
+                "distance_to_nearest_observation_pose_m": region.distance_to_nearest_observation_pose_m,
+                "near_robot_penalty": region.near_robot_penalty,
+                "recent_observation_penalty": region.recent_observation_penalty,
+                "visit_count": region.visited_count,
+                "selection_count": 0,
+                "navigation_failure_count": region.navigation_failure_count,
+                "blacklisted": region.blacklisted,
+                "geo_score": region.geo_score,
+                "geo_rank": region.geo_rank,
+                "score_components": dict(region.score_components),
+                "penalty_components": dict(region.penalty_components),
             }
         )
 
+    obs = observation_meta or {}
     return {
         "snapshot_id": snapshot_id,
         "cycle_id": result.cycle_id,
@@ -1296,10 +1347,18 @@ def build_region_snapshot_payload(
         "rejected_reason_summary": rejection_summary,
         "annotated_map_file": annotated_map_file,
         "expires_after_s": expires_after_s,
+        "observation_window_id": obs.get("observation_window_id"),
+        "full_scan_completed": obs.get("full_scan_completed", False),
+        "accumulated_rotation_deg": obs.get("accumulated_rotation_deg", 0.0),
+        "map_stable": obs.get("map_stable", False),
+        "robot_settled": obs.get("robot_settled", False),
+        "geometric_scoring_version": "1.0",
+        "history_version": obs.get("history_version", "1.0"),
         "merge_summary": {
             "raw_cluster_count": result.stats.raw_cluster_count,
             "merge_pairs_accepted": result.stats.merge_pairs_accepted,
             "merged_group_count": result.stats.merged_group_count,
             "cluster_count_after_merge": result.stats.cluster_count_after_merge,
         },
+        "guard_summary": obs.get("guard_summary", {}),
     }

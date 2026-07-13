@@ -14,9 +14,6 @@ class StateMachineConfig:
     search_interval_sec: float = 3.0
     verify_interval_sec: float = 9999.0
     error_cooldown_sec: float = 3.0
-    min_confidence_visible: float = 0.55
-    min_confidence_search_hint: float = 0.45
-    min_confidence_verify: float = 0.60
     auto_enter_search: bool = True
 
 
@@ -111,15 +108,9 @@ class NavigationStateMachine:
         result: ModelResult,
         request_mode: PromptMode,
     ) -> None:
-        visible = (
-            result.result == "TARGET_VISIBLE"
-            and result.confidence >= self.config.min_confidence_visible
-        )
+        visible = result.result == "TARGET_VISIBLE"
 
-        inferred = (
-            result.result in {"TARGET_INFERRED", "VERIFY_FAILED"}
-            and result.confidence >= self.config.min_confidence_search_hint
-        )
+        inferred = result.result in {"TARGET_INFERRED", "VERIFY_FAILED"}
 
         if request_mode in {
             PromptMode.OBSERVE,
@@ -139,15 +130,12 @@ class NavigationStateMachine:
             else:
                 self._transition(
                     VlnState.SEARCHING,
-                    "low_confidence_search_waypoint",
+                    "no_visible_or_inferred_target",
                 )
             return
 
         if request_mode == PromptMode.VERIFY:
-            success = (
-                result.result == "VERIFY_SUCCESS"
-                and result.confidence >= self.config.min_confidence_verify
-            )
+            success = result.result == "VERIFY_SUCCESS"
 
             if success:
                 self._transition(
@@ -162,7 +150,7 @@ class NavigationStateMachine:
             else:
                 self._transition(
                     VlnState.SEARCHING,
-                    "verify_failed_low_confidence",
+                    "verify_failed",
                 )
 
     def apply_error(self, reason: str) -> None:

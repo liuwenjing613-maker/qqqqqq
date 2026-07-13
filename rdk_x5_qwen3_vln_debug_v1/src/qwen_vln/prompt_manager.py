@@ -9,7 +9,7 @@ from typing import Dict, Optional
 from .types import PromptMode
 
 
-_JSON_TEMPLATE = """{"s":"V|I|S|F","p":[0,0],"c":0}"""
+_JSON_TEMPLATE = """{"s":"V|I|S|F","p":[0,0]}"""
 _DEFAULT_PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts"
 
 

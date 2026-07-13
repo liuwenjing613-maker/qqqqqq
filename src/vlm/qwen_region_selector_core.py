@@ -76,6 +76,14 @@ class RegionCandidate:
     source_cluster_ids: List[str] = field(default_factory=list)
     path_checked: bool = False
     reachable: Optional[bool] = None
+    track_id: str = ""
+    stable: bool = False
+    snapshot_eligible: bool = True
+    blacklisted: bool = False
+    geo_score: float = 0.0
+    geo_rank: int = 0
+    score_components: Dict[str, float] = field(default_factory=dict)
+    penalty_components: Dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

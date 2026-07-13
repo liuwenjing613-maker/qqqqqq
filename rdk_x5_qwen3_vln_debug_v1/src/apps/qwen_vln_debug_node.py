@@ -173,9 +173,6 @@ class QwenVlnDebugNode(Node):
                 search_interval_sec=float(sm_cfg["search_interval_sec"]),
                 verify_interval_sec=float(sm_cfg["verify_interval_sec"]),
                 error_cooldown_sec=float(sm_cfg["error_cooldown_sec"]),
-                min_confidence_visible=float(sm_cfg["min_confidence_visible"]),
-                min_confidence_search_hint=float(sm_cfg["min_confidence_search_hint"]),
-                min_confidence_verify=float(sm_cfg["min_confidence_verify"]),
                 auto_enter_search=bool(sm_cfg["auto_enter_search"]),
             )
         )
@@ -377,12 +374,12 @@ class QwenVlnDebugNode(Node):
             point_msg.header.stamp = self.get_clock().now().to_msg()
             point_msg.point.x = float(result.point.x)
             point_msg.point.y = float(result.point.y)
-            point_msg.point.z = float(result.confidence)
+            point_msg.point.z = 0.0
             self.point_pub.publish(point_msg)
 
         self.get_logger().info(
             f"id={meta.request_id} result={result.result} point={result.point} "
-            f"conf={result.confidence:.2f} latency={result.latency_ms:.0f}ms "
+            f"latency={result.latency_ms:.0f}ms "
             f"next={self.fsm.state.value}"
         )
 
@@ -505,7 +502,6 @@ class QwenVlnDebugNode(Node):
             "last_result": None if self.latest_result is None else self.latest_result.result,
             "last_request_id": None if self.latest_result is None else self.latest_result.request_id,
             "last_point": point,
-            "last_confidence": None if self.latest_result is None else self.latest_result.confidence,
             "last_latency_ms": None if self.latest_result is None else self.latest_result.latency_ms,
             "visualized_frame": "exact_api_input" if self.result_frame is not None else "live_camera",
             "error": self.latest_error,

@@ -235,7 +235,7 @@ def _extract_json(text: str) -> Dict[str, Any]:
                 raise ValueError("Top-level JSON must be an object")
             return value
         # Compact protocol recovery for truncated tails such as:
-        # {"s":"V","p":[450, 430],"c":95000000000000
+        # {"s":"V","p":[450, 430]
         repaired = _repair_compact_json(cleaned)
         if repaired is not None:
             return repaired
@@ -245,50 +245,21 @@ def _extract_json(text: str) -> Dict[str, Any]:
 _COMPACT_RE = re.compile(
     r'"s"\s*:\s*"([VvIiSsFf])"'
     r'.*?'
-    r'"p"\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]'
-    r'.*?'
-    r'"c"\s*:\s*(-?\d+(?:\.\d+)?)',
+    r'"p"\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]',
     flags=re.DOTALL,
 )
 
 
 def _repair_compact_json(text: str) -> Optional[Dict[str, Any]]:
-    """Recover compact {"s","p","c"} even when the model truncates the closing brace."""
+    """Recover compact {"s","p"} even when the model truncates the closing brace."""
     match = _COMPACT_RE.search(text or "")
     if not match:
         return None
-    status, x_raw, y_raw, c_raw = match.groups()
+    status, x_raw, y_raw = match.groups()
     return {
         "s": status.upper(),
         "p": [float(x_raw), float(y_raw)],
-        "c": float(c_raw),
     }
-
-
-def _normalize_confidence_percent(raw: float) -> float:
-    """Map model confidence to [0, 1].
-
-    Compact protocol expects integer/float percent in [0, 100].
-    Some Qwen compact outputs emit a valid prefix then runaway digits
-    (e.g. 95 -> 95000000000000) under tight max_tokens; recover the
-    longest valid 1-3 digit prefix in that case.
-    """
-    if isinstance(raw, bool):
-        raise ValueError("confidence c cannot be a boolean")
-    value = float(raw)
-    if 0.0 <= value <= 100.0:
-        return value / 100.0
-
-    digits = re.sub(r"[^0-9]", "", f"{value:.0f}")
-    if not digits:
-        raise ValueError(f"confidence c must be within [0, 100], got {raw}")
-    for length in (3, 2, 1):
-        if len(digits) < length:
-            continue
-        prefix = int(digits[:length])
-        if 0 <= prefix <= 100:
-            return prefix / 100.0
-    raise ValueError(f"confidence c must be within [0, 100], got {raw}")
 
 
 _NORM1000_MAX = 1000.0
@@ -350,9 +321,9 @@ def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
 
 
 def parse_model_output(raw_text: str, mode: PromptMode, image_width: int, image_height: int) -> ModelResult:
-    """Parse compact realtime JSON: {"s":"V|I|S|F","p":[x,y],"c":0-100}."""
+    """Parse compact realtime JSON: {"s":"V|I|S|F","p":[x,y]}."""
     data = _extract_json(raw_text)
-    required = {"s", "p", "c"}
+    required = {"s", "p"}
     missing = sorted(required.difference(data))
     if missing:
         raise ValueError(f"Missing required JSON fields: {missing}")
@@ -371,19 +342,11 @@ def parse_model_output(raw_text: str, mode: PromptMode, image_width: int, image_
     if point is None:
         raise ValueError(f"s={status} requires point p=[x,y]")
 
-    if isinstance(data.get("c"), bool):
-        raise ValueError("confidence c cannot be a boolean")
-    try:
-        confidence = _normalize_confidence_percent(float(data["c"]))
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"invalid confidence c={data.get('c')!r}: {exc}") from exc
-
     role = _ROLE_BY_RESULT[result]
     return ModelResult(
         result=result,
         point=point,
         point_role=role,
-        confidence=confidence,
         label="",
         reason_code=f"compact_{status.lower()}",
     )

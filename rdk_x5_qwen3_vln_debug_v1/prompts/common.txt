@@ -21,11 +21,8 @@ Field definitions:
   - Never use original pixel coordinates
   - Never use 0-1 normalized coordinates
   - p must never be null
-- c: integer confidence in [0, 100]
-  - MUST be an integer with at most 3 digits (e.g. 0, 50, 75, 95, 100)
-  - NEVER output values like 950, 9500, or 95000000000000
-  - Output shape example only (do NOT copy these numbers): {"s":"V","p":[x,y],"c":95}
   - p must be grounded on THIS image; never reuse placeholder or prior-example coordinates
+  - Output shape example only (do NOT copy these numbers): {"s":"V","p":[x,y]}
 
 Point semantics:
 1. If s="V" or s="S":
@@ -43,11 +40,7 @@ Search waypoint selection rules, in priority order:
 6. Avoid the outer 6 percent of left/right edges unless that is the only passage.
 7. Never place p on wall, furniture surface, plant, person, bag, box, object, reflection, shadow, ceiling, or obstacle.
 8. If no useful landmark exists, choose the widest safest central free-space direction.
-9. If all directions are partially obstructed, choose the least obstructed visible direction and lower c.
-
-Confidence meaning:
-- For s="V" or s="S": c = confidence that the visible object matches the task.
-- For s="I" or s="F": c = confidence that the selected waypoint is open and useful.
+9. If all directions are partially obstructed, choose the least obstructed visible direction.
 
 Output rules:
 - Return JSON only.

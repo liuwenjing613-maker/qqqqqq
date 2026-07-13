@@ -254,7 +254,6 @@ ros2 topic pub --once /qwen_vln/command std_msgs/msg/String "{data: 'reset'}"
   "result": "TARGET_VISIBLE",
   "point": {"x": 612, "y": 287},
   "point_role": "target",
-  "confidence": 0.93,
   "label": "bottle",
   "reason_code": "exact_target_visible"
 }
@@ -267,7 +266,6 @@ ros2 topic pub --once /qwen_vln/command std_msgs/msg/String "{data: 'reset'}"
   "result": "TARGET_INFERRED",
   "point": {"x": 500, "y": 720},
   "point_role": "search",
-  "confidence": 0.78,
   "label": "open corridor toward desk",
   "reason_code": "free_space_toward_desk"
 }

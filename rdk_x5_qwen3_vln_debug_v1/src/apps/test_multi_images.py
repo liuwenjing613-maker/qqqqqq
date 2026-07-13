@@ -190,7 +190,6 @@ def main() -> int:
             "image": str(image_path),
             "result": result.result,
             "point": None if result.point is None else {"x": result.point.x, "y": result.point.y},
-            "confidence": result.confidence,
             "latency_ms": result.latency_ms,
             "image_width": result.image_width,
             "image_height": result.image_height,

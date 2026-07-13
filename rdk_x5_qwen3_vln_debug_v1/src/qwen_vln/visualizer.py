@@ -98,7 +98,7 @@ class ResultVisualizer:
         summary = (
             "RESULT: waiting"
             if result is None
-            else f"RESULT: {result.result}  conf={result.confidence:.2f}  latency={result.latency_ms:.0f}ms  req={result.request_id}"
+            else f"RESULT: {result.result}  latency={result.latency_ms:.0f}ms  req={result.request_id}"
         )
         cv2.putText(canvas, summary, (16, 76), cv2.FONT_HERSHEY_SIMPLEX, 0.53, (235, 235, 235), 1, cv2.LINE_AA)
         reason = "" if result is None else result.reason_code

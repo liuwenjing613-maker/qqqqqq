@@ -41,6 +41,6 @@ ros2 topic echo /qwen_vln/prompt_text
 ```text
 point.x = 像素 x
 point.y = 像素 y
-point.z = confidence
+point.z = 0
 header.frame_id = camera_pixels_target/search/verify
 ```
