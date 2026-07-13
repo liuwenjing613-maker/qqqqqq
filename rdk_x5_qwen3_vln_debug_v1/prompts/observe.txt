@@ -5,7 +5,7 @@ Inspect the entire image and decide whether the exact requested target is clearl
 Output s="V" only when:
 - The requested object itself is clearly visible.
 - Its category and visible attributes match the task.
-- p can be placed on the center of the actual object body.
+- p can be placed on the geometric center of the actual object body (not an edge, label, or cap).
 
 Otherwise output s="I":
 - The target is not confirmed visible.

@@ -4,11 +4,14 @@
 This module deliberately contains no ROS imports so it can be unit-tested on a
 laptop.  The ROS node adapts /qwen_vln/result_json, /qwen_vln/state and LaserScan
 messages into :class:`ServoInput`.
+
+V2 policy: any fresh valid pixel may drive, regardless of semantic result name
+or point_role. Only explicit lifecycle blocked_states hard-stop motion.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Sequence, Tuple
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -24,8 +27,14 @@ class ServoConfig:
     center_deadband: float = 0.06
     turn_only_threshold: float = 0.40
     cmd_wz_deadband: float = 0.006
-    min_confidence: float = 0.55
-    visible_results_before_forward: int = 2
+    min_confidence: float = 0.0
+    point_results_before_forward: int = 1
+    blocked_states: Tuple[str, ...] = (
+        "WAIT_IMAGE",
+        "PAUSED",
+        "SUCCESS",
+        "ERROR",
+    )
     full_speed_source_age_sec: float = 0.95
     stop_source_age_sec: float = 2.00
     max_receive_gap_sec: float = 1.60
@@ -45,8 +54,8 @@ class ServoConfig:
             )
         if not 0.0 <= self.min_confidence <= 1.0:
             raise ValueError("min_confidence must be within [0, 1]")
-        if self.visible_results_before_forward < 1:
-            raise ValueError("visible_results_before_forward must be >= 1")
+        if self.point_results_before_forward < 1:
+            raise ValueError("point_results_before_forward must be >= 1")
         if not 0.0 <= self.full_speed_source_age_sec < self.stop_source_age_sec:
             raise ValueError(
                 "require 0 <= full_speed_source_age_sec < stop_source_age_sec"
@@ -66,12 +75,13 @@ class ServoInput:
     now_sec: float
     state: str
     result: str
+    point_role: str
     point_x: Optional[float]
     image_width: int
     confidence: float
     latency_ms: float
     result_received_sec: float
-    visible_streak: int
+    point_streak: int
     front_distance: Optional[float]
     scan_received_sec: Optional[float]
 
@@ -92,40 +102,34 @@ class ServoDecision:
 class QwenVisualServo:
     """Sample-and-hold visual servo with freshness and lidar safety gates.
 
-    The latest Qwen pixel is held between model replies.  Command magnitude
+    The latest Qwen pixel is held between model replies. Command magnitude
     decreases as the originating image becomes old, and reaches exactly zero at
     ``stop_source_age_sec``.
 
-    Motion is allowed for:
-    - TARGET_LOCKED + TARGET_VISIBLE (track the target)
-    - SEARCHING / TARGET_INFERRED + TARGET_INFERRED / VERIFY_FAILED
-      (drive toward the search waypoint). Search mode accepts a null front
-      distance and does not require lidar range_max returns.
+    Any fresh valid pixel may drive unless ``state`` is in ``blocked_states``.
+    TARGET_VISIBLE still requires a non-null front distance when
+    ``require_lidar`` is enabled. Search / inferred / other point results accept
+    a null front distance (no range_max returns) and only emergency-stop when a
+    fresh near obstacle reading exists.
     """
 
-    _SEARCH_STATES = frozenset({"SEARCHING", "TARGET_INFERRED"})
-    _SEARCH_RESULTS = frozenset({"TARGET_INFERRED", "VERIFY_FAILED"})
+    _TRACK_RESULTS = frozenset({"TARGET_VISIBLE"})
 
     def __init__(self, config: ServoConfig):
         config.validate()
         self.cfg = config
+        self._blocked = {str(s).strip().upper() for s in config.blocked_states}
 
     def compute(self, data: ServoInput) -> ServoDecision:
         cfg = self.cfg
+        state = str(data.state or "").strip().upper()
+        result = str(data.result or "").strip().upper()
+        role = str(data.point_role or "none").strip().lower()
 
-        target_visible = (
-            data.state == "TARGET_LOCKED" and data.result == "TARGET_VISIBLE"
-        )
-        target_search = (
-            data.state in self._SEARCH_STATES
-            and data.result in self._SEARCH_RESULTS
-        )
-        if not target_visible and not target_search:
-            if data.state not in {"TARGET_LOCKED", *self._SEARCH_STATES}:
-                return self._stop(f"fsm_{data.state.lower()}")
-            return self._stop(f"result_{data.result.lower() or 'none'}")
+        if state in self._blocked:
+            return self._stop(f"fsm_{state.lower()}")
         if data.point_x is None or data.image_width <= 1:
-            return self._stop("invalid_pixel")
+            return self._stop("no_valid_pixel")
         if data.confidence < cfg.min_confidence:
             return self._stop("low_confidence")
 
@@ -137,10 +141,9 @@ class QwenVisualServo:
             return self._stop("source_frame_stale", source_age)
 
         freshness = self._freshness_scale(source_age)
+        is_track = result in self._TRACK_RESULTS or role == "target"
 
-        if target_visible and cfg.require_lidar:
-            # Track mode keeps the full lidar gate, including rejecting null
-            # front_distance (often caused by no returns within range_max).
+        if cfg.require_lidar and is_track:
             if data.scan_received_sec is None or data.front_distance is None:
                 return self._stop("waiting_for_lidar", source_age)
             if data.now_sec - data.scan_received_sec > cfg.scan_timeout_sec:
@@ -148,14 +151,11 @@ class QwenVisualServo:
             if data.front_distance <= cfg.emergency_stop_distance:
                 return self._stop("emergency_obstacle", source_age)
         elif (
-            target_search
-            and data.front_distance is not None
+            data.front_distance is not None
             and data.scan_received_sec is not None
             and data.now_sec - data.scan_received_sec <= cfg.scan_timeout_sec
             and data.front_distance <= cfg.emergency_stop_distance
         ):
-            # Search still hard-stops on a known near obstacle, but null /
-            # missing lidar range_max returns are accepted and do not block.
             return self._stop("emergency_obstacle", source_age)
 
         half_width = 0.5 * float(data.image_width - 1)
@@ -168,30 +168,25 @@ class QwenVisualServo:
         else:
             wz = cfg.angular_sign * cfg.kp_wz * error * freshness
             wz = clamp(wz, -cfg.max_wz, cfg.max_wz)
-            # The existing PWM bridge has a non-zero deadband offset.  Sending
-            # microscopic wz values can therefore still cause a visible turn.
             if abs(wz) < cfg.cmd_wz_deadband:
                 wz = 0.0
 
         heading_scale = self._heading_scale(abs_error)
-        if target_search and data.front_distance is None:
+        if (not is_track) and data.front_distance is None:
             obstacle_scale = 1.0
         else:
             obstacle_scale = self._obstacle_scale(data.front_distance)
 
-        # Search waypoints are not TARGET_VISIBLE, so visible_streak stays 0;
-        # do not force rotate-only while exploring.
-        forward_confirmed = target_search or (
-            data.visible_streak >= cfg.visible_results_before_forward
-        )
+        forward_confirmed = data.point_streak >= cfg.point_results_before_forward
+        searchish = (not is_track) or role in {"search", "verify"}
         if not forward_confirmed:
             vx = 0.0
-            reason = "rotate_only_wait_second_visible"
+            reason = "rotate_only_wait_point_confirm"
         elif heading_scale <= 0.0:
             vx = 0.0
             reason = (
                 "search_rotate_only_large_error"
-                if target_search
+                if searchish
                 else "rotate_only_large_error"
             )
         elif obstacle_scale <= 0.0:
@@ -202,7 +197,7 @@ class QwenVisualServo:
         else:
             vx = cfg.max_vx * heading_scale * freshness * obstacle_scale
             reason = (
-                "search_visual_servo" if target_search else "continuous_visual_servo"
+                "search_visual_servo" if searchish else "continuous_visual_servo"
             )
 
         return ServoDecision(
@@ -231,7 +226,6 @@ class QwenVisualServo:
         if abs_error >= cfg.turn_only_threshold:
             return 0.0
         span = cfg.turn_only_threshold - cfg.center_deadband
-        # Smoothly suppress forward speed as the target moves away from center.
         linear = (cfg.turn_only_threshold - abs_error) / span
         return clamp(linear * linear, 0.0, 1.0)
 

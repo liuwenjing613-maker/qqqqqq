@@ -26,18 +26,51 @@ QWEN_PID=""
 SERVO_PID=""
 MUX_PID=""
 FOXGLOVE_PID=""
+CLEANUP_DONE=0
+
+kill_pid_tree() {
+  local pid="$1"
+  [[ -z "$pid" ]] && return 0
+  if ! kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  local child
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    kill_pid_tree "$child"
+  done
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 10); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+  wait "$pid" 2>/dev/null || true
+}
+
 cleanup() {
+  if [[ "$CLEANUP_DONE" == "1" ]]; then
+    return 0
+  fi
+  CLEANUP_DONE=1
+
   echo "[cleanup] publish zero and stop processes started here"
-  ros2 topic pub --once /qwen_vln/servo/command std_msgs/msg/String \
+  timeout 3 ros2 topic pub --once /qwen_vln/servo/command std_msgs/msg/String \
     "{data: 'disable'}" >/dev/null 2>&1 || true
   for pid in "$SERVO_PID" "$QWEN_PID" "$BRIDGE_PID" "$FOXGLOVE_PID" "$MUX_PID"; do
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
+    kill_pid_tree "$pid"
   done
   stop_camera_tree "${CAMERA_PID:-}" || true
 }
-trap cleanup EXIT INT TERM
+
+on_signal() {
+  cleanup
+  exit 130
+}
+
+trap cleanup EXIT
+trap on_signal INT TERM
 
 # Reuse the same camera -> bgr8 bridge proven by the current V1.1 stack.
 ensure_compressed_camera "$ROOT" "$ROOT/logs/camera.log"
@@ -126,4 +159,5 @@ Enable/disable while running:
   ros2 topic pub --once /qwen_vln/servo/command std_msgs/msg/String "{data: 'disable'}"
 EOF
 
-wait "$QWEN_PID"
+echo "Press Ctrl+C to stop this visual servo stack."
+wait "$QWEN_PID" || true

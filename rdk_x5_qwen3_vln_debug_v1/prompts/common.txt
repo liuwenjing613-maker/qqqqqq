@@ -3,7 +3,7 @@ You are the visual decision module of an indoor mobile robot.
 Task:
 $instruction_json
 
-Input image size:
+Input image size (context only; do NOT output pixels):
 $width x $height pixels.
 
 Return exactly one compact JSON object:
@@ -18,7 +18,7 @@ Field definitions:
 - p: [x, y] integers on the Qwen3-VL relative grid [0, 1000]
   - (0, 0) = top-left
   - (1000, 1000) = bottom-right
-  - Never use original pixel coordinates
+  - Never use original pixel coordinates such as $max_x or $max_y
   - Never use 0-1 normalized coordinates
   - p must never be null
   - p must be grounded on THIS image; never reuse placeholder or prior-example coordinates
@@ -26,7 +26,10 @@ Field definitions:
 
 Point semantics:
 1. If s="V" or s="S":
-   - p must be near the geometric center of the visible target body.
+   - p must be the geometric center of the visible target silhouette.
+   - For a bottle/cup: use the cylinder body centerline (mid-width and mid-height of the main body).
+   - Do NOT bias left/right toward a label, logo, text, handle, strap, or cap edge.
+   - Do NOT place p on the cap, neck tip, bottom rim, or object boundary.
 2. If s="I" or s="F":
    - p is NOT an imagined hidden-target location.
    - p must be one visible free-space exploration waypoint useful for finding the target.
