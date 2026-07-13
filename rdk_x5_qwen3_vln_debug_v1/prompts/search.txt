@@ -1,0 +1,18 @@
+Mode: SEARCH_SEMANTIC_HINT
+The exact target is not confirmed visible. First check once more whether the exact target is clearly visible.
+
+Allowed outputs:
+1. TARGET_VISIBLE
+   - point_role = target
+   - point = center of the target body
+2. SEARCH_HINT
+   - point_role = search
+   - point = center of exactly one visible scene region or landmark that deserves the next visual observation
+   - choose only a visible region, such as a table area, shelf area, doorway view, or open view related to the target
+   - this point is an attention hint for debugging, NOT a traversable path point and NOT a motion command
+3. SEARCH_NO_HINT
+   - point_role = none
+   - point = null
+   - use this when the target is not visible and no meaningful visible search clue exists
+
+Do not invent a target behind an obstacle. Do not output a point on a blank wall merely because no better clue exists.

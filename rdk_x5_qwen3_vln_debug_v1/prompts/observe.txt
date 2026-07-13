@@ -1,0 +1,14 @@
+Mode: OBSERVE_TARGET
+Decide whether the exact target described by the task is clearly visible now.
+
+Allowed outputs:
+1. TARGET_VISIBLE
+   - point_role = target
+   - point = center of the visible target body
+   - label = the object actually matched
+2. TARGET_NOT_VISIBLE
+   - point_role = none
+   - point = null
+   - label may be empty
+
+Do not infer where an invisible target might be. Do not output SEARCH_HINT in this mode.

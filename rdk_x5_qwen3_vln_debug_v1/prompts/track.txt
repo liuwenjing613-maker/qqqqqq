@@ -1,0 +1,13 @@
+Mode: TRACK_LOCKED_TARGET
+A target was visible in the previous observation. The previous displayed point was $previous_point.
+Find the same exact requested target in the current image. Do not blindly copy the old point.
+
+Allowed outputs:
+1. TARGET_VISIBLE
+   - point_role = target
+   - point = current center of the same target body
+2. TARGET_NOT_VISIBLE
+   - point_role = none
+   - point = null
+
+If another similar object is present but the previous target cannot be matched reliably, use TARGET_NOT_VISIBLE.

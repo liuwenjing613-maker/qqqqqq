@@ -1,0 +1,13 @@
+Mode: VERIFY_CANDIDATE
+Verify whether the visible candidate matches the full task description. The last displayed candidate point was $previous_point.
+Consider category, visible attributes, and explicit spatial relation in the instruction.
+
+Allowed outputs:
+1. VERIFY_SUCCESS
+   - point_role = verify
+   - point = center of the verified target body
+2. VERIFY_FAILED
+   - point_role = none
+   - point = null
+
+Be conservative. A related landmark alone is not the target.
