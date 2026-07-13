@@ -19,6 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 import rclpy
+from cv_bridge import CvBridge
 from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -32,16 +33,28 @@ from qwen_vln.types import ModelResult, PromptMode
 from qwen_vln.visualizer import ResultVisualizer
 
 
-def resize_for_api(image, max_width: int):
+def resize_for_api(image, max_width: int, max_height: int = 0):
+    """Downscale for API while preserving aspect ratio."""
     height, width = image.shape[:2]
-    if width <= max_width:
+    scale = 1.0
+    if max_width > 0 and width > max_width:
+        scale = min(scale, max_width / float(width))
+    if max_height > 0 and height > max_height:
+        scale = min(scale, max_height / float(height))
+    if scale >= 0.999:
         return image
-    scale = max_width / float(width)
-    return cv2.resize(
-        image,
-        (max_width, max(1, int(round(height * scale)))),
-        interpolation=cv2.INTER_AREA,
-    )
+    new_w = max(1, int(round(width * scale)))
+    new_h = max(1, int(round(height * scale)))
+    return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
+def _section(config: dict, *names: str) -> dict:
+    """Prefer V1.1 section names, fall back to V1 names."""
+    for name in names:
+        value = config.get(name)
+        if isinstance(value, dict):
+            return value
+    return {}
 
 
 def _rows_with_step(msg: Image, row_count: int) -> np.ndarray:
@@ -112,8 +125,16 @@ class QwenVlnDebugNode(Node):
     ):
         super().__init__("qwen3_vln_debug_node")
         self.config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
+        self.bridge = CvBridge()
 
-        api_cfg = self.config["api"]
+        # V1.1: api section renamed to qwen; jpeg_quality lives with the model config.
+        api_cfg = _section(self.config, "qwen", "api")
+        camera_cfg = _section(self.config, "camera", "image")
+        if not api_cfg:
+            raise KeyError("config missing required section: qwen (or legacy api)")
+        if not camera_cfg:
+            raise KeyError("config missing required section: camera (or legacy image)")
+
         self.client = QwenVisionClient(
             ClientConfig(
                 model=api_cfg["model"],
@@ -124,10 +145,25 @@ class QwenVlnDebugNode(Node):
                 max_retries=int(api_cfg["max_retries"]),
                 temperature=float(api_cfg["temperature"]),
                 max_tokens=int(api_cfg["max_tokens"]),
-                enable_thinking=bool(api_cfg["enable_thinking"]),
-                jpeg_quality=int(self.config["image"]["jpeg_quality"]),
+                enable_thinking=bool(api_cfg.get("enable_thinking", False)),
+                jpeg_quality=int(api_cfg.get("jpeg_quality", 72)),
+                min_pixels=int(api_cfg.get("min_pixels", 65536)),
+                max_pixels=int(api_cfg.get("max_pixels", 442368)),
+                vl_high_resolution_images=bool(
+                    api_cfg.get("vl_high_resolution_images", False)
+                ),
             )
         )
+
+        # One-shot vision warm-up on the same Client used for real inference.
+        # Failure is logged only; it must not prevent node startup.
+        warmup_cfg = self.config.get("warmup", {})
+        if bool(warmup_cfg.get("enabled", False)):
+            try:
+                warmup_ms = self.client.warmup()
+                self.get_logger().info(f"Qwen warmup completed: {warmup_ms:.0f} ms")
+            except Exception as exc:  # noqa: BLE001
+                self.get_logger().warning(f"Qwen warmup failed: {exc}")
 
         sm_cfg = self.config["state_machine"]
         self.fsm = NavigationStateMachine(
@@ -146,14 +182,16 @@ class QwenVlnDebugNode(Node):
 
         prompt_dir = PROJECT_ROOT / str(self.config.get("prompts", {}).get("directory", "prompts"))
         self.prompt_manager = PromptManager(str(prompt_dir))
-        vis_cfg = self.config["visualization"]
+        vis_cfg = self.config.get("visualization", {})
         self.visualizer = ResultVisualizer(
-            int(vis_cfg["point_radius"]),
-            int(vis_cfg["history_length"]),
-            bool(vis_cfg["draw_center_line"]),
+            int(vis_cfg.get("point_radius", 11)),
+            int(vis_cfg.get("history_length", 1)),
+            bool(vis_cfg.get("draw_center_line", True)),
         )
-        self.api_max_width = int(self.config["image"]["api_max_width"])
-        self.output_jpeg_quality = int(vis_cfg["jpeg_quality"])
+        self.api_max_width = int(camera_cfg.get("api_max_width", 960))
+        self.api_max_height = int(camera_cfg.get("api_max_height", 0))
+        self.expected_encoding = str(camera_cfg.get("expected_encoding", "bgr8")).strip().lower()
+        self.output_jpeg_quality = int(vis_cfg.get("jpeg_quality", 90))
 
         self.frame_lock = threading.Lock()
         self.latest_frame = None
@@ -167,7 +205,8 @@ class QwenVlnDebugNode(Node):
 
         self.future: Optional[Future] = None
         self.future_meta: Optional[PendingRequest] = None
-        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen_api")
+        # Do not name this self.executor — that collides with rclpy.Node.executor.
+        self.api_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen_api")
         self.request_id = 0
 
         topics = self.config["topics"]
@@ -176,14 +215,45 @@ class QwenVlnDebugNode(Node):
         self.latency_pub = self.create_publisher(Float32, topics["latency_ms"], 10)
         self.point_pub = self.create_publisher(PointStamped, topics["pixel_point"], 10)
         self.prompt_pub = self.create_publisher(String, topics["prompt_text"], 10)
-        self.annotated_pub = self.create_publisher(CompressedImage, topics["annotated_image"], 2)
+
+        # V1.1: publish both raw + compressed annotated images for Foxglove.
+        annotated_compressed = vis_cfg.get(
+            "annotated_compressed_topic",
+            topics.get("annotated_image", "/qwen_vln/annotated_image/compressed"),
+        )
+        annotated_raw = vis_cfg.get("annotated_raw_topic", "/qwen_vln/annotated_image")
+        self.annotated_compressed_pub = self.create_publisher(
+            CompressedImage, annotated_compressed, 2
+        )
+        self.annotated_raw_pub = self.create_publisher(Image, annotated_raw, 2)
         self.create_subscription(String, topics["instruction"], self._on_instruction, 10)
         self.create_subscription(String, topics["command"], self._on_command, 10)
 
-        image_topic = image_topic or self.config["image"]["topic"]
-        image_transport = (image_transport or self.config["image"]["transport"]).strip().lower()
+        image_topic = (
+            image_topic
+            or camera_cfg.get("image_topic")
+            or camera_cfg.get("topic")
+            or "/image_raw"
+        )
+        image_transport = (
+            image_transport
+            or camera_cfg.get("input_transport")
+            or camera_cfg.get("transport")
+            or "raw"
+        ).strip().lower()
+
+        # Match the bridge: /image_raw is RELIABLE; compressed /image is BEST_EFFORT.
+        reliability_name = str(
+            camera_cfg.get("subscriber_reliability", "reliable")
+        ).strip().lower()
+        if image_transport == "compressed":
+            reliability_name = "best_effort"
         sensor_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=(
+                ReliabilityPolicy.RELIABLE
+                if reliability_name == "reliable"
+                else ReliabilityPolicy.BEST_EFFORT
+            ),
             history=HistoryPolicy.KEEP_LAST,
             depth=2,
         )
@@ -199,24 +269,36 @@ class QwenVlnDebugNode(Node):
         else:
             raise ValueError("image transport must be raw or compressed")
 
-        initial = instruction.strip() if instruction else str(sm_cfg["initial_instruction"]).strip()
+        initial = instruction.strip() if instruction else str(
+            sm_cfg.get("initial_instruction", "find the bottle")
+        ).strip()
         self.fsm.set_instruction(initial)
-        self.timer = self.create_timer(
-            1.0 / max(1.0, float(vis_cfg["publish_hz"])),
-            self._on_timer,
-        )
+        publish_hz = float(vis_cfg.get("publish_hz", 8.0))
+        self.timer = self.create_timer(1.0 / max(1.0, publish_hz), self._on_timer)
         self.get_logger().info(
             f"started model={self.client.config.model} image_topic={image_topic} "
-            f"transport={image_transport} task={initial!r}"
+            f"transport={image_transport} qos={reliability_name} "
+            f"api_size<={self.api_max_width}x{self.api_max_height or 'any'} task={initial!r}"
         )
-        self.get_logger().warning("V1 publishes no chassis velocity commands")
+        self.get_logger().warning("V1.1 publishes no chassis velocity commands")
 
     def destroy_node(self):
-        self.executor.shutdown(wait=False, cancel_futures=True)
+        self.api_pool.shutdown(wait=False, cancel_futures=True)
         return super().destroy_node()
 
     def _on_raw_image(self, msg: Image) -> None:
         try:
+            encoding = (msg.encoding or "").strip().lower()
+            if self.expected_encoding and encoding and encoding != self.expected_encoding:
+                # Still attempt decode for compatible formats; warn once style via status.
+                if encoding not in {
+                    "bgr8", "rgb8", "bgra8", "rgba8", "mono8", "8uc1",
+                    "yuyv", "yuy2", "yuv422_yuy2", "uyvy", "yuv422", "nv12", "nv21",
+                }:
+                    raise ValueError(
+                        f"encoding {encoding!r} does not match expected "
+                        f"{self.expected_encoding!r}"
+                    )
             self._store_frame(raw_ros_image_to_bgr(msg), msg.header)
         except Exception as exc:
             self.latest_error = f"raw_image_decode: {exc}"
@@ -231,7 +313,7 @@ class QwenVlnDebugNode(Node):
             self.latest_error = f"compressed_image_decode: {exc}"
 
     def _store_frame(self, frame, header) -> None:
-        frame = resize_for_api(frame, self.api_max_width)
+        frame = resize_for_api(frame, self.api_max_width, self.api_max_height)
         with self.frame_lock:
             self.latest_frame = frame
             self.latest_header = copy.deepcopy(header)
@@ -348,7 +430,7 @@ class QwenVlnDebugNode(Node):
             frame=frame,
             header=header,
         )
-        self.future = self.executor.submit(
+        self.future = self.api_pool.submit(
             self.client.infer,
             frame,
             prompt,
@@ -383,6 +465,16 @@ class QwenVlnDebugNode(Node):
             self.latest_error,
             frame_note,
         )
+
+        stamp_header = header
+        if stamp_header is None:
+            stamp_header = Image().header
+            stamp_header.stamp = self.get_clock().now().to_msg()
+
+        raw_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+        raw_msg.header = stamp_header
+        self.annotated_raw_pub.publish(raw_msg)
+
         ok, encoded = cv2.imencode(
             ".jpg",
             annotated,
@@ -392,13 +484,10 @@ class QwenVlnDebugNode(Node):
             return
 
         msg = CompressedImage()
-        if header is not None:
-            msg.header = header
-        else:
-            msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header = stamp_header
         msg.format = "jpeg"
         msg.data = encoded.tobytes()
-        self.annotated_pub.publish(msg)
+        self.annotated_compressed_pub.publish(msg)
 
     def _publish_state(self) -> None:
         point = (

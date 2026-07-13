@@ -1,14 +1,16 @@
 Mode: OBSERVE_TARGET
-Decide whether the exact target described by the task is clearly visible now.
 
-Allowed outputs:
-1. TARGET_VISIBLE
-   - point_role = target
-   - point = center of the visible target body
-   - label = the object actually matched
-2. TARGET_NOT_VISIBLE
-   - point_role = none
-   - point = null
-   - label may be empty
+Inspect the entire image and decide whether the exact requested target is clearly visible.
 
-Do not infer where an invisible target might be. Do not output SEARCH_HINT in this mode.
+Output s="V" only when:
+- The requested object itself is clearly visible.
+- Its category and visible attributes match the task.
+- p can be placed on the center of the actual object body.
+
+Otherwise output s="I":
+- The target is not confirmed visible.
+- Still select one search waypoint using the free-space and semantic-direction rules.
+- Prefer a free-floor point leading toward a relevant landmark.
+- Do not place p directly on the landmark itself.
+
+Do not confuse a table, shelf, bottle-like object, reflection, label, or similarly colored object with the requested target.

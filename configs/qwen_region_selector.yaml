@@ -1,0 +1,47 @@
+selector:
+  mode: dry_run
+  allow_motion: false
+  allow_nav2: false
+  allow_coordinates: false
+
+qwen:
+  model_env: QWEN_MODEL
+  api_key_env: DASHSCOPE_API_KEY
+  base_url_env: QWEN_BASE_URL
+  default_model: qwen3-vl-flash
+  default_base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  request_timeout_s: 30
+  max_retries: 1
+  max_tokens: 256
+  require_image_input: true
+  use_low_randomness: true
+
+validation:
+  require_snapshot_id_echo: true
+  require_selected_label_in_snapshot: true
+  require_unique_fallbacks: true
+  reject_forbidden_fields: true
+
+logging:
+  root_dir: logs/qwen_region_selection
+  save_prompt: true
+  save_raw_response: true
+  save_request_manifest: true
+  save_validation: true
+
+ros:
+  max_snapshot_age_s: 300
+  snapshot_topic: /qwen_explore_debug/region_snapshot_json
+  instruction_topic: /qwen_explore/target_instruction
+  status_topic: /qwen_explore/region_selection_status
+  decision_topic: /qwen_explore/region_decision_json
+  debug_topic: /qwen_explore/region_selection_debug_json
+  select_service: /qwen_explore/select_region
+
+node:
+  name: qwen_region_selector
+
+safety:
+  observation_only: true
+  motion_enabled: false
+  nav2_enabled: false

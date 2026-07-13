@@ -106,30 +106,41 @@ class NavigationStateMachine:
     def mark_request_started(self, now: Optional[float] = None) -> None:
         self.last_request_time = time.monotonic() if now is None else now
 
-    def apply_result(self, result: ModelResult, request_mode: PromptMode) -> None:
+    def apply_result(
+        self,
+        result: ModelResult,
+        request_mode: PromptMode,
+    ) -> None:
         visible = (
             result.result == "TARGET_VISIBLE"
             and result.confidence >= self.config.min_confidence_visible
         )
-        if request_mode in {PromptMode.OBSERVE, PromptMode.TRACK}:
-            if visible:
-                self._transition(VlnState.TARGET_LOCKED, "target_visible")
-            elif self.config.auto_enter_search:
-                self._transition(VlnState.SEARCHING, "target_not_visible")
-            else:
-                self._transition(VlnState.OBSERVE, "target_not_visible_retry")
-            return
 
-        if request_mode == PromptMode.SEARCH:
+        inferred = (
+            result.result in {"TARGET_INFERRED", "VERIFY_FAILED"}
+            and result.confidence >= self.config.min_confidence_search_hint
+        )
+
+        if request_mode in {
+            PromptMode.OBSERVE,
+            PromptMode.TRACK,
+            PromptMode.SEARCH,
+        }:
             if visible:
-                self._transition(VlnState.TARGET_LOCKED, "target_found_during_search")
-            elif (
-                result.result == "SEARCH_HINT"
-                and result.confidence >= self.config.min_confidence_search_hint
-            ):
-                self._transition(VlnState.TARGET_INFERRED, "search_hint_available")
+                self._transition(
+                    VlnState.TARGET_LOCKED,
+                    "target_visible",
+                )
+            elif inferred:
+                self._transition(
+                    VlnState.TARGET_INFERRED,
+                    "search_waypoint_available",
+                )
             else:
-                self._transition(VlnState.SEARCHING, "no_reliable_search_hint")
+                self._transition(
+                    VlnState.SEARCHING,
+                    "low_confidence_search_waypoint",
+                )
             return
 
         if request_mode == PromptMode.VERIFY:
@@ -137,10 +148,22 @@ class NavigationStateMachine:
                 result.result == "VERIFY_SUCCESS"
                 and result.confidence >= self.config.min_confidence_verify
             )
-            self._transition(
-                VlnState.SUCCESS if success else VlnState.OBSERVE,
-                "verify_success" if success else "verify_failed",
-            )
+
+            if success:
+                self._transition(
+                    VlnState.SUCCESS,
+                    "verify_success",
+                )
+            elif inferred:
+                self._transition(
+                    VlnState.TARGET_INFERRED,
+                    "verify_failed_new_search_waypoint",
+                )
+            else:
+                self._transition(
+                    VlnState.SEARCHING,
+                    "verify_failed_low_confidence",
+                )
 
     def apply_error(self, reason: str) -> None:
         self.error_since = time.monotonic()

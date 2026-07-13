@@ -13,21 +13,25 @@ import cv2
 from .types import ModelResult, PixelPoint, PromptMode
 
 
-_ALLOWED_BY_MODE = {
-    PromptMode.OBSERVE: {"TARGET_VISIBLE", "TARGET_NOT_VISIBLE"},
-    PromptMode.TRACK: {"TARGET_VISIBLE", "TARGET_NOT_VISIBLE"},
-    PromptMode.SEARCH: {"TARGET_VISIBLE", "SEARCH_HINT", "SEARCH_NO_HINT"},
-    PromptMode.VERIFY: {"VERIFY_SUCCESS", "VERIFY_FAILED"},
-}
-_POINT_REQUIRED = {"TARGET_VISIBLE", "SEARCH_HINT", "VERIFY_SUCCESS"}
-_POINT_FORBIDDEN = {"TARGET_NOT_VISIBLE", "SEARCH_NO_HINT", "VERIFY_FAILED"}
 _ROLE_BY_RESULT = {
     "TARGET_VISIBLE": "target",
-    "TARGET_NOT_VISIBLE": "none",
-    "SEARCH_HINT": "search",
-    "SEARCH_NO_HINT": "none",
+    "TARGET_INFERRED": "search",
     "VERIFY_SUCCESS": "verify",
-    "VERIFY_FAILED": "none",
+    "VERIFY_FAILED": "search",
+}
+
+_STATUS_TO_RESULT = {
+    "V": "TARGET_VISIBLE",
+    "I": "TARGET_INFERRED",
+    "S": "VERIFY_SUCCESS",
+    "F": "VERIFY_FAILED",
+}
+
+_ALLOWED_STATUS_BY_MODE = {
+    PromptMode.OBSERVE: {"V", "I"},
+    PromptMode.TRACK: {"V", "I"},
+    PromptMode.SEARCH: {"V", "I"},
+    PromptMode.VERIFY: {"S", "F"},
 }
 
 
@@ -37,12 +41,15 @@ class ClientConfig:
     api_key_env: str = "DASHSCOPE_API_KEY"
     base_url_env: str = "QWEN_BASE_URL"
     default_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    timeout_sec: float = 35.0
-    max_retries: int = 1
-    temperature: float = 0.1
-    max_tokens: int = 420
+    timeout_sec: float = 20.0
+    max_retries: int = 0
+    temperature: float = 0.0
+    max_tokens: int = 96
     enable_thinking: bool = False
-    jpeg_quality: int = 88
+    jpeg_quality: int = 72
+    min_pixels: int = 65536
+    max_pixels: int = 442368
+    vl_high_resolution_images: bool = False
 
 
 class QwenVisionClient:
@@ -68,32 +75,57 @@ class QwenVisionClient:
 
     def infer(self, image_bgr, prompt: str, mode: PromptMode, request_id: int = 0) -> ModelResult:
         height, width = image_bgr.shape[:2]
+
+        encode_started = time.perf_counter()
         ok, encoded = cv2.imencode(
             ".jpg",
             image_bgr,
             [int(cv2.IMWRITE_JPEG_QUALITY), int(self.config.jpeg_quality)],
         )
+        encode_ms = (time.perf_counter() - encode_started) * 1000.0
         if not ok:
             raise RuntimeError("Failed to encode image as JPEG")
+
+        jpeg_kb = len(encoded) / 1024.0
         data_url = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
-        started = time.perf_counter()
+        # Keep the image payload minimal. Attaching min_pixels/max_pixels on the
+        # image item can trigger server-side smart-resize that no longer matches
+        # the exact JPEG we encode and draw on, which reintroduces point offset.
+        image_item: Dict[str, Any] = {
+            "type": "image_url",
+            "image_url": {"url": data_url},
+        }
+
+        api_started = time.perf_counter()
         completion = self._client.chat.completions.create(
             model=self.config.model,
             messages=[
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image_url", "image_url": {"url": data_url}},
                         {"type": "text", "text": prompt},
+                        image_item,
                     ],
                 }
             ],
             response_format={"type": "json_object"},
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-            extra_body={"enable_thinking": bool(self.config.enable_thinking)},
+            temperature=float(self.config.temperature),
+            max_tokens=int(self.config.max_tokens),
+            extra_body={
+                "enable_thinking": bool(self.config.enable_thinking),
+                "vl_high_resolution_images": bool(self.config.vl_high_resolution_images),
+            },
         )
-        latency_ms = (time.perf_counter() - started) * 1000.0
+        api_ms = (time.perf_counter() - api_started) * 1000.0
+
+        usage = getattr(completion, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", None)
+        completion_tokens = getattr(usage, "completion_tokens", None)
+        cached_tokens = None
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is not None:
+            cached_tokens = getattr(details, "cached_tokens", None)
+
         raw_content = completion.choices[0].message.content
         raw_text = raw_content if isinstance(raw_content, str) else json.dumps(raw_content, ensure_ascii=False)
         try:
@@ -101,12 +133,88 @@ class QwenVisionClient:
         except Exception as exc:
             preview = (raw_text or "").replace("\n", " ")[:600]
             raise ValueError(f"{exc}; raw_output={preview!r}") from exc
+
+        raw_point = "null"
+        try:
+            raw_json = _extract_json(raw_text or "")
+            raw_point = repr(raw_json.get("p", raw_json.get("point")))
+        except Exception:  # noqa: BLE001
+            pass
+        pixel_point = (
+            "null"
+            if result.point is None
+            else f"[{result.point.x},{result.point.y}]"
+        )
+        print(
+            f"[QWEN_PROFILE] "
+            f"req={request_id} mode={mode.value} "
+            f"shape={width}x{height} "
+            f"jpeg_kb={jpeg_kb:.1f} "
+            f"encode_ms={encode_ms:.1f} "
+            f"api_ms={api_ms:.1f} "
+            f"raw_p={raw_point} "
+            f"pixel_p={pixel_point} "
+            f"prompt_tokens={prompt_tokens} "
+            f"completion_tokens={completion_tokens} "
+            f"cached_tokens={cached_tokens}",
+            flush=True,
+        )
+
         result.raw_text = raw_text or ""
-        result.latency_ms = latency_ms
+        # Keep ModelResult.latency_ms as the pure API wait (exclude local JPEG encode).
+        result.latency_ms = api_ms
         result.request_id = request_id
         result.image_width = width
         result.image_height = height
         return result
+
+    def warmup(self) -> float:
+        """Run one tiny vision request before the real task.
+
+        Call once after Client construction on node startup. Failures must not
+        abort node startup; callers should catch and log warnings.
+        """
+        import numpy as np
+
+        dummy = np.full((256, 256, 3), 127, dtype=np.uint8)
+        ok, encoded = cv2.imencode(
+            ".jpg",
+            dummy,
+            [int(cv2.IMWRITE_JPEG_QUALITY), 60],
+        )
+        if not ok:
+            raise RuntimeError("Failed to encode warmup image")
+
+        data_url = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+        started = time.perf_counter()
+        self._client.chat.completions.create(
+            model=self.config.model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": 'Return exactly this JSON: {"ok":true}',
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": data_url},
+                            "min_pixels": 65536,
+                            "max_pixels": 65536,
+                        },
+                    ],
+                }
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            max_tokens=16,
+            extra_body={
+                "enable_thinking": False,
+                "vl_high_resolution_images": False,
+            },
+        )
+        return (time.perf_counter() - started) * 1000.0
 
 
 def _extract_json(text: str) -> Dict[str, Any]:
@@ -119,13 +227,68 @@ def _extract_json(text: str) -> Dict[str, Any]:
             raise ValueError("Top-level JSON must be an object")
         return value
     except json.JSONDecodeError:
+        # Prefer a complete {...} span when present.
         match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-        if not match:
-            raise ValueError(f"No JSON object found in model output: {cleaned[:300]}")
-        value = json.loads(match.group(0))
-        if not isinstance(value, dict):
-            raise ValueError("Top-level JSON must be an object")
-        return value
+        if match:
+            value = json.loads(match.group(0))
+            if not isinstance(value, dict):
+                raise ValueError("Top-level JSON must be an object")
+            return value
+        # Compact protocol recovery for truncated tails such as:
+        # {"s":"V","p":[450, 430],"c":95000000000000
+        repaired = _repair_compact_json(cleaned)
+        if repaired is not None:
+            return repaired
+        raise ValueError(f"No JSON object found in model output: {cleaned[:300]}")
+
+
+_COMPACT_RE = re.compile(
+    r'"s"\s*:\s*"([VvIiSsFf])"'
+    r'.*?'
+    r'"p"\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]'
+    r'.*?'
+    r'"c"\s*:\s*(-?\d+(?:\.\d+)?)',
+    flags=re.DOTALL,
+)
+
+
+def _repair_compact_json(text: str) -> Optional[Dict[str, Any]]:
+    """Recover compact {"s","p","c"} even when the model truncates the closing brace."""
+    match = _COMPACT_RE.search(text or "")
+    if not match:
+        return None
+    status, x_raw, y_raw, c_raw = match.groups()
+    return {
+        "s": status.upper(),
+        "p": [float(x_raw), float(y_raw)],
+        "c": float(c_raw),
+    }
+
+
+def _normalize_confidence_percent(raw: float) -> float:
+    """Map model confidence to [0, 1].
+
+    Compact protocol expects integer/float percent in [0, 100].
+    Some Qwen compact outputs emit a valid prefix then runaway digits
+    (e.g. 95 -> 95000000000000) under tight max_tokens; recover the
+    longest valid 1-3 digit prefix in that case.
+    """
+    if isinstance(raw, bool):
+        raise ValueError("confidence c cannot be a boolean")
+    value = float(raw)
+    if 0.0 <= value <= 100.0:
+        return value / 100.0
+
+    digits = re.sub(r"[^0-9]", "", f"{value:.0f}")
+    if not digits:
+        raise ValueError(f"confidence c must be within [0, 100], got {raw}")
+    for length in (3, 2, 1):
+        if len(digits) < length:
+            continue
+        prefix = int(digits[:length])
+        if 0 <= prefix <= 100:
+            return prefix / 100.0
+    raise ValueError(f"confidence c must be within [0, 100], got {raw}")
 
 
 _NORM1000_MAX = 1000.0
@@ -187,44 +350,40 @@ def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
 
 
 def parse_model_output(raw_text: str, mode: PromptMode, image_width: int, image_height: int) -> ModelResult:
+    """Parse compact realtime JSON: {"s":"V|I|S|F","p":[x,y],"c":0-100}."""
     data = _extract_json(raw_text)
-    required = {"result", "point", "point_role", "confidence", "label", "reason_code"}
+    required = {"s", "p", "c"}
     missing = sorted(required.difference(data))
     if missing:
         raise ValueError(f"Missing required JSON fields: {missing}")
-    result = str(data.get("result", "")).strip().upper()
-    if result not in _ALLOWED_BY_MODE[mode]:
+
+    status = str(data.get("s", "")).strip().upper()
+    if status not in _STATUS_TO_RESULT:
+        raise ValueError(f"Unknown status code s={status!r}; allowed=V|I|S|F")
+    if status not in _ALLOWED_STATUS_BY_MODE[mode]:
         raise ValueError(
-            f"Result {result!r} is not allowed in mode {mode.value}; "
-            f"allowed={sorted(_ALLOWED_BY_MODE[mode])}"
+            f"Status s={status!r} is not allowed in mode {mode.value}; "
+            f"allowed={sorted(_ALLOWED_STATUS_BY_MODE[mode])}"
         )
-    point = _parse_point(data.get("point"), image_width, image_height)
-    if result in _POINT_REQUIRED and point is None:
-        raise ValueError(f"{result} requires a pixel point")
-    if result in _POINT_FORBIDDEN and point is not None:
-        raise ValueError(f"{result} requires point=null")
-    expected_role = _ROLE_BY_RESULT[result]
-    role = str(data.get("point_role", expected_role)).strip().lower()
-    if role != expected_role:
-        raise ValueError(
-            f"point_role={role!r} conflicts with result={result}; expected {expected_role!r}"
-        )
-    if isinstance(data.get("confidence"), bool):
-        raise ValueError("confidence cannot be a boolean")
+
+    result = _STATUS_TO_RESULT[status]
+    point = _parse_point(data.get("p"), image_width, image_height)
+    if point is None:
+        raise ValueError(f"s={status} requires point p=[x,y]")
+
+    if isinstance(data.get("c"), bool):
+        raise ValueError("confidence c cannot be a boolean")
     try:
-        confidence = float(data["confidence"])
+        confidence = _normalize_confidence_percent(float(data["c"]))
     except (TypeError, ValueError) as exc:
-        raise ValueError("confidence must be numeric") from exc
-    if not 0.0 <= confidence <= 1.0:
-        raise ValueError(f"confidence must be within [0, 1], got {confidence}")
-    reason_code = str(data["reason_code"]).strip().lower()
-    if not reason_code:
-        raise ValueError("reason_code must be a non-empty machine-readable string")
+        raise ValueError(f"invalid confidence c={data.get('c')!r}: {exc}") from exc
+
+    role = _ROLE_BY_RESULT[result]
     return ModelResult(
         result=result,
         point=point,
         point_role=role,
         confidence=confidence,
-        label=str(data.get("label", "")).strip(),
-        reason_code=reason_code,
+        label="",
+        reason_code=f"compact_{status.lower()}",
     )

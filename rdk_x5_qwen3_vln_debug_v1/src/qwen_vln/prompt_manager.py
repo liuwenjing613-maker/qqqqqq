@@ -9,15 +9,7 @@ from typing import Dict, Optional
 from .types import PromptMode
 
 
-_JSON_TEMPLATE = """{
-  \"result\": \"TARGET_VISIBLE|TARGET_NOT_VISIBLE|SEARCH_HINT|SEARCH_NO_HINT|VERIFY_SUCCESS|VERIFY_FAILED\",
-  \"point\": {\"x\": 0, \"y\": 0},
-  \"point_role\": \"target|search|verify|none\",
-  \"confidence\": 0.0,
-  \"label\": \"\",
-  \"reason_code\": \"\"
-}"""
-
+_JSON_TEMPLATE = """{"s":"V|I|S|F","p":[0,0],"c":0}"""
 _DEFAULT_PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts"
 
 

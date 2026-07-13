@@ -1,18 +1,24 @@
-Mode: SEARCH_SEMANTIC_HINT
-The exact target is not confirmed visible. First check once more whether the exact target is clearly visible.
+Mode: SEARCH_SEMANTIC_GUIDANCE
 
-Allowed outputs:
-1. TARGET_VISIBLE
-   - point_role = target
-   - point = center of the target body
-2. SEARCH_HINT
-   - point_role = search
-   - point = center of exactly one visible scene region or landmark that deserves the next visual observation
-   - choose only a visible region, such as a table area, shelf area, doorway view, or open view related to the target
-   - this point is an attention hint for debugging, NOT a traversable path point and NOT a motion command
-3. SEARCH_NO_HINT
-   - point_role = none
-   - point = null
-   - use this when the target is not visible and no meaningful visible search clue exists
+The exact requested target is not currently confirmed visible.
 
-Do not invent a target behind an obstacle. Do not output a point on a blank wall merely because no better clue exists.
+Inspect the whole image once more.
+
+If the exact target is clearly visible:
+- s="V"
+- p = center of the visible target body
+
+Otherwise:
+- s="I"
+- p = exactly one visible exploration waypoint
+
+Select the search waypoint using this order:
+1. Identify visible landmarks related to the target.
+2. Identify visually open ground or a passage leading toward those landmarks.
+3. Choose a mid-distance point on that free-space region.
+4. Reject any point on an obstacle, wall, furniture surface, object, person, or near-field clutter.
+5. If no semantic evidence exists, choose the widest central open passage.
+6. If ambiguous, still return the least obstructed visible direction but lower c.
+
+p indicates where the robot should next observe or explore.
+It does not claim the hidden target is located at that point.

@@ -18,12 +18,18 @@ from qwen_vln.types import PromptMode, VlnState
 from qwen_vln.visualizer import ResultVisualizer
 
 
-def resize_for_api(image, max_width: int):
+def resize_for_api(image, max_width: int, max_height: int = 0):
     height, width = image.shape[:2]
-    if width <= max_width:
+    scale = 1.0
+    if max_width > 0 and width > max_width:
+        scale = min(scale, max_width / float(width))
+    if max_height > 0 and height > max_height:
+        scale = min(scale, max_height / float(height))
+    if scale >= 0.999:
         return image
-    scale = max_width / float(width)
-    return cv2.resize(image, (max_width, max(1, int(round(height * scale)))), interpolation=cv2.INTER_AREA)
+    new_w = max(1, int(round(width * scale)))
+    new_h = max(1, int(round(height * scale)))
+    return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
 def main() -> int:
@@ -35,19 +41,45 @@ def main() -> int:
     parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "outputs"))
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+
+    def section(*names: str) -> dict:
+        for name in names:
+            value = config.get(name)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    api_cfg = section("qwen", "api")
+    camera_cfg = section("camera", "image")
+    if not api_cfg or not camera_cfg:
+        raise KeyError("config needs qwen/camera sections (or legacy api/image)")
+
     image = cv2.imread(args.image, cv2.IMREAD_COLOR)
     if image is None:
         raise RuntimeError(f"Cannot read image: {args.image}")
-    image = resize_for_api(image, int(config["image"]["api_max_width"]))
+    image = resize_for_api(
+        image,
+        int(camera_cfg.get("api_max_width", 960)),
+        int(camera_cfg.get("api_max_height", 0)),
+    )
     height, width = image.shape[:2]
-    api_cfg = config["api"]
-    client = QwenVisionClient(ClientConfig(
-        model=api_cfg["model"], api_key_env=api_cfg["api_key_env"], base_url_env=api_cfg["base_url_env"],
-        default_base_url=api_cfg["default_base_url"], timeout_sec=float(api_cfg["timeout_sec"]),
-        max_retries=int(api_cfg["max_retries"]), temperature=float(api_cfg["temperature"]),
-        max_tokens=int(api_cfg["max_tokens"]), enable_thinking=bool(api_cfg["enable_thinking"]),
-        jpeg_quality=int(config["image"]["jpeg_quality"]),
-    ))
+    client = QwenVisionClient(
+        ClientConfig(
+            model=api_cfg["model"],
+            api_key_env=api_cfg["api_key_env"],
+            base_url_env=api_cfg["base_url_env"],
+            default_base_url=api_cfg["default_base_url"],
+            timeout_sec=float(api_cfg["timeout_sec"]),
+            max_retries=int(api_cfg["max_retries"]),
+            temperature=float(api_cfg["temperature"]),
+            max_tokens=int(api_cfg["max_tokens"]),
+            enable_thinking=bool(api_cfg["enable_thinking"]),
+            jpeg_quality=int(api_cfg.get("jpeg_quality", 72)),
+            min_pixels=int(api_cfg.get("min_pixels", 65536)),
+            max_pixels=int(api_cfg.get("max_pixels", 442368)),
+            vl_high_resolution_images=bool(api_cfg.get("vl_high_resolution_images", False)),
+        )
+    )
     mode = PromptMode(args.mode)
     prompt_dir = PROJECT_ROOT / str(config.get("prompts", {}).get("directory", "prompts"))
     prompt = PromptManager(str(prompt_dir)).build(mode, args.instruction, width, height)
@@ -57,17 +89,23 @@ def main() -> int:
     result_path = output_dir / "latest_result.json"
     image_path = output_dir / "latest_annotated.jpg"
     result_path.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _state_for_result(result_name: str) -> VlnState:
+        if result_name == "TARGET_VISIBLE":
+            return VlnState.TARGET_LOCKED
+        if result_name == "TARGET_INFERRED":
+            return VlnState.TARGET_INFERRED
+        if result_name == "VERIFY_SUCCESS":
+            return VlnState.SUCCESS
+        if result_name == "VERIFY_FAILED":
+            return VlnState.TARGET_INFERRED
+        return VlnState.SEARCHING
+
     state_by_mode = {
-        PromptMode.OBSERVE: VlnState.TARGET_LOCKED if result.result == "TARGET_VISIBLE" else VlnState.OBSERVE,
-        PromptMode.TRACK: VlnState.TARGET_LOCKED if result.result == "TARGET_VISIBLE" else VlnState.SEARCHING,
-        PromptMode.SEARCH: (
-            VlnState.TARGET_LOCKED
-            if result.result == "TARGET_VISIBLE"
-            else VlnState.TARGET_INFERRED
-            if result.result == "SEARCH_HINT"
-            else VlnState.SEARCHING
-        ),
-        PromptMode.VERIFY: VlnState.SUCCESS if result.result == "VERIFY_SUCCESS" else VlnState.VERIFY,
+        PromptMode.OBSERVE: _state_for_result(result.result),
+        PromptMode.TRACK: _state_for_result(result.result),
+        PromptMode.SEARCH: _state_for_result(result.result),
+        PromptMode.VERIFY: _state_for_result(result.result),
     }
     visualizer = ResultVisualizer(history_length=1)
     visualizer.add_result(result)

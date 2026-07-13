@@ -1,13 +1,22 @@
 Mode: VERIFY_CANDIDATE
-Verify whether the visible candidate matches the full task description. The last candidate point on the [0, 1000] relative grid was $previous_point.
-Consider category, visible attributes, and explicit spatial relation in the instruction.
 
-Allowed outputs:
-1. VERIFY_SUCCESS
-   - point_role = verify
-   - point = center of the verified target body
-2. VERIFY_FAILED
-   - point_role = none
-   - point = null
+The last candidate point on the [0, 1000] grid was:
+$previous_point
 
-Be conservative. A related landmark alone is not the target.
+Determine whether the visible candidate matches the full task, including:
+- object category
+- visible attributes
+- explicit spatial relation
+- task meaning
+
+If it matches:
+- s="S"
+- p = center of the verified target body
+
+If it does not match or cannot be confirmed:
+- s="F"
+- p = next best visible free-space exploration waypoint
+- Do not place p on the rejected candidate
+- Prefer a different open direction or another semantically relevant region
+
+Be conservative when verifying the target.

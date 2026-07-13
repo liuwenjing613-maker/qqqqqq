@@ -1,0 +1,76 @@
+node:
+  name: frontier_region_debug
+  analysis_period_s: 1.0
+  console_log_level: DEBUG
+  console_summary_every_cycles: 1
+
+topics:
+  map: /map
+  heartbeat: /qwen_explore_debug/heartbeat
+  map_health_json: /qwen_explore_debug/map_health_json
+  frontier_stats_json: /qwen_explore_debug/frontier_stats_json
+  regions_json: /qwen_explore_debug/regions_json
+  rejections_json: /qwen_explore_debug/rejections_json
+  frontier_markers: /qwen_explore_debug/frontier_markers
+  region_markers: /qwen_explore_debug/region_markers
+  rejected_region_markers: /qwen_explore_debug/rejected_region_markers
+  annotated_map: /qwen_explore_debug/annotated_map/compressed
+  region_snapshot_json: /qwen_explore_debug/region_snapshot_json
+
+frames:
+  map: map
+  robot: base_link
+  tf_timeout_s: 0.5
+  warn_tf_age_s: 1.0
+
+map_values:
+  unknown_value: -1
+  free_max: 20
+  occupied_min: 65
+
+map_health:
+  enforce_map_timestamp_age: false
+  warn_map_age_s: 5.0
+  require_robot_inside_map: true
+  reject_robot_cell_occupied: true
+  reject_robot_cell_unknown: false
+
+frontier:
+  unknown_neighbor_mode: 8
+  cluster_connectivity: 8
+  min_clearance_m: 0.35
+
+region:
+  min_frontier_cells: 8
+  min_distance_m: 0.50
+  max_distance_m: 4.00
+  min_unknown_gain_cells: 10
+  unknown_gain_radius_m: 1.00
+  max_regions: 12
+
+region_merge:
+  enabled: true
+  max_frontier_gap_m: 0.20
+  max_centroid_distance_m: 0.45
+  max_bearing_difference_deg: 25.0
+  require_same_direction_label: false
+
+snapshot:
+  expires_after_s: 300.0
+  service_name: /qwen_explore_debug/capture_region_snapshot
+  topic: /qwen_explore_debug/region_snapshot_json
+
+logging:
+  root_dir: logs/qwen_region_explore
+  write_jsonl: true
+  write_latest_json: true
+  write_annotated_image: true
+  periodic_snapshot_s: 10.0
+  snapshot_on_region_change: true
+  flush_every_record: true
+
+safety:
+  observation_only: true
+  motion_enabled: false
+  qwen_enabled: false
+  nav2_enabled: false

@@ -6,7 +6,7 @@
 
 1. 调用 `qwen3-vl-flash` 分析真车相机画面；
 2. 按状态选择独立提示词；
-3. 严格解析 JSON 和真实像素坐标；
+3. 严格解析 JSON；模型输出 `[0, 1000]` 相对坐标，本地换算为像素后绘制/发布；
 4. 把模型点绘制在**本次 API 实际输入的那一帧图像**上，并发布给 Foxglove。
 
 本版本**不发布 `/cmd_vel`，不控制底盘，不包含 SLAM、Frontier、记忆、路径规划或 YOLO-World 融合**。先判断模型到底点中了什么，再允许机器人运动，多少算是给墙壁一点基本尊重。
@@ -22,22 +22,24 @@ WAIT_IMAGE
     │ 收到图像且已有任务
     ▼
 OBSERVE
-    ├── TARGET_VISIBLE ─────────────> TARGET_LOCKED
-    └── TARGET_NOT_VISIBLE ─────────> SEARCHING
+    ├── TARGET_VISIBLE (高置信) ────> TARGET_LOCKED
+    ├── TARGET_INFERRED (高置信) ───> TARGET_INFERRED
+    └── 低置信探索点 ───────────────> SEARCHING
 
 TARGET_LOCKED
-    ├── 继续看到同一目标 ───────────> TARGET_LOCKED
-    └── 目标丢失 ───────────────────> SEARCHING
+    ├── TARGET_VISIBLE ─────────────> TARGET_LOCKED
+    └── TARGET_INFERRED / 低置信 ───> TARGET_INFERRED / SEARCHING
 
 SEARCHING / TARGET_INFERRED
     ├── TARGET_VISIBLE ─────────────> TARGET_LOCKED
-    ├── SEARCH_HINT 且置信度足够 ───> TARGET_INFERRED
-    └── SEARCH_NO_HINT / 低置信度 ──> SEARCHING
+    ├── TARGET_INFERRED (高置信) ───> TARGET_INFERRED
+    └── 低置信 ─────────────────────> SEARCHING
 
 任意工作状态 -- verify --> VERIFY
 VERIFY
     ├── VERIFY_SUCCESS ─────────────> SUCCESS
-    └── VERIFY_FAILED ──────────────> OBSERVE
+    ├── VERIFY_FAILED (高置信) ─────> TARGET_INFERRED
+    └── VERIFY_FAILED (低置信) ─────> SEARCHING
 
 任意工作状态 -- pause --> PAUSED
 API 或解析异常 ─────────────────────> ERROR
@@ -258,16 +260,16 @@ ros2 topic pub --once /qwen_vln/command std_msgs/msg/String "{data: 'reset'}"
 }
 ```
 
-无语义搜索线索：
+目标不可见但仍返回探索路点（新协议要求 `point` 永不为 null）：
 
 ```json
 {
-  "result": "SEARCH_NO_HINT",
-  "point": null,
-  "point_role": "none",
-  "confidence": 0.84,
-  "label": "",
-  "reason_code": "no_visible_semantic_clue"
+  "result": "TARGET_INFERRED",
+  "point": {"x": 500, "y": 720},
+  "point_role": "search",
+  "confidence": 0.78,
+  "label": "open corridor toward desk",
+  "reason_code": "free_space_toward_desk"
 }
 ```
 
@@ -276,7 +278,7 @@ ros2 topic pub --once /qwen_vln/command std_msgs/msg/String "{data: 'reset'}"
 
 `pixel = round(coord / 1000 * (size - 1))`
 
-其中 `size` 为图像宽或高。0～1 归一化坐标会被拒绝。
+其中 `size` 为图像宽或高。0～1 归一化坐标会被拒绝。ROS 话题 `/qwen_vln/pixel_point` 与标注图上的点均为换算后的像素。
 
 ---
 
