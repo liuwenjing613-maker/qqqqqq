@@ -9,6 +9,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from control.qwen_visual_servo import (  # noqa: E402
     CommandRateLimiter,
+    EmergencyReverseConfig,
+    EmergencyReverseController,
     QwenVisualServo,
     RateLimitConfig,
     ServoConfig,
@@ -58,6 +60,34 @@ class ServoTests(unittest.TestCase):
             )
         )
         self.assertGreater(decision.vx, 0.0)
+
+    def test_target_visible_moves_when_lidar_null(self) -> None:
+        decision = self.servo.compute(
+            self.input(front_distance=None, scan_received_sec=None)
+        )
+        self.assertFalse(decision.hard_stop)
+        self.assertGreater(decision.vx, 0.0)
+        self.assertEqual(decision.obstacle_scale, 1.0)
+        self.assertEqual(decision.reason, "continuous_visual_servo")
+
+    def test_target_visible_moves_when_lidar_stale(self) -> None:
+        decision = self.servo.compute(
+            self.input(
+                front_distance=0.30,
+                scan_received_sec=0.0,
+                now_sec=10.0,
+            )
+        )
+        self.assertFalse(decision.hard_stop)
+        self.assertGreater(decision.vx, 0.0)
+        self.assertEqual(decision.obstacle_scale, 1.0)
+
+    def test_fresh_close_lidar_still_emergency_stops(self) -> None:
+        decision = self.servo.compute(
+            self.input(front_distance=0.20, scan_received_sec=9.9)
+        )
+        self.assertTrue(decision.hard_stop)
+        self.assertEqual(decision.reason, "emergency_obstacle")
 
     def test_turn_never_enters_pixel_servo(self) -> None:
         decision = self.servo.compute(
@@ -121,6 +151,21 @@ class ServoTests(unittest.TestCase):
         self.assertFalse(gate.ready)
         gate.update_scan(0.44)
         self.assertTrue(gate.ready)
+
+    def test_emergency_reverse_latches_until_clearance(self) -> None:
+        # Trigger on stop_distance (0.42), release at 0.42 + 0.18 = 0.60.
+        reverse = EmergencyReverseController(
+            EmergencyReverseConfig(
+                trigger_distance=0.42,
+                clearance=0.18,
+                reverse_vx=-0.055,
+            )
+        )
+        self.assertFalse(reverse.update(0.43))
+        self.assertTrue(reverse.update(0.42))
+        self.assertTrue(reverse.update(0.50))
+        self.assertTrue(reverse.update(0.59))
+        self.assertFalse(reverse.update(0.60))
 
     def test_rate_limiter_hard_stop_is_immediate(self) -> None:
         limiter = CommandRateLimiter(RateLimitConfig())

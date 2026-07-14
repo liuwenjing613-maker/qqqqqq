@@ -16,9 +16,9 @@ BASE_CONFIG="${QWEN_BASE_CONFIG:-$ROOT/configs/qwen3_vln_debug.yaml}"
 FAST_CONFIG="${QWEN_FAST_CONFIG:-$ROOT/configs/qwen3_vln_debug_servo_fast.yaml}"
 python3 "$ROOT/scripts/qwen_servo/make_fast_qwen_config.py" \
   --input "$BASE_CONFIG" --output "$FAST_CONFIG" \
-  --observe "${QWEN_OBSERVE_INTERVAL:-1.0}" \
-  --track "${QWEN_TRACK_INTERVAL:-0.90}" \
-  --search "${QWEN_SEARCH_INTERVAL:-1.20}"
+  --observe "${QWEN_OBSERVE_INTERVAL:-0.9}" \
+  --track "${QWEN_TRACK_INTERVAL:-0.85}" \
+  --search "${QWEN_SEARCH_INTERVAL:-0.90}"
 
 CAMERA_PID=""
 BRIDGE_PID=""

@@ -25,6 +25,8 @@ from std_msgs.msg import Bool, Float32, String
 
 from control.qwen_visual_servo import (
     CommandRateLimiter,
+    EmergencyReverseConfig,
+    EmergencyReverseController,
     QwenVisualServo,
     RateLimitConfig,
     ServoConfig,
@@ -105,6 +107,18 @@ class QwenVisualServoNode(Node):
             ),
         )
         self.servo = QwenVisualServo(servo_cfg)
+        self.emergency_reverse = EmergencyReverseController(
+            EmergencyReverseConfig(
+                enabled=bool(safety.get("emergency_reverse_enabled", True)),
+                # Trigger on the normal stop band, not only the tighter emergency
+                # band, so the robot does not freeze between stop and emergency.
+                trigger_distance=servo_cfg.stop_distance,
+                clearance=float(
+                    safety.get("emergency_reverse_clearance", 0.18)
+                ),
+                reverse_vx=float(safety.get("emergency_reverse_vx", -0.055)),
+            )
+        )
         self.view_adjust = ViewAdjustController(
             ViewAdjustConfig(
                 turn_left_wz=float(view_cfg.get("turn_left_wz", 0.06)),
@@ -274,6 +288,9 @@ class QwenVisualServoNode(Node):
             f"motion_enabled={self.motion_enabled} "
             f"cmd={topics.get('cmd_output', '/cmd_vel_autonomy')} "
             f"point_max=({servo_cfg.max_vx:.3f},{servo_cfg.max_wz:.3f}) "
+            f"emergency_reverse=({self.emergency_reverse.cfg.trigger_distance:.2f}"
+            f"->{self.emergency_reverse.cfg.release_distance:.2f}m,"
+            f" vx={self.emergency_reverse.cfg.reverse_vx:.3f}) "
             f"turn_wz=({self.view_adjust.cfg.turn_left_wz:.3f},"
             f"{self.view_adjust.cfg.turn_right_wz:.3f}) "
             f"turn_entry=({self.turn_gate.cfg.entry_distance:.2f}m x"
@@ -415,7 +432,39 @@ class QwenVisualServoNode(Node):
         view_phase = self.view_adjust.phase.value
         bypass_rate_limit = False
 
-        if self.view_adjust.active:
+        scan_fresh = (
+            self.front_distance is not None
+            and self.scan_received_sec is not None
+            and now - self.scan_received_sec <= self.servo.cfg.scan_timeout_sec
+        )
+        was_emergency_reversing = self.emergency_reverse.active
+        emergency_reversing = (
+            self.emergency_reverse.update(self.front_distance)
+            if scan_fresh
+            else self.emergency_reverse.active
+        )
+        if was_emergency_reversing and not emergency_reversing:
+            self.limiter.reset()
+            self._send_qwen_command(self.resume_command)
+            self.get_logger().warning(
+                "emergency reverse cleared; requested fresh observation"
+            )
+
+        if emergency_reversing:
+            self.turn_gate.cancel()
+            self.view_adjust.cancel()
+            self._release_qwen_pause(send_resume=False)
+            desired_wz = 0.0
+            view_phase = "EMERGENCY_REVERSE"
+            if scan_fresh:
+                desired_vx = self.emergency_reverse.cfg.reverse_vx
+                hard_stop = False
+                reason = "emergency_reverse"
+            else:
+                desired_vx = 0.0
+                hard_stop = True
+                reason = "emergency_reverse_wait_lidar"
+        elif self.view_adjust.active:
             view = self.view_adjust.update(now)
             desired_vx, desired_wz = view.vx, view.wz
             hard_stop = view.hard_stop
@@ -426,17 +475,7 @@ class QwenVisualServoNode(Node):
                 self._release_qwen_pause(send_resume=True)
         elif self.turn_gate.active:
             view_phase = f"TURN_PENDING_{self.turn_gate.action.removeprefix('TURN_')}"
-            scan_fresh = (
-                self.front_distance is not None
-                and self.scan_received_sec is not None
-                and now - self.scan_received_sec
-                <= self.servo.cfg.scan_timeout_sec
-            )
-            if not scan_fresh:
-                desired_vx = desired_wz = 0.0
-                hard_stop = True
-                reason = "turn_pending_wait_lidar"
-            elif self.turn_gate.ready:
+            if self.turn_gate.ready:
                 turn_action = self.turn_gate.action
                 turn_request_id = self.turn_gate.request_id
                 self.turn_gate.cancel()
@@ -465,18 +504,30 @@ class QwenVisualServoNode(Node):
                     hard_stop = True
                     reason = "turn_request_already_used"
                     view_phase = self.view_adjust.phase.value
-            elif self.front_distance <= self.servo.cfg.emergency_stop_distance:
+            elif (
+                scan_fresh
+                and self.front_distance is not None
+                and self.front_distance
+                <= self.servo.cfg.emergency_stop_distance
+            ):
+                # Fresh close reading while pending: let emergency reverse own it
+                # on the next tick after cancel; for this tick stop spinning.
                 desired_vx = desired_wz = 0.0
                 hard_stop = True
                 reason = "turn_pending_emergency_obstacle"
             else:
+                # Missing/stale lidar does not freeze TURN_PENDING crawl.
                 desired_vx = self.turn_gate.desired_vx(
                     self.limiter.vx,
                     self.servo.cfg.max_vx,
                 )
                 desired_wz = 0.0
                 hard_stop = False
-                reason = f"turn_pending_{self.turn_gate.action.lower()}"
+                reason = (
+                    f"turn_pending_{self.turn_gate.action.lower()}"
+                    if scan_fresh
+                    else "turn_pending_no_lidar"
+                )
         elif self.action == "STOP":
             desired_vx = desired_wz = 0.0
             hard_stop = True
@@ -564,6 +615,11 @@ class QwenVisualServoNode(Node):
                 else round(self.front_distance, 3)
             ),
             "view_adjust_phase": view_phase,
+            "emergency_reverse_active": self.emergency_reverse.active,
+            "emergency_release_distance": round(
+                self.emergency_reverse.cfg.release_distance,
+                3,
+            ),
             "turn_pending_action": (
                 self.turn_gate.action if self.turn_gate.active else None
             ),
@@ -604,6 +660,7 @@ class QwenVisualServoNode(Node):
             )
 
     def _cancel_turn_and_resume_qwen(self) -> None:
+        self.emergency_reverse.reset()
         self.turn_gate.cancel()
         self.view_adjust.cancel()
         if self.qwen_pause_owned:

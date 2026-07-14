@@ -133,18 +133,17 @@ class QwenVisualServo:
         freshness = self._freshness_scale(source_age)
 
         is_track = result in self._TRACK_RESULTS or role == "target"
-        if cfg.require_lidar and is_track:
-            if data.scan_received_sec is None or data.front_distance is None:
-                return self._stop("waiting_for_lidar", source_age)
-            if data.now_sec - data.scan_received_sec > cfg.scan_timeout_sec:
-                return self._stop("lidar_stale", source_age)
-            if data.front_distance <= cfg.emergency_stop_distance:
-                return self._stop("emergency_obstacle", source_age)
-        elif (
+        # Missing or stale lidar must NOT freeze motion. Only a fresh numeric
+        # front distance may apply emergency / obstacle scaling.
+        scan_fresh = (
             data.front_distance is not None
             and data.scan_received_sec is not None
             and data.now_sec - data.scan_received_sec <= cfg.scan_timeout_sec
-            and data.front_distance <= cfg.emergency_stop_distance
+        )
+        usable_front = data.front_distance if scan_fresh else None
+        if (
+            usable_front is not None
+            and usable_front <= cfg.emergency_stop_distance
         ):
             return self._stop("emergency_obstacle", source_age)
 
@@ -162,10 +161,7 @@ class QwenVisualServo:
                 wz = 0.0
 
         heading_scale = self._heading_scale(abs_error)
-        if (not is_track) and data.front_distance is None:
-            obstacle_scale = 1.0
-        else:
-            obstacle_scale = self._obstacle_scale(data.front_distance)
+        obstacle_scale = self._obstacle_scale(usable_front)
 
         forward_confirmed = (
             data.point_streak >= cfg.point_results_before_forward
@@ -229,8 +225,9 @@ class QwenVisualServo:
 
     def _obstacle_scale(self, front_distance: Optional[float]) -> float:
         cfg = self.cfg
+        # null / unavailable lidar: do not restrict forward motion.
         if front_distance is None:
-            return 0.0 if cfg.require_lidar else 1.0
+            return 1.0
         if front_distance <= cfg.stop_distance:
             return 0.0
         if front_distance >= cfg.slow_distance:
@@ -461,6 +458,51 @@ class TurnPendingGate:
         if current_vx > 0.0:
             return min(current_vx, cap)
         return cap
+
+
+@dataclass(frozen=True)
+class EmergencyReverseConfig:
+    enabled: bool = True
+    trigger_distance: float = 0.42
+    clearance: float = 0.18
+    reverse_vx: float = -0.055
+
+    @property
+    def release_distance(self) -> float:
+        return self.trigger_distance + self.clearance
+
+    def validate(self) -> None:
+        if self.trigger_distance <= 0.0:
+            raise ValueError("trigger_distance must be positive")
+        if self.clearance <= 0.0:
+            raise ValueError("clearance must be positive")
+        if self.reverse_vx >= 0.0:
+            raise ValueError("reverse_vx must be negative")
+
+
+class EmergencyReverseController:
+    """Latch reverse until lidar has backed out past trigger + clearance."""
+
+    def __init__(self, config: EmergencyReverseConfig):
+        config.validate()
+        self.cfg = config
+        self.active = False
+
+    def reset(self) -> None:
+        self.active = False
+
+    def update(self, front_distance: Optional[float]) -> bool:
+        if not self.cfg.enabled:
+            self.active = False
+            return False
+        if front_distance is None:
+            return self.active
+        if self.active:
+            if front_distance >= self.cfg.release_distance:
+                self.active = False
+        elif front_distance <= self.cfg.trigger_distance:
+            self.active = True
+        return self.active
 
 
 @dataclass(frozen=True)
