@@ -4,12 +4,11 @@ Inspect the current image again.
 
 If the same exact target is still clearly visible:
 - s="V", a="POINT"
-- p = geometric center of the current target body
+- p = exact geometric center of the current visible target body (not cap/base/edge)
 - do not blindly copy the old point
 
 If the target is lost or occluded, use s="I":
 - POINT if a visible open continuation useful for reacquiring the target exists now
 - TURN_LEFT or TURN_RIGHT if the target/path left the field of view and a clear corner/side opening requires view adjustment first
-- STOP if neither is reliable
 
-Do not lock onto another similar object. Do not output a central POINT merely because the old target cannot be found.
+Do not lock onto another similar object. Do not output a central POINT merely because the old target cannot be found. If turn evidence is insufficient, choose the safest, most continuous, farthest visible free-floor POINT that can actually be followed now.

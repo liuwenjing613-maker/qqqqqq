@@ -6,8 +6,8 @@ qwen:
   timeout_sec: 20.0
   max_retries: 0
   temperature: 0.0
-  # Compact JSON is tiny ({"s","p"}); keep a small headroom for the closing brace.
-  max_tokens: 24
+  # Protocol is {"s","a","p"} only; keep a little headroom for precise p digits.
+  max_tokens: 22
 
   enable_thinking: false
   jpeg_quality: 72
@@ -30,7 +30,7 @@ camera:
   # Keep the exact resized JPEG as both API input and draw canvas so
   # norm1000 -> pixel mapping stays one-to-one.
   api_max_width: 960
-  api_max_height: 0
+  api_max_height: 540
   subscriber_reliability: reliable
 
 bridge:

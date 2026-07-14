@@ -1,4 +1,6 @@
 # V3 action protocol controller for baseline commit f9a3010.
+# Chassis serial port is NOT here. Change it in:
+#   /root/rdk_x5_vln_robot/configs/mvp_tune.yaml  ->  chassis_port
 topics:
   state: /qwen_vln/state
   result_json: /qwen_vln/result_json
@@ -20,9 +22,9 @@ control:
   # Existing POINT visual-servo parameters are intentionally preserved.
   max_vx: 0.07
   max_wz: 0.05
-  kp_wz: 0.05
+  kp_wz: 0.07
   angular_sign: -1.0
-  center_deadband: 0.18
+  center_deadband: 0.15
   turn_only_threshold: 0.40
   cmd_wz_deadband: 0.006
 
@@ -44,7 +46,12 @@ view_adjust:
 
   # This is a fixed-duration incremental pulse, NOT a claimed fixed angle.
   # One unique Qwen TURN result can trigger only one pulse.
-  turn_pulse_sec: 1.20
+  # TURN waits until front lidar is near for N consecutive scan frames.
+  turn_entry_distance: 0.45
+  turn_entry_frames: 3
+  turn_pending_vx: 0.04
+  pre_turn_stop_sec: 0.15
+  turn_pulse_sec: 1.50
   settle_sec: 0.30
 
   # Pause Qwen requests while moving, then send "search" after the camera settles.
@@ -53,13 +60,13 @@ view_adjust:
   resume_command: search
 
 freshness:
-  full_speed_source_age_sec: 0.95
+  full_speed_source_age_sec: 1.5
   stop_source_age_sec: 2.00
   max_receive_gap_sec: 1.60
 
 rate_limit:
   max_linear_accel: 0.08
-  max_linear_decel: 0.16
+  max_linear_decel: 0.10
   max_angular_accel: 0.12
   max_angular_decel: 0.25
 

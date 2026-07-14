@@ -29,6 +29,8 @@ from control.qwen_visual_servo import (
     RateLimitConfig,
     ServoConfig,
     ServoInput,
+    TurnPendingConfig,
+    TurnPendingGate,
     ViewAdjustConfig,
     ViewAdjustController,
     ViewAdjustPhase,
@@ -107,8 +109,20 @@ class QwenVisualServoNode(Node):
             ViewAdjustConfig(
                 turn_left_wz=float(view_cfg.get("turn_left_wz", 0.06)),
                 turn_right_wz=float(view_cfg.get("turn_right_wz", -0.06)),
+                pre_turn_stop_sec=float(
+                    view_cfg.get("pre_turn_stop_sec", 0.15)
+                ),
                 turn_pulse_sec=float(view_cfg.get("turn_pulse_sec", 1.20)),
                 settle_sec=float(view_cfg.get("settle_sec", 0.30)),
+            )
+        )
+        self.turn_gate = TurnPendingGate(
+            TurnPendingConfig(
+                entry_distance=float(
+                    view_cfg.get("turn_entry_distance", 0.45)
+                ),
+                entry_frames=int(view_cfg.get("turn_entry_frames", 3)),
+                pending_vx=float(view_cfg.get("turn_pending_vx", 0.04)),
             )
         )
         self.pause_qwen_during_turn = bool(
@@ -262,6 +276,10 @@ class QwenVisualServoNode(Node):
             f"point_max=({servo_cfg.max_vx:.3f},{servo_cfg.max_wz:.3f}) "
             f"turn_wz=({self.view_adjust.cfg.turn_left_wz:.3f},"
             f"{self.view_adjust.cfg.turn_right_wz:.3f}) "
+            f"turn_entry=({self.turn_gate.cfg.entry_distance:.2f}m x"
+            f"{self.turn_gate.cfg.entry_frames}) "
+            f"pending_vx={self.turn_gate.cfg.pending_vx:.3f} "
+            f"pre_stop={self.view_adjust.cfg.pre_turn_stop_sec:.2f}s "
             f"pulse={self.view_adjust.cfg.turn_pulse_sec:.2f}s "
             f"settle={self.view_adjust.cfg.settle_sec:.2f}s"
         )
@@ -308,26 +326,21 @@ class QwenVisualServoNode(Node):
 
             if self.action == "POINT" and self.point_x is not None:
                 self.point_streak += 1
+                self.turn_gate.cancel()
                 self.view_adjust.cancel()
                 self._release_qwen_pause(send_resume=False)
             else:
                 self.point_streak = 0
 
             if self.action in {"TURN_LEFT", "TURN_RIGHT"}:
-                started = self.view_adjust.start(
-                    self.action,
-                    request_id,
-                    time.monotonic(),
-                )
+                started = self.turn_gate.start(self.action, request_id)
                 if started:
-                    self.limiter.reset()
-                    if self.pause_qwen_during_turn:
-                        self._send_qwen_command("pause")
-                        self.qwen_pause_owned = True
                     self.get_logger().warning(
-                        f"start {self.action} pulse request_id={request_id}"
+                        f"pending {self.action} request_id={request_id} "
+                        f"front_distance={self.front_distance}"
                     )
             elif self.action == "STOP":
+                self.turn_gate.cancel()
                 self.view_adjust.cancel()
                 self.limiter.reset()
                 self._release_qwen_pause(send_resume=False)
@@ -336,6 +349,7 @@ class QwenVisualServoNode(Node):
             self.point_x = None
             self.point_y = None
             self.action = "STOP"
+            self.turn_gate.cancel()
             self.view_adjust.cancel()
             self.get_logger().warning(f"invalid result JSON: {exc}")
 
@@ -365,6 +379,7 @@ class QwenVisualServoNode(Node):
                 else float(np.percentile(values, self.front_percentile))
             )
             self.scan_received_sec = time.monotonic()
+            self.turn_gate.update_scan(self.front_distance)
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warning(f"scan parse failed: {exc}")
 
@@ -398,6 +413,7 @@ class QwenVisualServoNode(Node):
         heading_scale = 0.0
         obstacle_scale = 0.0
         view_phase = self.view_adjust.phase.value
+        bypass_rate_limit = False
 
         if self.view_adjust.active:
             view = self.view_adjust.update(now)
@@ -405,8 +421,62 @@ class QwenVisualServoNode(Node):
             hard_stop = view.hard_stop
             reason = view.reason
             view_phase = view.phase.value
+            bypass_rate_limit = view.phase == ViewAdjustPhase.TURNING
             if view.request_fresh_observation:
                 self._release_qwen_pause(send_resume=True)
+        elif self.turn_gate.active:
+            view_phase = f"TURN_PENDING_{self.turn_gate.action.removeprefix('TURN_')}"
+            scan_fresh = (
+                self.front_distance is not None
+                and self.scan_received_sec is not None
+                and now - self.scan_received_sec
+                <= self.servo.cfg.scan_timeout_sec
+            )
+            if not scan_fresh:
+                desired_vx = desired_wz = 0.0
+                hard_stop = True
+                reason = "turn_pending_wait_lidar"
+            elif self.turn_gate.ready:
+                turn_action = self.turn_gate.action
+                turn_request_id = self.turn_gate.request_id
+                self.turn_gate.cancel()
+                started = self.view_adjust.start(
+                    turn_action,
+                    turn_request_id,
+                    now,
+                )
+                if started:
+                    self.limiter.reset()
+                    if self.pause_qwen_during_turn:
+                        self._send_qwen_command("pause")
+                        self.qwen_pause_owned = True
+                    self.get_logger().warning(
+                        f"start {turn_action} after lidar gate "
+                        f"request_id={turn_request_id}"
+                    )
+                    view = self.view_adjust.update(now)
+                    desired_vx, desired_wz = view.vx, view.wz
+                    hard_stop = view.hard_stop
+                    reason = view.reason
+                    view_phase = view.phase.value
+                    bypass_rate_limit = view.phase == ViewAdjustPhase.TURNING
+                else:
+                    desired_vx = desired_wz = 0.0
+                    hard_stop = True
+                    reason = "turn_request_already_used"
+                    view_phase = self.view_adjust.phase.value
+            elif self.front_distance <= self.servo.cfg.emergency_stop_distance:
+                desired_vx = desired_wz = 0.0
+                hard_stop = True
+                reason = "turn_pending_emergency_obstacle"
+            else:
+                desired_vx = self.turn_gate.desired_vx(
+                    self.limiter.vx,
+                    self.servo.cfg.max_vx,
+                )
+                desired_wz = 0.0
+                hard_stop = False
+                reason = f"turn_pending_{self.turn_gate.action.lower()}"
         elif self.action == "STOP":
             desired_vx = desired_wz = 0.0
             hard_stop = True
@@ -440,12 +510,20 @@ class QwenVisualServoNode(Node):
 
         self.raw_cmd_pub.publish(self._twist(desired_vx, desired_wz))
         output_hard_stop = hard_stop or not self.motion_enabled
-        limited_vx, limited_wz = self.limiter.step(
-            desired_vx,
-            desired_wz,
-            dt,
-            hard_stop=output_hard_stop,
-        )
+        if not self.motion_enabled:
+            self.limiter.reset()
+            limited_vx = limited_wz = 0.0
+        elif bypass_rate_limit:
+            self.limiter.vx = desired_vx
+            self.limiter.wz = desired_wz
+            limited_vx, limited_wz = desired_vx, desired_wz
+        else:
+            limited_vx, limited_wz = self.limiter.step(
+                desired_vx,
+                desired_wz,
+                dt,
+                hard_stop=output_hard_stop,
+            )
         effective_reason = (
             "motion_disabled_dry_run" if not self.motion_enabled else reason
         )
@@ -486,6 +564,11 @@ class QwenVisualServoNode(Node):
                 else round(self.front_distance, 3)
             ),
             "view_adjust_phase": view_phase,
+            "turn_pending_action": (
+                self.turn_gate.action if self.turn_gate.active else None
+            ),
+            "turn_near_count": self.turn_gate.near_count,
+            "turn_entry_frames": self.turn_gate.cfg.entry_frames,
             "qwen_pause_owned": self.qwen_pause_owned,
             "raw_cmd": {
                 "vx": round(desired_vx, 4),
@@ -521,6 +604,7 @@ class QwenVisualServoNode(Node):
             )
 
     def _cancel_turn_and_resume_qwen(self) -> None:
+        self.turn_gate.cancel()
         self.view_adjust.cancel()
         if self.qwen_pause_owned:
             self._release_qwen_pause(send_resume=True)

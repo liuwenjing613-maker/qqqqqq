@@ -60,6 +60,17 @@ class ActionProtocolTests(unittest.TestCase):
                 720,
             )
 
+    def test_verify_success_uses_point(self) -> None:
+        r = parse_model_output(
+            '{"s":"S","a":"POINT","p":[500,500],"c":90}',
+            PromptMode.VERIFY,
+            960,
+            720,
+        )
+        self.assertEqual(r.result, "VERIFY_SUCCESS")
+        self.assertEqual(r.action, "POINT")
+        self.assertIsNotNone(r.point)
+
     def test_legacy_point_is_backward_compatible(self) -> None:
         r = parse_model_output(
             '{"s":"I","p":[800,650]}',
@@ -81,6 +92,28 @@ class ActionProtocolTests(unittest.TestCase):
         self.assertEqual(r.action, "TURN_LEFT")
         self.assertIsNone(r.point)
         self.assertEqual(r.confidence, 73.0)
+
+    def test_truncated_confidence_digit_recovery(self) -> None:
+        # max_tokens can cut {"c":95} into "c":950 without the closing brace.
+        r = parse_model_output(
+            '{"s":"V","a":"POINT","p":[150,720],"c":950',
+            PromptMode.OBSERVE,
+            960,
+            720,
+        )
+        self.assertEqual(r.action, "POINT")
+        self.assertEqual(r.confidence, 95.0)
+
+    def test_protocol_without_confidence(self) -> None:
+        r = parse_model_output(
+            '{"s":"V","a":"POINT","p":[473,612]}',
+            PromptMode.OBSERVE,
+            960,
+            720,
+        )
+        self.assertEqual(r.action, "POINT")
+        self.assertIsNotNone(r.point)
+        self.assertEqual(r.confidence, 0.0)
 
 
 if __name__ == "__main__":

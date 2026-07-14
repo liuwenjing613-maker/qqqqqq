@@ -12,33 +12,36 @@ Field definitions:
   - "S" = verification success
   - "F" = verification failed
 - a: execution action
-  - "POINT" = follow one visible target or visible traversable continuation in THIS image
-  - "TURN_LEFT" = no reliable POINT continuation is currently visible; rotate view left first
-  - "TURN_RIGHT" = no reliable POINT continuation is currently visible; rotate view right first
-  - "STOP" = do not move from this result
+  - "POINT" = follow one visible target or a real visible traversable continuation in THIS image
+  - "TURN_LEFT" = the current visible path has ended and a left corner/opening is clearly supported
+  - "TURN_RIGHT" = the current visible path has ended and a right corner/opening is clearly supported
 - p:
   - when a="POINT", p=[x,y] integers on the Qwen3-VL relative grid [0,1000]
-  - when a is TURN_LEFT, TURN_RIGHT, or STOP, p=null
-- c: integer confidence from 0 to 100. It is logged only and does not control motion.
+  - when a is TURN_LEFT or TURN_RIGHT, p=null
 
 POINT versus TURN is the most important decision:
-1. Use POINT when the next useful target or traversable continuation is visibly present in the current image and can be grounded at one concrete point.
-2. Use TURN_LEFT or TURN_RIGHT only when the route/next useful view continues outside the current camera field of view, such as an L-corner or side opening, and no reliable visible ground point represents that continuation yet.
-3. A side opening, corridor edge, wall termination, or corner must provide visual evidence for TURN. Do not choose TURN only because the target is semantically likely to be left or right.
-4. Never use a central POINT merely because the decision is uncertain. If the forward view ends and the continuation is outside view, output TURN_LEFT or TURN_RIGHT.
-5. If a visible open passage can already be followed, use POINT on that passage even when it is left or right of center.
-6. If neither a safe visible POINT nor a confident turn direction exists, output STOP.
+1. If a currently followable visible path exists, output POINT.
+2. Use POINT when the next useful target or traversable continuation is visibly present in the current image and can be grounded at one concrete point.
+3. If the current visible path has ended and the left or right side has clear corner/opening evidence, output TURN_LEFT or TURN_RIGHT.
+4. Use TURN_LEFT or TURN_RIGHT only when the route/next useful view continues outside the current camera field of view, such as an L-corner or side opening, and no reliable visible ground point represents that continuation yet.
+5. A side opening, corridor edge, wall termination, or corner must provide visual evidence for TURN. Do not choose TURN only because the target is semantically likely to be left or right.
+6. Never use a central POINT merely because the decision is uncertain. Do not avoid a visually supported turn by choosing a default center point.
+7. If a visible open passage can already be followed, use POINT on that passage even when it is left or right of center.
+8. If left/right turn evidence is insufficient, choose the safest, most continuous, farthest visible free-floor POINT that can actually be followed now.
+9. Do not stop merely because the decision is uncertain.
 
 Coordinate rules for POINT:
 - (0,0)=top-left and (1000,1000)=bottom-right.
 - Never use original pixel coordinates such as $max_x or $max_y.
 - Never use 0-1 normalized coordinates.
 - p must be grounded on THIS image; never reuse placeholder coordinates.
+- Prefer precise integers near the true visual center; do not round to coarse 50-step values unless they are truly correct.
 
 Point semantics:
-- If s="V": p is the geometric center of the visible target body.
+- If s="V": p must be the exact geometric center of the visible target silhouette/body in THIS image.
+- For a visible target, estimate the center of its visible extent; do not place p on the cap, base, label edge, contact point with a table, or nearby background.
 - If s="I" or s="F" with a="POINT": p is one visible free-space exploration waypoint, not an imagined hidden-target location.
-- Never place p on wall, furniture surface, object, person, reflection, ceiling, or obstacle.
+- Never place an exploration POINT on wall, furniture surface, object, person, reflection, ceiling, or obstacle.
 - Prefer a mid-distance point on clear floor/open passage; avoid the bottom 8 percent and outer 6 percent unless that is the only passage.
 
 Output rules:

@@ -35,9 +35,9 @@ _ACTIONS = {"POINT", "TURN_LEFT", "TURN_RIGHT", "STOP"}
 _ALLOWED_ACTION_BY_STATUS = {
     "V": {"POINT"},
     # Target is not visible. Either follow a visible continuation, adjust view,
-    # or stop when neither is reliable.
+    # or accept legacy STOP output from older prompts.
     "I": {"POINT", "TURN_LEFT", "TURN_RIGHT", "STOP"},
-    # New prompt asks S+STOP, while POINT remains accepted for old-output
+    # New prompt asks S+POINT; STOP remains accepted for old-output
     # compatibility. The high-level FSM enters SUCCESS either way.
     "S": {"POINT", "STOP"},
     "F": {"POINT", "TURN_LEFT", "TURN_RIGHT", "STOP"},
@@ -360,6 +360,10 @@ def _parse_confidence(value: Any) -> float:
         confidence = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError("c must be numeric in [0,100]") from exc
+    # Truncation with max_tokens can turn {"c":95} into "c":950 without '}'.
+    # Models may also emit a 0-1000 style score. Both map cleanly by /10.
+    if 100.0 < confidence <= 1000.0:
+        confidence = confidence / 10.0
     if not 0.0 <= confidence <= 100.0:
         raise ValueError(f"c={confidence} is outside [0,100]")
     return confidence
@@ -373,8 +377,9 @@ def parse_model_output(
 ) -> ModelResult:
     """Parse V3 compact protocol.
 
-    Preferred: {"s":"I","a":"TURN_RIGHT","p":null,"c":82}
+    Preferred: {"s":"I","a":"TURN_RIGHT","p":null}
     Legacy:    {"s":"I","p":[800,650]} -> inferred as a=POINT
+    Optional:  "c" remains accepted if the model still emits it.
     """
     data = _extract_json(raw_text)
     required = {"s", "p"}

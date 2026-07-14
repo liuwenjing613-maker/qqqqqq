@@ -6,7 +6,7 @@ qwen:
   timeout_sec: 20.0
   max_retries: 0
   temperature: 0.0
-  max_tokens: 24
+  max_tokens: 22
   enable_thinking: false
   jpeg_quality: 72
   min_pixels: 65536
@@ -21,7 +21,7 @@ camera:
   input_transport: raw
   expected_encoding: bgr8
   api_max_width: 960
-  api_max_height: 0
+  api_max_height: 540
   subscriber_reliability: reliable
 bridge:
   compressed_topic: /image

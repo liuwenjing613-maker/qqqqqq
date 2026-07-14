@@ -258,6 +258,7 @@ class QwenVisualServo:
 
 class ViewAdjustPhase(str, Enum):
     IDLE = "IDLE"
+    PRE_TURN_STOP = "PRE_TURN_STOP"
     TURNING = "TURNING"
     SETTLING = "SETTLING"
     WAITING_FRESH_RESULT = "WAITING_FRESH_RESULT"
@@ -267,6 +268,7 @@ class ViewAdjustPhase(str, Enum):
 class ViewAdjustConfig:
     turn_left_wz: float = 0.06
     turn_right_wz: float = -0.06
+    pre_turn_stop_sec: float = 0.15
     turn_pulse_sec: float = 1.20
     settle_sec: float = 0.30
 
@@ -275,8 +277,12 @@ class ViewAdjustConfig:
             raise ValueError("turn wz values must be non-zero")
         if self.turn_left_wz * self.turn_right_wz >= 0.0:
             raise ValueError("left/right turn wz must have opposite signs")
-        if self.turn_pulse_sec <= 0.0 or self.settle_sec < 0.0:
-            raise ValueError("invalid turn_pulse_sec/settle_sec")
+        if (
+            self.pre_turn_stop_sec < 0.0
+            or self.turn_pulse_sec <= 0.0
+            or self.settle_sec < 0.0
+        ):
+            raise ValueError("invalid pre_turn_stop_sec/turn_pulse_sec/settle_sec")
 
 
 @dataclass(frozen=True)
@@ -309,6 +315,7 @@ class ViewAdjustController:
     @property
     def active(self) -> bool:
         return self.phase in {
+            ViewAdjustPhase.PRE_TURN_STOP,
             ViewAdjustPhase.TURNING,
             ViewAdjustPhase.SETTLING,
             ViewAdjustPhase.WAITING_FRESH_RESULT,
@@ -323,7 +330,7 @@ class ViewAdjustController:
         self.action = action
         self.request_id = int(request_id)
         self.started_sec = float(now_sec)
-        self.phase = ViewAdjustPhase.TURNING
+        self.phase = ViewAdjustPhase.PRE_TURN_STOP
         self._fresh_event_sent = False
         return True
 
@@ -343,7 +350,18 @@ class ViewAdjustController:
             )
 
         elapsed = max(0.0, float(now_sec) - self.started_sec)
-        if elapsed < self.cfg.turn_pulse_sec:
+        if elapsed < self.cfg.pre_turn_stop_sec:
+            self.phase = ViewAdjustPhase.PRE_TURN_STOP
+            return ViewAdjustDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                "view_adjust_pre_turn_stop",
+            )
+
+        turn_elapsed = elapsed - self.cfg.pre_turn_stop_sec
+        if turn_elapsed < self.cfg.turn_pulse_sec:
             self.phase = ViewAdjustPhase.TURNING
             wz = (
                 self.cfg.turn_left_wz
@@ -358,7 +376,7 @@ class ViewAdjustController:
                 f"view_adjust_{self.action.lower()}",
             )
 
-        if elapsed < self.cfg.turn_pulse_sec + self.cfg.settle_sec:
+        if turn_elapsed < self.cfg.turn_pulse_sec + self.cfg.settle_sec:
             self.phase = ViewAdjustPhase.SETTLING
             return ViewAdjustDecision(
                 0.0,
@@ -379,6 +397,70 @@ class ViewAdjustController:
             "view_adjust_waiting_fresh_result",
             request_fresh_observation=request,
         )
+
+
+@dataclass(frozen=True)
+class TurnPendingConfig:
+    entry_distance: float = 0.45
+    entry_frames: int = 3
+    pending_vx: float = 0.04
+
+    def validate(self) -> None:
+        if self.entry_distance <= 0.0:
+            raise ValueError("entry_distance must be positive")
+        if self.entry_frames < 1:
+            raise ValueError("entry_frames must be >= 1")
+        if self.pending_vx < 0.0:
+            raise ValueError("pending_vx must be non-negative")
+
+
+class TurnPendingGate:
+    def __init__(self, config: TurnPendingConfig):
+        config.validate()
+        self.cfg = config
+        self.action = ""
+        self.request_id = -1
+        self.near_count = 0
+
+    @property
+    def active(self) -> bool:
+        return self.action in {"TURN_LEFT", "TURN_RIGHT"}
+
+    @property
+    def ready(self) -> bool:
+        return self.active and self.near_count >= self.cfg.entry_frames
+
+    def start(self, action: str, request_id: int) -> bool:
+        action = str(action).strip().upper()
+        if action not in {"TURN_LEFT", "TURN_RIGHT"}:
+            raise ValueError(f"unsupported pending turn action: {action}")
+        if self.active and self.request_id == int(request_id):
+            return False
+        self.action = action
+        self.request_id = int(request_id)
+        self.near_count = 0
+        return True
+
+    def cancel(self) -> None:
+        self.action = ""
+        self.request_id = -1
+        self.near_count = 0
+
+    def update_scan(self, front_distance: Optional[float]) -> None:
+        if not self.active:
+            return
+        if front_distance is not None and front_distance <= self.cfg.entry_distance:
+            self.near_count += 1
+        else:
+            self.near_count = 0
+
+    def desired_vx(self, current_vx: float, max_vx: float) -> float:
+        cap = min(max(0.0, self.cfg.pending_vx), max(0.0, max_vx))
+        if cap <= 0.0:
+            return 0.0
+        if current_vx > 0.0:
+            return min(current_vx, cap)
+        return cap
 
 
 @dataclass(frozen=True)

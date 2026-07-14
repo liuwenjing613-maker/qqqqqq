@@ -13,6 +13,8 @@ from control.qwen_visual_servo import (  # noqa: E402
     RateLimitConfig,
     ServoConfig,
     ServoInput,
+    TurnPendingConfig,
+    TurnPendingGate,
     ViewAdjustConfig,
     ViewAdjustController,
     ViewAdjustPhase,
@@ -71,28 +73,54 @@ class ServoTests(unittest.TestCase):
 
     def test_view_adjust_one_pulse_per_request(self) -> None:
         view = ViewAdjustController(
-            ViewAdjustConfig(turn_pulse_sec=1.0, settle_sec=0.2)
+            ViewAdjustConfig(
+                pre_turn_stop_sec=0.15,
+                turn_pulse_sec=1.0,
+                settle_sec=0.2,
+            )
         )
         self.assertTrue(view.start("TURN_RIGHT", 7, 10.0))
         self.assertFalse(view.start("TURN_RIGHT", 7, 10.1))
+        d = view.update(10.05)
+        self.assertEqual(d.phase, ViewAdjustPhase.PRE_TURN_STOP)
+        self.assertEqual((d.vx, d.wz), (0.0, 0.0))
+        self.assertTrue(d.hard_stop)
         d = view.update(10.4)
         self.assertEqual(d.phase, ViewAdjustPhase.TURNING)
         self.assertLess(d.wz, 0.0)
-        d = view.update(11.05)
+        d = view.update(11.2)
         self.assertEqual(d.phase, ViewAdjustPhase.SETTLING)
         self.assertEqual(d.wz, 0.0)
-        d = view.update(11.3)
+        d = view.update(11.4)
         self.assertEqual(d.phase, ViewAdjustPhase.WAITING_FRESH_RESULT)
         self.assertTrue(d.request_fresh_observation)
-        d2 = view.update(11.4)
+        d2 = view.update(11.5)
         self.assertFalse(d2.request_fresh_observation)
 
     def test_left_and_right_signs(self) -> None:
         view = ViewAdjustController(ViewAdjustConfig())
         view.start("TURN_LEFT", 1, 0.0)
-        self.assertGreater(view.update(0.1).wz, 0.0)
+        self.assertGreater(view.update(0.2).wz, 0.0)
         view.start("TURN_RIGHT", 2, 1.0)
-        self.assertLess(view.update(1.1).wz, 0.0)
+        self.assertLess(view.update(1.2).wz, 0.0)
+
+    def test_turn_pending_requires_consecutive_near_lidar(self) -> None:
+        gate = TurnPendingGate(
+            TurnPendingConfig(
+                entry_distance=0.45,
+                entry_frames=3,
+                pending_vx=0.04,
+            )
+        )
+        self.assertTrue(gate.start("TURN_RIGHT", 9))
+        self.assertAlmostEqual(gate.desired_vx(0.07, 0.07), 0.04)
+        gate.update_scan(0.9)
+        self.assertFalse(gate.ready)
+        gate.update_scan(0.44)
+        gate.update_scan(0.43)
+        self.assertFalse(gate.ready)
+        gate.update_scan(0.44)
+        self.assertTrue(gate.ready)
 
     def test_rate_limiter_hard_stop_is_immediate(self) -> None:
         limiter = CommandRateLimiter(RateLimitConfig())
