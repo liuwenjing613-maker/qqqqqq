@@ -1,11 +1,9 @@
-# Additive V2 controller. It does not alter Qwen prompts, API parsing or FSM.
+# V3 action protocol controller for baseline commit f9a3010.
 topics:
   state: /qwen_vln/state
   result_json: /qwen_vln/result_json
   scan: /scan_filtered
   scan_fallback: /scan
-
-  # Match the existing semantic-explore stack: autonomy -> priority mux -> /cmd_vel.
   cmd_output: /cmd_vel_autonomy
   cmd_raw: /qwen_vln/servo/cmd_raw
   cmd_limited: /qwen_vln/servo/cmd_limited
@@ -13,39 +11,48 @@ topics:
   front_distance: /qwen_vln/servo/front_distance
   enabled: /qwen_vln/servo/enabled
   servo_command: /qwen_vln/servo/command
+  qwen_command: /qwen_vln/command
 
 control:
-  # Safe default. start_live_servo.sh passes --enable-motion only when
-  # MOTION_ENABLED=1 is explicitly supplied.
   motion_enabled: false
   rate_hz: 20.0
 
+  # Existing POINT visual-servo parameters are intentionally preserved.
   max_vx: 0.07
   max_wz: 0.05
   kp_wz: 0.05
-  angular_sign: -1.0   # target/point right -> negative ROS angular.z
-
-  center_deadband: 0.06
+  angular_sign: -1.0
+  center_deadband: 0.18
   turn_only_threshold: 0.40
   cmd_wz_deadband: 0.006
 
-  # V2 core change: every fresh valid pixel can drive the chassis, regardless
-  # of TARGET_VISIBLE / SEARCH_HINT / VERIFY_SUCCESS or semantic point_role.
+  # c is parsed and published but deliberately unused in V3.
   min_confidence: 0.0
   point_results_before_forward: 1
-
-  # These are explicit lifecycle stops, not visibility filters. Remove an item
-  # only if you deliberately want an old point to remain active in that state.
   blocked_states:
     - WAIT_IMAGE
     - PAUSED
     - SUCCESS
     - ERROR
-
   image_width_fallback: 960
 
+view_adjust:
+  # Explicit TURN actions use standard ROS sign convention by default.
+  # Swap signs only if dry-run/raised-wheel test proves your chassis is reversed.
+  turn_left_wz: 0.06
+  turn_right_wz: -0.06
+
+  # This is a fixed-duration incremental pulse, NOT a claimed fixed angle.
+  # One unique Qwen TURN result can trigger only one pulse.
+  turn_pulse_sec: 1.20
+  settle_sec: 0.30
+
+  # Pause Qwen requests while moving, then send "search" after the camera settles.
+  # This avoids asking the model on a motion-blurred middle-of-turn frame.
+  pause_qwen_during_turn: true
+  resume_command: search
+
 freshness:
-  # Effective source age = API latency + time since result reception.
   full_speed_source_age_sec: 0.95
   stop_source_age_sec: 2.00
   max_receive_gap_sec: 1.60
@@ -59,13 +66,9 @@ rate_limit:
 safety:
   require_lidar: true
   scan_timeout_sec: 0.50
-
-  # Change to 0 only after confirming /scan_filtered already aligns lidar zero
-  # with camera forward.
   camera_lidar_yaw_offset_deg: -170.0
   front_sector_deg: 30.0
   front_percentile: 10.0
-
   emergency_stop_distance: 0.28
   stop_distance: 0.42
   slow_distance: 0.65

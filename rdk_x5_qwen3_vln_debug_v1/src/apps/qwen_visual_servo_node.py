@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ROS2 adapter from any valid Qwen pixel result to low-speed Twist."""
+"""ROS2 adapter for POINT servo and one-shot TURN view adjustment."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +8,7 @@ import math
 import sys
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import numpy as np
 import yaml
@@ -29,16 +29,10 @@ from control.qwen_visual_servo import (
     RateLimitConfig,
     ServoConfig,
     ServoInput,
+    ViewAdjustConfig,
+    ViewAdjustController,
+    ViewAdjustPhase,
 )
-
-
-def _nested(config: dict[str, Any], *keys: str, default: Any = None) -> Any:
-    value: Any = config
-    for key in keys:
-        if not isinstance(value, dict) or key not in value:
-            return default
-        value = value[key]
-    return value
 
 
 def _angle_delta(angle: np.ndarray, center: float) -> np.ndarray:
@@ -49,21 +43,27 @@ class QwenVisualServoNode(Node):
     def __init__(self, config_path: str, force_enable_motion: bool):
         super().__init__("qwen_visual_servo_node")
         self.config_path = str(config_path)
-        self.config = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+        self.config = yaml.safe_load(
+            Path(config_path).read_text(encoding="utf-8")
+        ) or {}
         control = self.config.get("control", {})
         freshness = self.config.get("freshness", {})
         safety = self.config.get("safety", {})
         topics = self.config.get("topics", {})
         rate_limit = self.config.get("rate_limit", {})
+        view_cfg = self.config.get("view_adjust", {})
 
         servo_cfg = ServoConfig(
-            max_vx=float(control.get("max_vx", 0.04)),
+            max_vx=float(control.get("max_vx", 0.07)),
             max_wz=float(control.get("max_wz", 0.05)),
-            kp_wz=float(control.get("kp_wz", 0.10)),
+            kp_wz=float(control.get("kp_wz", 0.05)),
             angular_sign=float(control.get("angular_sign", -1.0)),
             center_deadband=float(control.get("center_deadband", 0.06)),
-            turn_only_threshold=float(control.get("turn_only_threshold", 0.40)),
+            turn_only_threshold=float(
+                control.get("turn_only_threshold", 0.40)
+            ),
             cmd_wz_deadband=float(control.get("cmd_wz_deadband", 0.006)),
+            # c is intentionally not used by V3; default 0 makes the gate inert.
             min_confidence=float(control.get("min_confidence", 0.0)),
             point_results_before_forward=int(
                 control.get(
@@ -103,12 +103,36 @@ class QwenVisualServoNode(Node):
             ),
         )
         self.servo = QwenVisualServo(servo_cfg)
+        self.view_adjust = ViewAdjustController(
+            ViewAdjustConfig(
+                turn_left_wz=float(view_cfg.get("turn_left_wz", 0.06)),
+                turn_right_wz=float(view_cfg.get("turn_right_wz", -0.06)),
+                turn_pulse_sec=float(view_cfg.get("turn_pulse_sec", 1.20)),
+                settle_sec=float(view_cfg.get("settle_sec", 0.30)),
+            )
+        )
+        self.pause_qwen_during_turn = bool(
+            view_cfg.get("pause_qwen_during_turn", True)
+        )
+        self.resume_command = str(
+            view_cfg.get("resume_command", "search")
+        ).strip().lower()
+        self.qwen_pause_owned = False
+
         self.limiter = CommandRateLimiter(
             RateLimitConfig(
-                max_linear_accel=float(rate_limit.get("max_linear_accel", 0.08)),
-                max_linear_decel=float(rate_limit.get("max_linear_decel", 0.16)),
-                max_angular_accel=float(rate_limit.get("max_angular_accel", 0.12)),
-                max_angular_decel=float(rate_limit.get("max_angular_decel", 0.25)),
+                max_linear_accel=float(
+                    rate_limit.get("max_linear_accel", 0.08)
+                ),
+                max_linear_decel=float(
+                    rate_limit.get("max_linear_decel", 0.16)
+                ),
+                max_angular_accel=float(
+                    rate_limit.get("max_angular_accel", 0.12)
+                ),
+                max_angular_decel=float(
+                    rate_limit.get("max_angular_decel", 0.25)
+                ),
             )
         )
 
@@ -126,6 +150,7 @@ class QwenVisualServoNode(Node):
 
         self.state = "WAIT_IMAGE"
         self.result = ""
+        self.action = "STOP"
         self.point_x: Optional[float] = None
         self.point_y: Optional[float] = None
         self.point_role = "none"
@@ -150,7 +175,6 @@ class QwenVisualServoNode(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=3,
         )
-
         self.create_subscription(
             String,
             str(topics.get("state", "/qwen_vln/state")),
@@ -170,9 +194,14 @@ class QwenVisualServoNode(Node):
             sensor_qos,
         )
         fallback_scan = str(topics.get("scan_fallback", "")).strip()
-        if fallback_scan and fallback_scan != str(topics.get("scan", "/scan_filtered")):
+        if fallback_scan and fallback_scan != str(
+            topics.get("scan", "/scan_filtered")
+        ):
             self.create_subscription(
-                LaserScan, fallback_scan, self._on_scan, sensor_qos
+                LaserScan,
+                fallback_scan,
+                self._on_scan,
+                sensor_qos,
             )
         self.create_subscription(
             String,
@@ -182,10 +211,14 @@ class QwenVisualServoNode(Node):
         )
 
         self.cmd_pub = self.create_publisher(
-            Twist, str(topics.get("cmd_output", "/cmd_vel_autonomy")), 10
+            Twist,
+            str(topics.get("cmd_output", "/cmd_vel_autonomy")),
+            10,
         )
         self.raw_cmd_pub = self.create_publisher(
-            Twist, str(topics.get("cmd_raw", "/qwen_vln/servo/cmd_raw")), 10
+            Twist,
+            str(topics.get("cmd_raw", "/qwen_vln/servo/cmd_raw")),
+            10,
         )
         self.limited_cmd_pub = self.create_publisher(
             Twist,
@@ -193,30 +226,48 @@ class QwenVisualServoNode(Node):
             10,
         )
         self.status_pub = self.create_publisher(
-            String, str(topics.get("status", "/qwen_vln/servo/status")), 10
+            String,
+            str(topics.get("status", "/qwen_vln/servo/status")),
+            10,
         )
         self.front_pub = self.create_publisher(
             Float32,
-            str(topics.get("front_distance", "/qwen_vln/servo/front_distance")),
+            str(
+                topics.get(
+                    "front_distance", "/qwen_vln/servo/front_distance"
+                )
+            ),
             10,
         )
         self.enabled_pub = self.create_publisher(
-            Bool, str(topics.get("enabled", "/qwen_vln/servo/enabled")), 10
+            Bool,
+            str(topics.get("enabled", "/qwen_vln/servo/enabled")),
+            10,
+        )
+        # Controller owns pause only during a TURN pulse. After settling it sends
+        # search, forcing the next request to use a stable post-turn frame.
+        self.qwen_command_pub = self.create_publisher(
+            String,
+            str(topics.get("qwen_command", "/qwen_vln/command")),
+            10,
         )
 
-        self.timer = self.create_timer(1.0 / max(1.0, self.rate_hz), self._tick)
+        self.timer = self.create_timer(
+            1.0 / max(1.0, self.rate_hz), self._tick
+        )
         self.get_logger().info(
-            "Qwen visual servo ready: "
+            "Qwen action servo ready: "
             f"motion_enabled={self.motion_enabled} "
             f"cmd={topics.get('cmd_output', '/cmd_vel_autonomy')} "
-            f"scan={topics.get('scan', '/scan_filtered')} "
-            f"max_vx={servo_cfg.max_vx:.3f} max_wz={servo_cfg.max_wz:.3f} "
-            f"point_policy=any_valid_point blocked_states={list(servo_cfg.blocked_states)}"
+            f"point_max=({servo_cfg.max_vx:.3f},{servo_cfg.max_wz:.3f}) "
+            f"turn_wz=({self.view_adjust.cfg.turn_left_wz:.3f},"
+            f"{self.view_adjust.cfg.turn_right_wz:.3f}) "
+            f"pulse={self.view_adjust.cfg.turn_pulse_sec:.2f}s "
+            f"settle={self.view_adjust.cfg.settle_sec:.2f}s"
         )
         if not self.motion_enabled:
             self.get_logger().warning(
-                "DRY RUN: only zero is sent to the chassis topic. "
-                "Restart with --enable-motion after checking Foxglove status."
+                "DRY RUN: raw desired commands are visible, chassis output stays zero"
             )
 
     def _on_state(self, msg: String) -> None:
@@ -234,35 +285,58 @@ class QwenVisualServoNode(Node):
                 return
             self.last_request_id = request_id
             self.result = str(payload.get("result", ""))
+            self.action = str(payload.get("action", "POINT")).strip().upper()
             point = payload.get("point")
-            if isinstance(point, dict) and "x" in point:
-                parsed_x = float(point["x"])
-                if not math.isfinite(parsed_x):
-                    raise ValueError("point.x must be finite")
-                self.point_x = parsed_x
-                parsed_y = None if point.get("y") is None else float(point.get("y"))
-                if parsed_y is not None and not math.isfinite(parsed_y):
-                    raise ValueError("point.y must be finite")
-                self.point_y = parsed_y
+            if isinstance(point, dict):
+                self.point_x = float(point["x"])
+                self.point_y = float(point["y"])
             else:
                 self.point_x = None
                 self.point_y = None
             self.point_role = str(payload.get("point_role", "none"))
             self.image_width = max(
-                2, int(payload.get("image_width", self.image_width))
+                2,
+                int(payload.get("image_width", self.image_width)),
             )
+            # c is displayed only. It does not choose or suppress an action.
             self.confidence = float(payload.get("confidence", 0.0))
-            self.latency_ms = max(0.0, float(payload.get("latency_ms", 0.0)))
+            self.latency_ms = max(
+                0.0,
+                float(payload.get("latency_ms", 0.0)),
+            )
             self.result_received_sec = time.monotonic()
-            if self.point_x is not None:
+
+            if self.action == "POINT" and self.point_x is not None:
                 self.point_streak += 1
+                self.view_adjust.cancel()
+                self._release_qwen_pause(send_resume=False)
             else:
                 self.point_streak = 0
+
+            if self.action in {"TURN_LEFT", "TURN_RIGHT"}:
+                started = self.view_adjust.start(
+                    self.action,
+                    request_id,
+                    time.monotonic(),
+                )
+                if started:
+                    self.limiter.reset()
+                    if self.pause_qwen_during_turn:
+                        self._send_qwen_command("pause")
+                        self.qwen_pause_owned = True
+                    self.get_logger().warning(
+                        f"start {self.action} pulse request_id={request_id}"
+                    )
+            elif self.action == "STOP":
+                self.view_adjust.cancel()
+                self.limiter.reset()
+                self._release_qwen_pause(send_resume=False)
         except Exception as exc:  # noqa: BLE001
             self.point_streak = 0
             self.point_x = None
             self.point_y = None
-            self.point_role = "none"
+            self.action = "STOP"
+            self.view_adjust.cancel()
             self.get_logger().warning(f"invalid result JSON: {exc}")
 
     def _on_scan(self, msg: LaserScan) -> None:
@@ -285,12 +359,11 @@ class QwenVisualServoNode(Node):
                 & (ranges > 0.02)
             )
             values = ranges[valid]
-            if values.size == 0:
-                self.front_distance = None
-            else:
-                self.front_distance = float(
-                    np.percentile(values, self.front_percentile)
-                )
+            self.front_distance = (
+                None
+                if values.size == 0
+                else float(np.percentile(values, self.front_percentile))
+            )
             self.scan_received_sec = time.monotonic()
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warning(f"scan parse failed: {exc}")
@@ -302,11 +375,12 @@ class QwenVisualServoNode(Node):
             self.get_logger().warning("motion ENABLED by servo command")
         elif command in {"disable", "stop", "pause"}:
             self.motion_enabled = False
+            self._cancel_turn_and_resume_qwen()
             self._publish_zero()
             self.get_logger().warning("motion DISABLED by servo command")
-        elif command in {"reset"}:
+        elif command == "reset":
             self.point_streak = 0
-            self.limiter.reset()
+            self._cancel_turn_and_resume_qwen()
             self._publish_zero()
         else:
             self.get_logger().warning(
@@ -317,91 +391,140 @@ class QwenVisualServoNode(Node):
         now = time.monotonic()
         dt = now - self.last_tick_sec
         self.last_tick_sec = now
-        decision = self.servo.compute(
-            ServoInput(
-                now_sec=now,
-                state=self.state,
-                result=self.result,
-                point_role=self.point_role,
-                point_x=self.point_x,
-                image_width=self.image_width,
-                confidence=self.confidence,
-                latency_ms=self.latency_ms,
-                result_received_sec=self.result_received_sec,
-                point_streak=self.point_streak,
-                front_distance=self.front_distance,
-                scan_received_sec=self.scan_received_sec,
-            )
-        )
 
-        raw = self._twist(decision.vx, decision.wz)
-        self.raw_cmd_pub.publish(raw)
+        horizontal_error = 0.0
+        source_age = float("inf")
+        freshness_scale = 0.0
+        heading_scale = 0.0
+        obstacle_scale = 0.0
+        view_phase = self.view_adjust.phase.value
 
-        safety_stop = decision.hard_stop or not self.motion_enabled
-        limited_vx, limited_wz = self.limiter.step(
-            decision.vx, decision.wz, dt, hard_stop=safety_stop
-        )
-        if not self.motion_enabled:
-            reason = "motion_disabled_dry_run"
+        if self.view_adjust.active:
+            view = self.view_adjust.update(now)
+            desired_vx, desired_wz = view.vx, view.wz
+            hard_stop = view.hard_stop
+            reason = view.reason
+            view_phase = view.phase.value
+            if view.request_fresh_observation:
+                self._release_qwen_pause(send_resume=True)
+        elif self.action == "STOP":
+            desired_vx = desired_wz = 0.0
+            hard_stop = True
+            reason = "action_stop"
         else:
+            decision = self.servo.compute(
+                ServoInput(
+                    now_sec=now,
+                    state=self.state,
+                    result=self.result,
+                    action=self.action,
+                    point_role=self.point_role,
+                    point_x=self.point_x,
+                    image_width=self.image_width,
+                    confidence=self.confidence,
+                    latency_ms=self.latency_ms,
+                    result_received_sec=self.result_received_sec,
+                    point_streak=self.point_streak,
+                    front_distance=self.front_distance,
+                    scan_received_sec=self.scan_received_sec,
+                )
+            )
+            desired_vx, desired_wz = decision.vx, decision.wz
+            hard_stop = decision.hard_stop
             reason = decision.reason
+            horizontal_error = decision.horizontal_error
+            source_age = decision.source_age_sec
+            freshness_scale = decision.freshness_scale
+            heading_scale = decision.heading_scale
+            obstacle_scale = decision.obstacle_scale
 
+        self.raw_cmd_pub.publish(self._twist(desired_vx, desired_wz))
+        output_hard_stop = hard_stop or not self.motion_enabled
+        limited_vx, limited_wz = self.limiter.step(
+            desired_vx,
+            desired_wz,
+            dt,
+            hard_stop=output_hard_stop,
+        )
+        effective_reason = (
+            "motion_disabled_dry_run" if not self.motion_enabled else reason
+        )
         limited = self._twist(limited_vx, limited_wz)
         self.limited_cmd_pub.publish(limited)
-        # Always publish at 20 Hz so the downstream watchdog receives either a
-        # fresh command or an explicit zero.
         self.cmd_pub.publish(limited)
         self.enabled_pub.publish(Bool(data=bool(self.motion_enabled)))
         if self.front_distance is not None:
-            self.front_pub.publish(Float32(data=float(self.front_distance)))
+            self.front_pub.publish(
+                Float32(data=float(self.front_distance))
+            )
 
         status = {
             "motion_enabled": self.motion_enabled,
             "state": self.state,
             "result": self.result,
+            "action": self.action,
+            "confidence_logged_only": round(self.confidence, 1),
             "request_id": self.last_request_id,
-            "point_policy": "any_valid_point",
             "point_streak": self.point_streak,
-            "visible_streak": self.point_streak,
             "point_role": self.point_role,
             "pixel_x": self.point_x,
             "pixel_y": self.point_y,
             "image_width": self.image_width,
-            "confidence": round(self.confidence, 4),
             "latency_ms": round(self.latency_ms, 1),
             "source_age_sec": (
                 None
-                if not math.isfinite(decision.source_age_sec)
-                else round(decision.source_age_sec, 3)
+                if not math.isfinite(source_age)
+                else round(source_age, 3)
             ),
-            "horizontal_error": round(decision.horizontal_error, 4),
-            "freshness_scale": round(decision.freshness_scale, 4),
-            "heading_scale": round(decision.heading_scale, 4),
-            "obstacle_scale": round(decision.obstacle_scale, 4),
+            "horizontal_error": round(horizontal_error, 4),
+            "freshness_scale": round(freshness_scale, 4),
+            "heading_scale": round(heading_scale, 4),
+            "obstacle_scale": round(obstacle_scale, 4),
             "front_distance": (
                 None
                 if self.front_distance is None
                 else round(self.front_distance, 3)
             ),
+            "view_adjust_phase": view_phase,
+            "qwen_pause_owned": self.qwen_pause_owned,
             "raw_cmd": {
-                "vx": round(decision.vx, 4),
-                "wz": round(decision.wz, 4),
+                "vx": round(desired_vx, 4),
+                "wz": round(desired_wz, 4),
             },
             "limited_cmd": {
                 "vx": round(limited_vx, 4),
                 "wz": round(limited_wz, 4),
             },
-            "reason": reason,
+            "reason": effective_reason,
         }
-        self.status_pub.publish(String(data=json.dumps(status, ensure_ascii=False)))
-        if reason != self.last_reason:
+        self.status_pub.publish(
+            String(data=json.dumps(status, ensure_ascii=False))
+        )
+        if effective_reason != self.last_reason:
             self.get_logger().info(
-                f"reason={reason} state={self.state} "
-                f"e={decision.horizontal_error:+.3f} "
-                f"front={self.front_distance} "
-                f"cmd=({limited_vx:.3f},{limited_wz:.3f})"
+                f"reason={effective_reason} action={self.action} "
+                f"phase={view_phase} cmd=({limited_vx:.3f},{limited_wz:.3f})"
             )
-            self.last_reason = reason
+            self.last_reason = effective_reason
+
+    def _send_qwen_command(self, command: str) -> None:
+        self.qwen_command_pub.publish(String(data=str(command)))
+
+    def _release_qwen_pause(self, send_resume: bool) -> None:
+        if not self.qwen_pause_owned:
+            return
+        self.qwen_pause_owned = False
+        if send_resume:
+            self._send_qwen_command(self.resume_command)
+            self.get_logger().info(
+                f"turn settled; requested fresh Qwen mode={self.resume_command}"
+            )
+
+    def _cancel_turn_and_resume_qwen(self) -> None:
+        self.view_adjust.cancel()
+        if self.qwen_pause_owned:
+            self._release_qwen_pause(send_resume=True)
+        self.limiter.reset()
 
     @staticmethod
     def _twist(vx: float, wz: float) -> Twist:
@@ -417,6 +540,7 @@ class QwenVisualServoNode(Node):
         self.limited_cmd_pub.publish(zero)
 
     def stop(self) -> None:
+        self._cancel_turn_and_resume_qwen()
         for _ in range(4):
             self._publish_zero()
             time.sleep(0.03)
@@ -431,7 +555,7 @@ def main() -> int:
     parser.add_argument(
         "--enable-motion",
         action="store_true",
-        help="Actually publish non-zero commands. Default is dry-run zero only.",
+        help="Actually publish non-zero commands. Default is dry-run.",
     )
     args = parser.parse_args()
 

@@ -19,19 +19,28 @@ _ROLE_BY_RESULT = {
     "VERIFY_SUCCESS": "verify",
     "VERIFY_FAILED": "search",
 }
-
 _STATUS_TO_RESULT = {
     "V": "TARGET_VISIBLE",
     "I": "TARGET_INFERRED",
     "S": "VERIFY_SUCCESS",
     "F": "VERIFY_FAILED",
 }
-
 _ALLOWED_STATUS_BY_MODE = {
     PromptMode.OBSERVE: {"V", "I"},
     PromptMode.TRACK: {"V", "I"},
     PromptMode.SEARCH: {"V", "I"},
     PromptMode.VERIFY: {"S", "F"},
+}
+_ACTIONS = {"POINT", "TURN_LEFT", "TURN_RIGHT", "STOP"}
+_ALLOWED_ACTION_BY_STATUS = {
+    "V": {"POINT"},
+    # Target is not visible. Either follow a visible continuation, adjust view,
+    # or stop when neither is reliable.
+    "I": {"POINT", "TURN_LEFT", "TURN_RIGHT", "STOP"},
+    # New prompt asks S+STOP, while POINT remains accepted for old-output
+    # compatibility. The high-level FSM enters SUCCESS either way.
+    "S": {"POINT", "STOP"},
+    "F": {"POINT", "TURN_LEFT", "TURN_RIGHT", "STOP"},
 }
 
 
@@ -73,9 +82,14 @@ class QwenVisionClient:
             max_retries=config.max_retries,
         )
 
-    def infer(self, image_bgr, prompt: str, mode: PromptMode, request_id: int = 0) -> ModelResult:
+    def infer(
+        self,
+        image_bgr,
+        prompt: str,
+        mode: PromptMode,
+        request_id: int = 0,
+    ) -> ModelResult:
         height, width = image_bgr.shape[:2]
-
         encode_started = time.perf_counter()
         ok, encoded = cv2.imencode(
             ".jpg",
@@ -85,12 +99,12 @@ class QwenVisionClient:
         encode_ms = (time.perf_counter() - encode_started) * 1000.0
         if not ok:
             raise RuntimeError("Failed to encode image as JPEG")
-
         jpeg_kb = len(encoded) / 1024.0
-        data_url = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
-        # Keep the image payload minimal. Attaching min_pixels/max_pixels on the
-        # image item can trigger server-side smart-resize that no longer matches
-        # the exact JPEG we encode and draw on, which reintroduces point offset.
+        data_url = "data:image/jpeg;base64," + base64.b64encode(
+            encoded.tobytes()
+        ).decode("ascii")
+        # Keep the image payload minimal. Server-side smart resize can make
+        # returned relative points disagree with the exact frame we visualize.
         image_item: Dict[str, Any] = {
             "type": "image_url",
             "image_url": {"url": data_url},
@@ -113,7 +127,9 @@ class QwenVisionClient:
             max_tokens=int(self.config.max_tokens),
             extra_body={
                 "enable_thinking": bool(self.config.enable_thinking),
-                "vl_high_resolution_images": bool(self.config.vl_high_resolution_images),
+                "vl_high_resolution_images": bool(
+                    self.config.vl_high_resolution_images
+                ),
             },
         )
         api_ms = (time.perf_counter() - api_started) * 1000.0
@@ -127,7 +143,11 @@ class QwenVisionClient:
             cached_tokens = getattr(details, "cached_tokens", None)
 
         raw_content = completion.choices[0].message.content
-        raw_text = raw_content if isinstance(raw_content, str) else json.dumps(raw_content, ensure_ascii=False)
+        raw_text = (
+            raw_content
+            if isinstance(raw_content, str)
+            else json.dumps(raw_content, ensure_ascii=False)
+        )
         try:
             result = parse_model_output(raw_text or "", mode, width, height)
         except Exception as exc:
@@ -135,9 +155,11 @@ class QwenVisionClient:
             raise ValueError(f"{exc}; raw_output={preview!r}") from exc
 
         raw_point = "null"
+        raw_action = "?"
         try:
             raw_json = _extract_json(raw_text or "")
             raw_point = repr(raw_json.get("p", raw_json.get("point")))
+            raw_action = str(raw_json.get("a", "legacy"))
         except Exception:  # noqa: BLE001
             pass
         pixel_point = (
@@ -152,16 +174,14 @@ class QwenVisionClient:
             f"jpeg_kb={jpeg_kb:.1f} "
             f"encode_ms={encode_ms:.1f} "
             f"api_ms={api_ms:.1f} "
-            f"raw_p={raw_point} "
-            f"pixel_p={pixel_point} "
+            f"action={raw_action} raw_p={raw_point} pixel_p={pixel_point} "
+            f"c={result.confidence:.0f} "
             f"prompt_tokens={prompt_tokens} "
             f"completion_tokens={completion_tokens} "
             f"cached_tokens={cached_tokens}",
             flush=True,
         )
-
         result.raw_text = raw_text or ""
-        # Keep ModelResult.latency_ms as the pure API wait (exclude local JPEG encode).
         result.latency_ms = api_ms
         result.request_id = request_id
         result.image_width = width
@@ -169,23 +189,18 @@ class QwenVisionClient:
         return result
 
     def warmup(self) -> float:
-        """Run one tiny vision request before the real task.
-
-        Call once after Client construction on node startup. Failures must not
-        abort node startup; callers should catch and log warnings.
-        """
+        """Run one tiny vision request before the real task."""
         import numpy as np
 
         dummy = np.full((256, 256, 3), 127, dtype=np.uint8)
         ok, encoded = cv2.imencode(
-            ".jpg",
-            dummy,
-            [int(cv2.IMWRITE_JPEG_QUALITY), 60],
+            ".jpg", dummy, [int(cv2.IMWRITE_JPEG_QUALITY), 60]
         )
         if not ok:
             raise RuntimeError("Failed to encode warmup image")
-
-        data_url = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+        data_url = "data:image/jpeg;base64," + base64.b64encode(
+            encoded.tobytes()
+        ).decode("ascii")
         started = time.perf_counter()
         self._client.chat.completions.create(
             model=self.config.model,
@@ -227,54 +242,68 @@ def _extract_json(text: str) -> Dict[str, Any]:
             raise ValueError("Top-level JSON must be an object")
         return value
     except json.JSONDecodeError:
-        # Prefer a complete {...} span when present.
         match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
         if match:
             value = json.loads(match.group(0))
             if not isinstance(value, dict):
                 raise ValueError("Top-level JSON must be an object")
             return value
-        # Compact protocol recovery for truncated tails such as:
-        # {"s":"V","p":[450, 430]
         repaired = _repair_compact_json(cleaned)
         if repaired is not None:
             return repaired
         raise ValueError(f"No JSON object found in model output: {cleaned[:300]}")
 
 
-_COMPACT_RE = re.compile(
-    r'"s"\s*:\s*"([VvIiSsFf])"'
-    r'.*?'
-    r'"p"\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]',
-    flags=re.DOTALL,
+_STATUS_RE = re.compile(r'"s"\s*:\s*"([VvIiSsFf])"')
+_ACTION_RE = re.compile(
+    r'"a"\s*:\s*"(POINT|TURN_LEFT|TURN_RIGHT|STOP)"', re.IGNORECASE
 )
+_POINT_RE = re.compile(
+    r'"p"\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]',
+    re.DOTALL,
+)
+_POINT_NULL_RE = re.compile(r'"p"\s*:\s*null', re.IGNORECASE)
+_CONF_RE = re.compile(r'"c"\s*:\s*(-?\d+(?:\.\d+)?)')
 
 
 def _repair_compact_json(text: str) -> Optional[Dict[str, Any]]:
-    """Recover compact {"s","p"} even when the model truncates the closing brace."""
-    match = _COMPACT_RE.search(text or "")
-    if not match:
+    """Recover compact action JSON when only a closing brace was truncated."""
+    status_match = _STATUS_RE.search(text or "")
+    if not status_match:
         return None
-    status, x_raw, y_raw = match.groups()
-    return {
-        "s": status.upper(),
-        "p": [float(x_raw), float(y_raw)],
-    }
+    action_match = _ACTION_RE.search(text or "")
+    point_match = _POINT_RE.search(text or "")
+    point_is_null = bool(_POINT_NULL_RE.search(text or ""))
+    if not point_match and not point_is_null:
+        return None
+    data: Dict[str, Any] = {"s": status_match.group(1).upper()}
+    if action_match:
+        data["a"] = action_match.group(1).upper()
+    if point_match:
+        data["p"] = [float(point_match.group(1)), float(point_match.group(2))]
+    else:
+        data["p"] = None
+    confidence_match = _CONF_RE.search(text or "")
+    if confidence_match:
+        data["c"] = float(confidence_match.group(1))
+    return data
 
 
 _NORM1000_MAX = 1000.0
 
 
 def _looks_like_unit_interval(x: float, y: float) -> bool:
-    """Reject 0-1 normalized coords that would collapse under norm1000 mapping."""
     if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
         return False
-    # Exact 0/1 integers are valid edge cells on the 0-1000 grid.
-    return not (x in (0.0, 1.0) and y in (0.0, 1.0) and float(x).is_integer() and float(y).is_integer())
+    return not (
+        x in (0.0, 1.0)
+        and y in (0.0, 1.0)
+        and float(x).is_integer()
+        and float(y).is_integer()
+    )
 
 
 def _norm1000_to_pixel(coord: float, size: int) -> int:
-    """Map Qwen3-VL relative coord in [0, 1000] onto pixel index in [0, size-1]."""
     if size <= 0:
         raise ValueError(f"image size must be positive, got {size}")
     pixel = int(round(coord / _NORM1000_MAX * (size - 1)))
@@ -282,7 +311,6 @@ def _norm1000_to_pixel(coord: float, size: int) -> int:
 
 
 def pixel_to_norm1000(pixel: int, size: int) -> int:
-    """Inverse map for feeding previous points back into prompts."""
     if size <= 1:
         return 0
     value = int(round(float(pixel) / float(size - 1) * _NORM1000_MAX))
@@ -290,7 +318,6 @@ def pixel_to_norm1000(pixel: int, size: int) -> int:
 
 
 def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
-    """Parse model point as Qwen3-VL 0-1000 relative coords, then convert to pixels."""
     if value is None:
         return None
     if isinstance(value, dict):
@@ -298,7 +325,7 @@ def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
     elif isinstance(value, (list, tuple)) and len(value) == 2:
         x_raw, y_raw = value
     else:
-        raise ValueError("point must be null, {x,y}, or [x,y]")
+        raise ValueError("p must be null, {x,y}, or [x,y]")
     if isinstance(x_raw, bool) or isinstance(y_raw, bool):
         raise ValueError("point coordinates cannot be booleans")
     try:
@@ -310,9 +337,12 @@ def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
             f"point ({x_norm}, {y_norm}) looks like normalized 0-1 coordinates; "
             "expected Qwen3-VL relative coordinates in [0, 1000]"
         )
-    if not (0.0 <= x_norm <= _NORM1000_MAX and 0.0 <= y_norm <= _NORM1000_MAX):
+    if not (
+        0.0 <= x_norm <= _NORM1000_MAX
+        and 0.0 <= y_norm <= _NORM1000_MAX
+    ):
         raise ValueError(
-            f"point ({x_norm}, {y_norm}) is outside the Qwen3-VL relative grid [0, 1000]"
+            f"point ({x_norm}, {y_norm}) is outside [0, 1000]"
         )
     return PixelPoint(
         x=_norm1000_to_pixel(x_norm, width),
@@ -320,8 +350,32 @@ def _parse_point(value: Any, width: int, height: int) -> Optional[PixelPoint]:
     )
 
 
-def parse_model_output(raw_text: str, mode: PromptMode, image_width: int, image_height: int) -> ModelResult:
-    """Parse compact realtime JSON: {"s":"V|I|S|F","p":[x,y]}."""
+def _parse_confidence(value: Any) -> float:
+    # c is published for logging only. No controller gate uses it in V3.
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        raise ValueError("c cannot be boolean")
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("c must be numeric in [0,100]") from exc
+    if not 0.0 <= confidence <= 100.0:
+        raise ValueError(f"c={confidence} is outside [0,100]")
+    return confidence
+
+
+def parse_model_output(
+    raw_text: str,
+    mode: PromptMode,
+    image_width: int,
+    image_height: int,
+) -> ModelResult:
+    """Parse V3 compact protocol.
+
+    Preferred: {"s":"I","a":"TURN_RIGHT","p":null,"c":82}
+    Legacy:    {"s":"I","p":[800,650]} -> inferred as a=POINT
+    """
     data = _extract_json(raw_text)
     required = {"s", "p"}
     missing = sorted(required.difference(data))
@@ -330,23 +384,46 @@ def parse_model_output(raw_text: str, mode: PromptMode, image_width: int, image_
 
     status = str(data.get("s", "")).strip().upper()
     if status not in _STATUS_TO_RESULT:
-        raise ValueError(f"Unknown status code s={status!r}; allowed=V|I|S|F")
+        raise ValueError(f"Unknown status s={status!r}; allowed=V|I|S|F")
     if status not in _ALLOWED_STATUS_BY_MODE[mode]:
         raise ValueError(
             f"Status s={status!r} is not allowed in mode {mode.value}; "
             f"allowed={sorted(_ALLOWED_STATUS_BY_MODE[mode])}"
         )
 
-    result = _STATUS_TO_RESULT[status]
-    point = _parse_point(data.get("p"), image_width, image_height)
-    if point is None:
-        raise ValueError(f"s={status} requires point p=[x,y]")
+    raw_point = data.get("p")
+    # Backward compatibility is deliberate: if the model occasionally emits
+    # the old two-field protocol, a non-null p remains a POINT action.
+    action_raw = data.get("a")
+    if action_raw is None:
+        action = "POINT" if raw_point is not None else "STOP"
+    else:
+        action = str(action_raw).strip().upper()
+    if action not in _ACTIONS:
+        raise ValueError(
+            f"Unknown action a={action!r}; allowed={sorted(_ACTIONS)}"
+        )
+    if action not in _ALLOWED_ACTION_BY_STATUS[status]:
+        raise ValueError(
+            f"Action a={action!r} is incompatible with s={status}; "
+            f"allowed={sorted(_ALLOWED_ACTION_BY_STATUS[status])}"
+        )
 
-    role = _ROLE_BY_RESULT[result]
+    point = _parse_point(raw_point, image_width, image_height)
+    if action == "POINT" and point is None:
+        raise ValueError("a=POINT requires p=[x,y]")
+    if action != "POINT" and point is not None:
+        raise ValueError(f"a={action} requires p=null")
+
+    result_name = _STATUS_TO_RESULT[status]
+    role = _ROLE_BY_RESULT[result_name] if action == "POINT" else "none"
+    confidence = _parse_confidence(data.get("c"))
     return ModelResult(
-        result=result,
+        result=result_name,
         point=point,
         point_role=role,
         label="",
-        reason_code=f"compact_{status.lower()}",
+        reason_code=f"compact_{status.lower()}_{action.lower()}",
+        action=action,
+        confidence=confidence,
     )

@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-"""Pure visual-servo control logic for Qwen pixel outputs.
+"""Pure POINT visual servo and one-shot view-adjust logic.
 
-This module deliberately contains no ROS imports so it can be unit-tested on a
-laptop.  The ROS node adapts /qwen_vln/result_json, /qwen_vln/state and LaserScan
-messages into :class:`ServoInput`.
-
-V2 policy: any fresh valid pixel may drive, regardless of semantic result name
-or point_role. Only explicit lifecycle blocked_states hard-stop motion.
+No ROS imports are used here, so parser/control behavior can be tested off-board.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional, Sequence, Tuple
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional, Tuple
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -20,9 +16,9 @@ def clamp(value: float, low: float, high: float) -> float:
 
 @dataclass(frozen=True)
 class ServoConfig:
-    max_vx: float = 0.04
+    max_vx: float = 0.07
     max_wz: float = 0.05
-    kp_wz: float = 0.10
+    kp_wz: float = 0.05
     angular_sign: float = -1.0
     center_deadband: float = 0.06
     turn_only_threshold: float = 0.40
@@ -52,13 +48,13 @@ class ServoConfig:
             raise ValueError(
                 "require 0 <= center_deadband < turn_only_threshold <= 1"
             )
-        if not 0.0 <= self.min_confidence <= 1.0:
-            raise ValueError("min_confidence must be within [0, 1]")
+        if not 0.0 <= self.min_confidence <= 100.0:
+            raise ValueError("min_confidence must be within [0,100]")
         if self.point_results_before_forward < 1:
             raise ValueError("point_results_before_forward must be >= 1")
         if not 0.0 <= self.full_speed_source_age_sec < self.stop_source_age_sec:
             raise ValueError(
-                "require 0 <= full_speed_source_age_sec < stop_source_age_sec"
+                "require full_speed_source_age_sec < stop_source_age_sec"
             )
         if not (
             0.0 < self.emergency_stop_distance
@@ -75,6 +71,7 @@ class ServoInput:
     now_sec: float
     state: str
     result: str
+    action: str
     point_role: str
     point_x: Optional[float]
     image_width: int
@@ -100,32 +97,26 @@ class ServoDecision:
 
 
 class QwenVisualServo:
-    """Sample-and-hold visual servo with freshness and lidar safety gates.
-
-    The latest Qwen pixel is held between model replies. Command magnitude
-    decreases as the originating image becomes old, and reaches exactly zero at
-    ``stop_source_age_sec``.
-
-    Any fresh valid pixel may drive unless ``state`` is in ``blocked_states``.
-    TARGET_VISIBLE still requires a non-null front distance when
-    ``require_lidar`` is enabled. Search / inferred / other point results accept
-    a null front distance (no range_max returns) and only emergency-stop when a
-    fresh near obstacle reading exists.
-    """
+    """Existing any-point servo, now explicitly gated by a=POINT."""
 
     _TRACK_RESULTS = frozenset({"TARGET_VISIBLE"})
 
     def __init__(self, config: ServoConfig):
         config.validate()
         self.cfg = config
-        self._blocked = {str(s).strip().upper() for s in config.blocked_states}
+        self._blocked = {
+            str(s).strip().upper() for s in config.blocked_states
+        }
 
     def compute(self, data: ServoInput) -> ServoDecision:
         cfg = self.cfg
         state = str(data.state or "").strip().upper()
         result = str(data.result or "").strip().upper()
+        action = str(data.action or "POINT").strip().upper()
         role = str(data.point_role or "none").strip().lower()
 
+        if action != "POINT":
+            return self._stop(f"action_{action.lower()}")
         if state in self._blocked:
             return self._stop(f"fsm_{state.lower()}")
         if data.point_x is None or data.image_width <= 1:
@@ -139,10 +130,9 @@ class QwenVisualServo:
             return self._stop("result_receive_timeout", source_age)
         if source_age >= cfg.stop_source_age_sec:
             return self._stop("source_frame_stale", source_age)
-
         freshness = self._freshness_scale(source_age)
-        is_track = result in self._TRACK_RESULTS or role == "target"
 
+        is_track = result in self._TRACK_RESULTS or role == "target"
         if cfg.require_lidar and is_track:
             if data.scan_received_sec is None or data.front_distance is None:
                 return self._stop("waiting_for_lidar", source_age)
@@ -177,7 +167,9 @@ class QwenVisualServo:
         else:
             obstacle_scale = self._obstacle_scale(data.front_distance)
 
-        forward_confirmed = data.point_streak >= cfg.point_results_before_forward
+        forward_confirmed = (
+            data.point_streak >= cfg.point_results_before_forward
+        )
         searchish = (not is_track) or role in {"search", "verify"}
         if not forward_confirmed:
             vx = 0.0
@@ -197,7 +189,9 @@ class QwenVisualServo:
         else:
             vx = cfg.max_vx * heading_scale * freshness * obstacle_scale
             reason = (
-                "search_visual_servo" if searchish else "continuous_visual_servo"
+                "search_visual_servo"
+                if searchish
+                else "continuous_visual_servo"
             )
 
         return ServoDecision(
@@ -217,7 +211,11 @@ class QwenVisualServo:
         if source_age <= cfg.full_speed_source_age_sec:
             return 1.0
         span = cfg.stop_source_age_sec - cfg.full_speed_source_age_sec
-        return clamp((cfg.stop_source_age_sec - source_age) / span, 0.0, 1.0)
+        return clamp(
+            (cfg.stop_source_age_sec - source_age) / span,
+            0.0,
+            1.0,
+        )
 
     def _heading_scale(self, abs_error: float) -> float:
         cfg = self.cfg
@@ -245,13 +243,141 @@ class QwenVisualServo:
         )
 
     @staticmethod
-    def _stop(reason: str, source_age: float = float("inf")) -> ServoDecision:
+    def _stop(
+        reason: str,
+        source_age: float = float("inf"),
+    ) -> ServoDecision:
         return ServoDecision(
             vx=0.0,
             wz=0.0,
             hard_stop=True,
             reason=reason,
             source_age_sec=source_age,
+        )
+
+
+class ViewAdjustPhase(str, Enum):
+    IDLE = "IDLE"
+    TURNING = "TURNING"
+    SETTLING = "SETTLING"
+    WAITING_FRESH_RESULT = "WAITING_FRESH_RESULT"
+
+
+@dataclass(frozen=True)
+class ViewAdjustConfig:
+    turn_left_wz: float = 0.06
+    turn_right_wz: float = -0.06
+    turn_pulse_sec: float = 1.20
+    settle_sec: float = 0.30
+
+    def validate(self) -> None:
+        if self.turn_left_wz == 0.0 or self.turn_right_wz == 0.0:
+            raise ValueError("turn wz values must be non-zero")
+        if self.turn_left_wz * self.turn_right_wz >= 0.0:
+            raise ValueError("left/right turn wz must have opposite signs")
+        if self.turn_pulse_sec <= 0.0 or self.settle_sec < 0.0:
+            raise ValueError("invalid turn_pulse_sec/settle_sec")
+
+
+@dataclass(frozen=True)
+class ViewAdjustDecision:
+    vx: float
+    wz: float
+    hard_stop: bool
+    phase: ViewAdjustPhase
+    reason: str
+    request_fresh_observation: bool = False
+
+
+class ViewAdjustController:
+    """One pulse per unique TURN result, then stop and request a fresh image.
+
+    This deliberately uses time, not a claimed fixed angle. Without a verified
+    yaw source, pretending an accurate angle would merely convert uncertainty
+    into a more sophisticated-looking uncertainty.
+    """
+
+    def __init__(self, config: ViewAdjustConfig):
+        config.validate()
+        self.cfg = config
+        self.phase = ViewAdjustPhase.IDLE
+        self.action = "STOP"
+        self.request_id = -1
+        self.started_sec = 0.0
+        self._fresh_event_sent = False
+
+    @property
+    def active(self) -> bool:
+        return self.phase in {
+            ViewAdjustPhase.TURNING,
+            ViewAdjustPhase.SETTLING,
+            ViewAdjustPhase.WAITING_FRESH_RESULT,
+        }
+
+    def start(self, action: str, request_id: int, now_sec: float) -> bool:
+        action = str(action).strip().upper()
+        if action not in {"TURN_LEFT", "TURN_RIGHT"}:
+            raise ValueError(f"unsupported view action: {action}")
+        if request_id == self.request_id:
+            return False
+        self.action = action
+        self.request_id = int(request_id)
+        self.started_sec = float(now_sec)
+        self.phase = ViewAdjustPhase.TURNING
+        self._fresh_event_sent = False
+        return True
+
+    def cancel(self) -> None:
+        self.phase = ViewAdjustPhase.IDLE
+        self.action = "STOP"
+        self._fresh_event_sent = False
+
+    def update(self, now_sec: float) -> ViewAdjustDecision:
+        if self.phase == ViewAdjustPhase.IDLE:
+            return ViewAdjustDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                "view_adjust_idle",
+            )
+
+        elapsed = max(0.0, float(now_sec) - self.started_sec)
+        if elapsed < self.cfg.turn_pulse_sec:
+            self.phase = ViewAdjustPhase.TURNING
+            wz = (
+                self.cfg.turn_left_wz
+                if self.action == "TURN_LEFT"
+                else self.cfg.turn_right_wz
+            )
+            return ViewAdjustDecision(
+                0.0,
+                wz,
+                False,
+                self.phase,
+                f"view_adjust_{self.action.lower()}",
+            )
+
+        if elapsed < self.cfg.turn_pulse_sec + self.cfg.settle_sec:
+            self.phase = ViewAdjustPhase.SETTLING
+            return ViewAdjustDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                "view_adjust_settling",
+            )
+
+        self.phase = ViewAdjustPhase.WAITING_FRESH_RESULT
+        request = not self._fresh_event_sent
+        self._fresh_event_sent = True
+        return ViewAdjustDecision(
+            0.0,
+            0.0,
+            True,
+            self.phase,
+            "view_adjust_waiting_fresh_result",
+            request_fresh_observation=request,
         )
 
 
@@ -264,8 +390,6 @@ class RateLimitConfig:
 
 
 class CommandRateLimiter:
-    """Symmetric ROS-command slew limiter with immediate safety stop."""
-
     def __init__(self, config: RateLimitConfig):
         self.cfg = config
         self.vx = 0.0

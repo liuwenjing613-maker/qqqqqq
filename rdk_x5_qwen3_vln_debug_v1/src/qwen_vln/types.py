@@ -40,6 +40,9 @@ class ModelResult:
     point_role: str
     label: str
     reason_code: str
+    # V3 protocol additions. Defaults keep old named/positional construction valid.
+    action: str = "POINT"
+    confidence: float = 0.0
     raw_text: str = ""
     latency_ms: float = 0.0
     request_id: int = 0
@@ -50,4 +53,6 @@ class ModelResult:
         data = asdict(self)
         if self.point is not None:
             data["point"] = {"x": self.point.x, "y": self.point.y}
+        else:
+            data["point"] = None
         return data

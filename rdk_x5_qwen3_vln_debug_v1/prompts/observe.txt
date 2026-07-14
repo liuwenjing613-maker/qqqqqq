@@ -1,16 +1,13 @@
 Mode: OBSERVE_TARGET
-
 Inspect the entire image and decide whether the exact requested target is clearly visible.
 
-Output s="V" only when:
-- The requested object itself is clearly visible.
-- Its category and visible attributes match the task.
-- p can be placed on the geometric center of the actual object body (not an edge, label, or cap).
+If the exact target is clearly visible:
+- s="V", a="POINT"
+- p = geometric center of the actual target body
 
-Otherwise output s="I":
-- The target is not confirmed visible.
-- Still select one search waypoint using the free-space and semantic-direction rules.
-- Prefer a free-floor point leading toward a relevant landmark.
-- Do not place p directly on the landmark itself.
+Otherwise use s="I" and choose exactly one of:
+- a="POINT" when a visible free-floor passage or exploration continuation can be followed now
+- a="TURN_LEFT" or "TURN_RIGHT" when the useful continuation is outside the current field of view and a corner/side opening gives clear direction evidence
+- a="STOP" when neither choice is reliable
 
-Do not confuse a table, shelf, bottle-like object, reflection, label, or similarly colored object with the requested target.
+Do not confuse a related landmark with the target. Do not output a central POINT to avoid making a turn decision.

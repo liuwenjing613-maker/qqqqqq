@@ -1,20 +1,15 @@
 Mode: TRACK_LOCKED_TARGET
-
-The requested target was visible previously.
-The previous point on the [0, 1000] grid was:
-$previous_point
-
+The requested target was visible previously. Previous point on [0,1000]: $previous_point
 Inspect the current image again.
 
 If the same exact target is still clearly visible:
-- s="V"
-- p = geometric center of the visible target body (mid-width / mid-height; not label/cap/edge)
-- Do not blindly copy the previous point.
+- s="V", a="POINT"
+- p = geometric center of the current target body
+- do not blindly copy the old point
 
-If the target is lost, occluded, or cannot be matched reliably:
-- s="I"
-- select one visible free-space waypoint most useful for reacquiring the target
-- Prefer the last-seen direction only when that direction remains visually open
-- Otherwise prefer a safe nearby passage or semantically related region
+If the target is lost or occluded, use s="I":
+- POINT if a visible open continuation useful for reacquiring the target exists now
+- TURN_LEFT or TURN_RIGHT if the target/path left the field of view and a clear corner/side opening requires view adjustment first
+- STOP if neither is reliable
 
-Do not lock onto a different similar object merely because it is near the old point.
+Do not lock onto another similar object. Do not output a central POINT merely because the old target cannot be found.
