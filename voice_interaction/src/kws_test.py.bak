@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Local wake-word test using sherpa-onnx (no cloud ASR)."""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+import sherpa_onnx
+
+
+SAMPLE_RATE = 16000
+FRAME_SECONDS = 0.1
+FRAME_SAMPLES = int(SAMPLE_RATE * FRAME_SECONDS)
+FRAME_BYTES = FRAME_SAMPLES * 2
+
+
+def require_file(path: str) -> str:
+    file_path = Path(path)
+    if not file_path.is_file():
+        raise FileNotFoundError(f"文件不存在：{file_path}")
+    return str(file_path)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="RDK X5 本地持续唤醒词检测测试"
+    )
+    parser.add_argument(
+        "--device",
+        default="plughw:0,0",
+        help="ALSA 录音设备，例如 plughw:0,0",
+    )
+    parser.add_argument("--encoder", required=True)
+    parser.add_argument("--decoder", required=True)
+    parser.add_argument("--joiner", required=True)
+    parser.add_argument("--tokens", required=True)
+    parser.add_argument("--keywords-file", required=True)
+    parser.add_argument("--num-threads", type=int, default=2)
+    return parser.parse_args()
+
+
+def create_keyword_spotter(
+    args: argparse.Namespace,
+) -> sherpa_onnx.KeywordSpotter:
+    return sherpa_onnx.KeywordSpotter(
+        tokens=require_file(args.tokens),
+        encoder=require_file(args.encoder),
+        decoder=require_file(args.decoder),
+        joiner=require_file(args.joiner),
+        keywords_file=require_file(args.keywords_file),
+        num_threads=args.num_threads,
+        max_active_paths=4,
+        keywords_score=1.0,
+        keywords_threshold=0.25,
+        num_trailing_blanks=1,
+        provider="cpu",
+    )
+
+
+def start_arecord(device: str) -> subprocess.Popen:
+    command = [
+        "arecord",
+        "-q",
+        "-D",
+        device,
+        "-t",
+        "raw",
+        "-f",
+        "S16_LE",
+        "-r",
+        str(SAMPLE_RATE),
+        "-c",
+        "1",
+    ]
+    print("启动麦克风：", " ".join(command), flush=True)
+    return subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=None,
+    )
+
+
+def main() -> int:
+    args = parse_args()
+    keyword_spotter = create_keyword_spotter(args)
+    stream = keyword_spotter.create_stream()
+    recorder = start_arecord(args.device)
+
+    if recorder.stdout is None:
+        raise RuntimeError("无法读取 arecord 输出。")
+
+    print("本地唤醒检测已启动。")
+    print("请说：小车你好")
+    print("按 Ctrl+C 退出。")
+
+    try:
+        while True:
+            raw = recorder.stdout.read(FRAME_BYTES)
+            if not raw:
+                raise RuntimeError(
+                    "麦克风数据流中断，请检查 USB 连接。"
+                )
+            if len(raw) != FRAME_BYTES:
+                continue
+
+            samples = np.frombuffer(raw, dtype="<i2").astype(np.float32)
+            samples /= 32768.0
+            stream.accept_waveform(SAMPLE_RATE, samples)
+
+            while keyword_spotter.is_ready(stream):
+                keyword_spotter.decode_stream(stream)
+
+            result = keyword_spotter.get_result(stream)
+            if result:
+                print(f"\n检测到唤醒词：{result}", flush=True)
+                keyword_spotter.reset_stream(stream)
+
+    except KeyboardInterrupt:
+        print("\n停止唤醒检测。")
+    finally:
+        recorder.terminate()
+        try:
+            recorder.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            recorder.kill()
+
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"错误：{exc}", file=sys.stderr)
+        raise SystemExit(1)

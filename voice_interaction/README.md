@@ -27,9 +27,11 @@ Set `DASHSCOPE_API_KEY`.
 
 ## Check microphone
 
+Board mic: **USB C-Media** (`plughw:0,0`, ALSA card 0, PyAudio index 0).
+
 ```bash
 bash scripts/check_audio.sh
-python3 src/list_audio_devices.py
+cd src && python3 list_audio_devices.py
 ```
 
 ## One-shot test
@@ -39,10 +41,9 @@ set -a
 source .env
 set +a
 
-python3 src/asr_once.py --device 2 --seconds 5
+cd src
+python3 asr_once.py --device 0 --seconds 5
 ```
-
-Replace `2` with the actual microphone index.
 
 ## ROS 2 test
 
