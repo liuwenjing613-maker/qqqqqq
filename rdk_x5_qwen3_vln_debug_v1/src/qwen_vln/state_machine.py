@@ -58,6 +58,7 @@ class NavigationStateMachine:
             "track": VlnState.TARGET_LOCKED,
             "verify": VlnState.VERIFY,
             "pause": VlnState.PAUSED,
+            "success": VlnState.SUCCESS,
         }
         if cmd in mapping:
             self._transition(mapping[cmd], f"manual_{cmd}")
@@ -66,7 +67,8 @@ class NavigationStateMachine:
             self._transition(target, f"manual_{cmd}")
         else:
             raise ValueError(
-                "Unknown command. Use observe/search/inferred/track/verify/pause/resume/reset"
+                "Unknown command. Use observe/search/inferred/track/verify/"
+                "pause/success/resume/reset"
             )
 
     def prompt_mode(self) -> Optional[PromptMode]:

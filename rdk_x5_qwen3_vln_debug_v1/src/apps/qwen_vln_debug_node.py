@@ -30,7 +30,41 @@ from qwen_vln.prompt_manager import PromptManager
 from qwen_vln.qwen_client import ClientConfig, QwenVisionClient, pixel_to_norm1000
 from qwen_vln.state_machine import NavigationStateMachine, StateMachineConfig
 from qwen_vln.types import ModelResult, PromptMode
-from qwen_vln.visualizer import ResultVisualizer
+from qwen_vln.visualizer import ResultVisualizer, ServoZoneOverlay
+
+
+def _load_servo_zone_overlay(
+    project_root: Path,
+    vis_cfg: dict,
+) -> Optional[ServoZoneOverlay]:
+    """Load POINT servo control params for Foxglove zone overlay."""
+    if not bool(vis_cfg.get("draw_servo_zones", True)):
+        return None
+    rel = str(
+        vis_cfg.get("servo_overlay_config", "configs/qwen3_vln_servo.yaml")
+    ).strip()
+    path = Path(rel).expanduser()
+    if not path.is_absolute():
+        path = (project_root / path).resolve()
+    if not path.is_file():
+        return None
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        control = payload.get("control", {}) or {}
+        return ServoZoneOverlay(
+            max_vx=float(control.get("max_vx", 0.07)),
+            max_wz=float(control.get("max_wz", 0.05)),
+            kp_wz=float(control.get("kp_wz", 0.05)),
+            angular_sign=float(control.get("angular_sign", -1.0)),
+            center_deadband=float(control.get("center_deadband", 0.06)),
+            turn_only_threshold=float(
+                control.get("turn_only_threshold", 0.40)
+            ),
+            cmd_wz_deadband=float(control.get("cmd_wz_deadband", 0.006)),
+            enabled=True,
+        )
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def resize_for_api(image, max_width: int, max_height: int = 0):
@@ -180,11 +214,26 @@ class QwenVlnDebugNode(Node):
         prompt_dir = PROJECT_ROOT / str(self.config.get("prompts", {}).get("directory", "prompts"))
         self.prompt_manager = PromptManager(str(prompt_dir))
         vis_cfg = self.config.get("visualization", {})
+        servo_zones = _load_servo_zone_overlay(PROJECT_ROOT, vis_cfg)
         self.visualizer = ResultVisualizer(
             int(vis_cfg.get("point_radius", 11)),
             int(vis_cfg.get("history_length", 1)),
             bool(vis_cfg.get("draw_center_line", True)),
+            servo_zones=servo_zones,
         )
+        if servo_zones is not None:
+            self.get_logger().info(
+                "servo zone overlay: "
+                f"deadband={servo_zones.center_deadband:.2f} "
+                f"turn_only={servo_zones.turn_only_threshold:.2f} "
+                f"kp_wz={servo_zones.kp_wz:.3f} "
+                f"max_wz={servo_zones.max_wz:.3f}"
+            )
+        elif bool(vis_cfg.get("draw_servo_zones", True)):
+            self.get_logger().warning(
+                "servo zone overlay disabled: cannot load "
+                f"{vis_cfg.get('servo_overlay_config', 'configs/qwen3_vln_servo.yaml')}"
+            )
         self.api_max_width = int(camera_cfg.get("api_max_width", 960))
         self.api_max_height = int(camera_cfg.get("api_max_height", 0))
         self.expected_encoding = str(camera_cfg.get("expected_encoding", "bgr8")).strip().lower()

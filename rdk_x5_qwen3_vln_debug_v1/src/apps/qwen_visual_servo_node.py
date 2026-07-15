@@ -147,6 +147,13 @@ class QwenVisualServoNode(Node):
         ).strip().lower()
         self.qwen_pause_owned = False
 
+        goal_cfg = self.config.get("goal", {})
+        self.goal_enabled = bool(goal_cfg.get("enabled", True))
+        self.success_distance = float(goal_cfg.get("success_distance", 0.50))
+        if self.success_distance <= 0.0:
+            raise ValueError("goal.success_distance must be positive")
+        self.mission_success = False
+
         self.limiter = CommandRateLimiter(
             RateLimitConfig(
                 max_linear_accel=float(
@@ -298,7 +305,8 @@ class QwenVisualServoNode(Node):
             f"pending_vx={self.turn_gate.cfg.pending_vx:.3f} "
             f"pre_stop={self.view_adjust.cfg.pre_turn_stop_sec:.2f}s "
             f"pulse={self.view_adjust.cfg.turn_pulse_sec:.2f}s "
-            f"settle={self.view_adjust.cfg.settle_sec:.2f}s"
+            f"settle={self.view_adjust.cfg.settle_sec:.2f}s "
+            f"goal_success={self.success_distance:.2f}m"
         )
         if not self.motion_enabled:
             self.get_logger().warning(
@@ -404,6 +412,7 @@ class QwenVisualServoNode(Node):
         command = (msg.data or "").strip().lower()
         if command in {"enable", "start", "run"}:
             self.motion_enabled = True
+            self.mission_success = False
             self.get_logger().warning("motion ENABLED by servo command")
         elif command in {"disable", "stop", "pause"}:
             self.motion_enabled = False
@@ -412,12 +421,42 @@ class QwenVisualServoNode(Node):
             self.get_logger().warning("motion DISABLED by servo command")
         elif command == "reset":
             self.point_streak = 0
+            self.mission_success = False
             self._cancel_turn_and_resume_qwen()
             self._publish_zero()
         else:
             self.get_logger().warning(
                 "servo command must be enable/disable/reset"
             )
+
+    def _target_visible_in_fov(self) -> bool:
+        result = str(self.result or "").strip().upper()
+        role = str(self.point_role or "none").strip().lower()
+        action = str(self.action or "").strip().upper()
+        return (
+            action == "POINT"
+            and self.point_x is not None
+            and (result == "TARGET_VISIBLE" or role == "target")
+        )
+
+    def _declare_mission_success(self, front_distance: float) -> None:
+        if self.mission_success:
+            return
+        self.mission_success = True
+        self.motion_enabled = False
+        self.emergency_reverse.reset()
+        self.turn_gate.cancel()
+        self.view_adjust.cancel()
+        self.qwen_pause_owned = False
+        self.limiter.reset()
+        self._send_qwen_command("success")
+        self._publish_zero()
+        self.get_logger().warning(
+            "MISSION SUCCESS: target visible and "
+            f"front_distance={front_distance:.3f}m "
+            f"<= success_distance={self.success_distance:.3f}m; "
+            "stopped and exited navigation"
+        )
 
     def _tick(self) -> None:
         now = time.monotonic()
@@ -437,127 +476,149 @@ class QwenVisualServoNode(Node):
             and self.scan_received_sec is not None
             and now - self.scan_received_sec <= self.servo.cfg.scan_timeout_sec
         )
-        was_emergency_reversing = self.emergency_reverse.active
-        emergency_reversing = (
-            self.emergency_reverse.update(self.front_distance)
-            if scan_fresh
-            else self.emergency_reverse.active
-        )
-        if was_emergency_reversing and not emergency_reversing:
-            self.limiter.reset()
-            self._send_qwen_command(self.resume_command)
-            self.get_logger().warning(
-                "emergency reverse cleared; requested fresh observation"
-            )
 
-        if emergency_reversing:
-            self.turn_gate.cancel()
-            self.view_adjust.cancel()
-            self._release_qwen_pause(send_resume=False)
-            desired_wz = 0.0
-            view_phase = "EMERGENCY_REVERSE"
-            if scan_fresh:
-                desired_vx = self.emergency_reverse.cfg.reverse_vx
-                hard_stop = False
-                reason = "emergency_reverse"
-            else:
-                desired_vx = 0.0
-                hard_stop = True
-                reason = "emergency_reverse_wait_lidar"
-        elif self.view_adjust.active:
-            view = self.view_adjust.update(now)
-            desired_vx, desired_wz = view.vx, view.wz
-            hard_stop = view.hard_stop
-            reason = view.reason
-            view_phase = view.phase.value
-            bypass_rate_limit = view.phase == ViewAdjustPhase.TURNING
-            if view.request_fresh_observation:
-                self._release_qwen_pause(send_resume=True)
-        elif self.turn_gate.active:
-            view_phase = f"TURN_PENDING_{self.turn_gate.action.removeprefix('TURN_')}"
-            if self.turn_gate.ready:
-                turn_action = self.turn_gate.action
-                turn_request_id = self.turn_gate.request_id
-                self.turn_gate.cancel()
-                started = self.view_adjust.start(
-                    turn_action,
-                    turn_request_id,
-                    now,
-                )
-                if started:
-                    self.limiter.reset()
-                    if self.pause_qwen_during_turn:
-                        self._send_qwen_command("pause")
-                        self.qwen_pause_owned = True
-                    self.get_logger().warning(
-                        f"start {turn_action} after lidar gate "
-                        f"request_id={turn_request_id}"
-                    )
-                    view = self.view_adjust.update(now)
-                    desired_vx, desired_wz = view.vx, view.wz
-                    hard_stop = view.hard_stop
-                    reason = view.reason
-                    view_phase = view.phase.value
-                    bypass_rate_limit = view.phase == ViewAdjustPhase.TURNING
-                else:
-                    desired_vx = desired_wz = 0.0
-                    hard_stop = True
-                    reason = "turn_request_already_used"
-                    view_phase = self.view_adjust.phase.value
-            elif (
-                scan_fresh
-                and self.front_distance is not None
-                and self.front_distance
-                <= self.servo.cfg.emergency_stop_distance
-            ):
-                # Fresh close reading while pending: let emergency reverse own it
-                # on the next tick after cancel; for this tick stop spinning.
-                desired_vx = desired_wz = 0.0
-                hard_stop = True
-                reason = "turn_pending_emergency_obstacle"
-            else:
-                # Missing/stale lidar does not freeze TURN_PENDING crawl.
-                desired_vx = self.turn_gate.desired_vx(
-                    self.limiter.vx,
-                    self.servo.cfg.max_vx,
-                )
-                desired_wz = 0.0
-                hard_stop = False
-                reason = (
-                    f"turn_pending_{self.turn_gate.action.lower()}"
-                    if scan_fresh
-                    else "turn_pending_no_lidar"
-                )
-        elif self.action == "STOP":
+        # Simple arrive-and-exit: visible target + close enough lidar reading.
+        if (
+            self.goal_enabled
+            and not self.mission_success
+            and self._target_visible_in_fov()
+            and scan_fresh
+            and self.front_distance is not None
+            and self.front_distance <= self.success_distance
+        ):
+            self._declare_mission_success(self.front_distance)
+
+        if self.mission_success:
             desired_vx = desired_wz = 0.0
             hard_stop = True
-            reason = "action_stop"
+            reason = "mission_success"
+            view_phase = "MISSION_SUCCESS"
+            self.emergency_reverse.reset()
+            self.turn_gate.cancel()
+            self.view_adjust.cancel()
         else:
-            decision = self.servo.compute(
-                ServoInput(
-                    now_sec=now,
-                    state=self.state,
-                    result=self.result,
-                    action=self.action,
-                    point_role=self.point_role,
-                    point_x=self.point_x,
-                    image_width=self.image_width,
-                    confidence=self.confidence,
-                    latency_ms=self.latency_ms,
-                    result_received_sec=self.result_received_sec,
-                    point_streak=self.point_streak,
-                    front_distance=self.front_distance,
-                    scan_received_sec=self.scan_received_sec,
-                )
+            was_emergency_reversing = self.emergency_reverse.active
+            emergency_reversing = (
+                self.emergency_reverse.update(self.front_distance)
+                if scan_fresh
+                else self.emergency_reverse.active
             )
-            desired_vx, desired_wz = decision.vx, decision.wz
-            hard_stop = decision.hard_stop
-            reason = decision.reason
-            horizontal_error = decision.horizontal_error
-            source_age = decision.source_age_sec
-            freshness_scale = decision.freshness_scale
-            heading_scale = decision.heading_scale
-            obstacle_scale = decision.obstacle_scale
+            if was_emergency_reversing and not emergency_reversing:
+                self.limiter.reset()
+                self._send_qwen_command(self.resume_command)
+                self.get_logger().warning(
+                    "emergency reverse cleared; requested fresh observation"
+                )
+
+            if emergency_reversing:
+                self.turn_gate.cancel()
+                self.view_adjust.cancel()
+                self._release_qwen_pause(send_resume=False)
+                desired_wz = 0.0
+                view_phase = "EMERGENCY_REVERSE"
+                if scan_fresh:
+                    desired_vx = self.emergency_reverse.cfg.reverse_vx
+                    hard_stop = False
+                    reason = "emergency_reverse"
+                else:
+                    desired_vx = 0.0
+                    hard_stop = True
+                    reason = "emergency_reverse_wait_lidar"
+            elif self.view_adjust.active:
+                view = self.view_adjust.update(now)
+                desired_vx, desired_wz = view.vx, view.wz
+                hard_stop = view.hard_stop
+                reason = view.reason
+                view_phase = view.phase.value
+                bypass_rate_limit = view.phase == ViewAdjustPhase.TURNING
+                if view.request_fresh_observation:
+                    self._release_qwen_pause(send_resume=True)
+            elif self.turn_gate.active:
+                view_phase = (
+                    f"TURN_PENDING_{self.turn_gate.action.removeprefix('TURN_')}"
+                )
+                if self.turn_gate.ready:
+                    turn_action = self.turn_gate.action
+                    turn_request_id = self.turn_gate.request_id
+                    self.turn_gate.cancel()
+                    started = self.view_adjust.start(
+                        turn_action,
+                        turn_request_id,
+                        now,
+                    )
+                    if started:
+                        self.limiter.reset()
+                        if self.pause_qwen_during_turn:
+                            self._send_qwen_command("pause")
+                            self.qwen_pause_owned = True
+                        self.get_logger().warning(
+                            f"start {turn_action} after lidar gate "
+                            f"request_id={turn_request_id}"
+                        )
+                        view = self.view_adjust.update(now)
+                        desired_vx, desired_wz = view.vx, view.wz
+                        hard_stop = view.hard_stop
+                        reason = view.reason
+                        view_phase = view.phase.value
+                        bypass_rate_limit = (
+                            view.phase == ViewAdjustPhase.TURNING
+                        )
+                    else:
+                        desired_vx = desired_wz = 0.0
+                        hard_stop = True
+                        reason = "turn_request_already_used"
+                        view_phase = self.view_adjust.phase.value
+                elif (
+                    scan_fresh
+                    and self.front_distance is not None
+                    and self.front_distance
+                    <= self.servo.cfg.emergency_stop_distance
+                ):
+                    desired_vx = desired_wz = 0.0
+                    hard_stop = True
+                    reason = "turn_pending_emergency_obstacle"
+                else:
+                    desired_vx = self.turn_gate.desired_vx(
+                        self.limiter.vx,
+                        self.servo.cfg.max_vx,
+                    )
+                    desired_wz = 0.0
+                    hard_stop = False
+                    reason = (
+                        f"turn_pending_{self.turn_gate.action.lower()}"
+                        if scan_fresh
+                        else "turn_pending_no_lidar"
+                    )
+            elif self.action == "STOP":
+                desired_vx = desired_wz = 0.0
+                hard_stop = True
+                reason = "action_stop"
+            else:
+                decision = self.servo.compute(
+                    ServoInput(
+                        now_sec=now,
+                        state=self.state,
+                        result=self.result,
+                        action=self.action,
+                        point_role=self.point_role,
+                        point_x=self.point_x,
+                        image_width=self.image_width,
+                        confidence=self.confidence,
+                        latency_ms=self.latency_ms,
+                        result_received_sec=self.result_received_sec,
+                        point_streak=self.point_streak,
+                        front_distance=self.front_distance,
+                        scan_received_sec=self.scan_received_sec,
+                    )
+                )
+                desired_vx, desired_wz = decision.vx, decision.wz
+                hard_stop = decision.hard_stop
+                reason = decision.reason
+                horizontal_error = decision.horizontal_error
+                source_age = decision.source_age_sec
+                freshness_scale = decision.freshness_scale
+                heading_scale = decision.heading_scale
+                obstacle_scale = decision.obstacle_scale
 
         self.raw_cmd_pub.publish(self._twist(desired_vx, desired_wz))
         output_hard_stop = hard_stop or not self.motion_enabled
@@ -615,6 +676,8 @@ class QwenVisualServoNode(Node):
                 else round(self.front_distance, 3)
             ),
             "view_adjust_phase": view_phase,
+            "mission_success": self.mission_success,
+            "success_distance": round(self.success_distance, 3),
             "emergency_reverse_active": self.emergency_reverse.active,
             "emergency_release_distance": round(
                 self.emergency_reverse.cfg.release_distance,

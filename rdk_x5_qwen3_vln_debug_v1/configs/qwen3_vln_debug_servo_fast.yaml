@@ -37,6 +37,8 @@ visualization:
   publish_hz: 8.0
   point_radius: 11
   draw_center_line: true
+  draw_servo_zones: true
+  servo_overlay_config: configs/qwen3_vln_servo.yaml
 state_machine:
   initial_instruction: find the bottle
   observe_interval_sec: 0.9

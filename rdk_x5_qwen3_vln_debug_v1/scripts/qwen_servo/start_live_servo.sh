@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_DIR="$(cd "$ROOT/.." && pwd)"
 source "$ROOT/scripts/lib/ros_env.sh"
 source "$ROOT/scripts/lib/camera_stack.sh"
+export DASHSCOPE_API_KEY="sk-ws-H.EMDRILX.kTsc.MEUCIQD5UgFGckkMu8pAf-oYK_ZgcxQMXYHj1gJDwy2J75_skQIgIPOraFvC3yeARZyAIMwuypWh0tFj3StA6AEDaSVYVtA"
 
 mkdir -p "$ROOT/logs"
 INSTRUCTION="${1:-find the bottle}"
