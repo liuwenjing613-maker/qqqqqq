@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
-from typing import Deque, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Deque, List, Optional, Tuple
 
 import cv2
 
@@ -20,6 +20,56 @@ _ACTION_COLORS = {
     "TURN_RIGHT": (255, 180, 60),
     "STOP": (80, 80, 255),
 }
+
+
+@dataclass
+class SpawnScanHud:
+    """Birth panoramic scan overlay fields from servo status."""
+
+    phase: str = "IDLE"
+    sector: int = 0
+    scores: List[Optional[float]] = field(default_factory=list)
+    best_sector: Optional[int] = None
+    sector_deg: float = 60.0
+
+    def format_line(self) -> str:
+        phase = str(self.phase or "IDLE").strip().upper() or "IDLE"
+        n = len(self.scores)
+        if n <= 0 and phase in {"IDLE", "DONE"}:
+            return "SPAWN: idle"
+        # After cancel, phase is IDLE but scores remain for post-scan HUD.
+        if phase == "IDLE" and n > 0:
+            phase = "DONE"
+
+        parts: List[str] = []
+        for idx, score in enumerate(self.scores):
+            if score is None:
+                token = "-"
+            else:
+                token = f"{float(score):.2f}"
+            if idx == int(self.sector) and phase in {
+                "DWELL",
+                "TURNING",
+                "RETURNING",
+            }:
+                token = f"[{token}]"
+            if self.best_sector is not None and idx == int(self.best_sector):
+                token = f"{token}*"
+            parts.append(token)
+        q_text = " ".join(parts) if parts else "-"
+
+        if n > 0:
+            sector_text = f"s={int(self.sector)}/{n}"
+        else:
+            sector_text = f"s={int(self.sector)}"
+
+        if self.best_sector is not None:
+            yaw = int(round(float(self.sector_deg) * int(self.best_sector)))
+            face = f"face->S{int(self.best_sector)}(+{yaw}L)"
+        else:
+            face = "face->?"
+
+        return f"SPAWN: {phase} {sector_text}  q=[{q_text}]  {face}"
 
 
 @dataclass(frozen=True)
@@ -87,7 +137,9 @@ class ResultVisualizer:
         request_in_flight: bool,
         error_text: str = "",
         frame_note: str = "live camera image",
+        spawn_scan: Optional[SpawnScanHud] = None,
     ):
+        del frame_note  # Replaced by SPAWN line; kept for call-site compatibility.
         canvas = frame_bgr.copy()
         height, width = canvas.shape[:2]
         panel_height = 178 if error_text else 156
@@ -193,7 +245,21 @@ class ResultVisualizer:
         cv2.putText(canvas, summary, (16, 76), cv2.FONT_HERSHEY_SIMPLEX, 0.51, (235, 235, 235), 1, cv2.LINE_AA)
         reason = "" if result is None else result.reason_code
         cv2.putText(canvas, f"REASON: {self._shorten(reason or '-', 90)}", (16, 101), cv2.FONT_HERSHEY_SIMPLEX, 0.49, (205, 205, 205), 1, cv2.LINE_AA)
-        cv2.putText(canvas, f"FRAME: {self._shorten(frame_note, 90)}", (16, 126), cv2.FONT_HERSHEY_SIMPLEX, 0.47, (180, 220, 255), 1, cv2.LINE_AA)
+        spawn_line = (
+            spawn_scan.format_line()
+            if spawn_scan is not None
+            else "SPAWN: idle"
+        )
+        cv2.putText(
+            canvas,
+            self._shorten(spawn_line, 110),
+            (16, 126),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.47,
+            (180, 220, 255),
+            1,
+            cv2.LINE_AA,
+        )
         cv2.putText(
             canvas,
             "zones: green=deadband | cyan=steer+drive | orange=rotate-only",

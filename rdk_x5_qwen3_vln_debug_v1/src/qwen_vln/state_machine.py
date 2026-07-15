@@ -13,6 +13,8 @@ class StateMachineConfig:
     track_interval_sec: float = 1.6
     search_interval_sec: float = 3.0
     verify_interval_sec: float = 9999.0
+    # Servo triggers each sector capture; keep auto interval inert.
+    spawn_scan_interval_sec: float = 9999.0
     error_cooldown_sec: float = 3.0
     auto_enter_search: bool = True
 
@@ -40,18 +42,20 @@ class NavigationStateMachine:
         self.instruction = cleaned
         self.generation += 1
         self._transition(
-            VlnState.OBSERVE if self.has_image else VlnState.WAIT_IMAGE,
+            VlnState.SPAWN_SCAN if self.has_image else VlnState.WAIT_IMAGE,
             "new_instruction" if self.has_image else "waiting_for_image",
         )
 
     def mark_image_ready(self) -> None:
         self.has_image = True
         if self.state == VlnState.WAIT_IMAGE and self.instruction:
-            self._transition(VlnState.OBSERVE, "first_image_ready")
+            self._transition(VlnState.SPAWN_SCAN, "first_image_ready")
 
     def command(self, command: str) -> None:
         cmd = (command or "").strip().lower()
         mapping = {
+            "spawn_scan": VlnState.SPAWN_SCAN,
+            "spawn": VlnState.SPAWN_SCAN,
             "observe": VlnState.OBSERVE,
             "search": VlnState.SEARCHING,
             "inferred": VlnState.TARGET_INFERRED,
@@ -63,16 +67,21 @@ class NavigationStateMachine:
         if cmd in mapping:
             self._transition(mapping[cmd], f"manual_{cmd}")
         elif cmd in {"resume", "reset"}:
-            target = VlnState.OBSERVE if self.has_image and self.instruction else VlnState.WAIT_IMAGE
+            target = (
+                VlnState.SPAWN_SCAN
+                if self.has_image and self.instruction
+                else VlnState.WAIT_IMAGE
+            )
             self._transition(target, f"manual_{cmd}")
         else:
             raise ValueError(
-                "Unknown command. Use observe/search/inferred/track/verify/"
-                "pause/success/resume/reset"
+                "Unknown command. Use spawn_scan/observe/search/inferred/"
+                "track/verify/pause/success/resume/reset"
             )
 
     def prompt_mode(self) -> Optional[PromptMode]:
         return {
+            VlnState.SPAWN_SCAN: PromptMode.SPAWN_SCAN,
             VlnState.OBSERVE: PromptMode.OBSERVE,
             VlnState.TARGET_LOCKED: PromptMode.TRACK,
             VlnState.TARGET_INFERRED: PromptMode.SEARCH,
@@ -82,6 +91,7 @@ class NavigationStateMachine:
 
     def request_interval(self) -> float:
         return {
+            VlnState.SPAWN_SCAN: self.config.spawn_scan_interval_sec,
             VlnState.OBSERVE: self.config.observe_interval_sec,
             VlnState.TARGET_LOCKED: self.config.track_interval_sec,
             VlnState.TARGET_INFERRED: self.config.search_interval_sec,
@@ -95,7 +105,7 @@ class NavigationStateMachine:
             return False
         if self.state == VlnState.ERROR:
             if self.error_since is not None and now - self.error_since >= self.config.error_cooldown_sec:
-                self._transition(VlnState.OBSERVE, "error_cooldown_finished")
+                self._transition(VlnState.SPAWN_SCAN, "error_cooldown_finished")
             else:
                 return False
         if self.prompt_mode() is None:
@@ -113,6 +123,13 @@ class NavigationStateMachine:
         visible = result.result == "TARGET_VISIBLE"
 
         inferred = result.result in {"TARGET_INFERRED", "VERIFY_FAILED"}
+
+        if request_mode == PromptMode.SPAWN_SCAN:
+            # Visible target aborts the panorama immediately into TRACK.
+            # Otherwise stay in SPAWN_SCAN until the servo finishes the scan.
+            if visible:
+                self._transition(VlnState.TARGET_LOCKED, "spawn_target_visible")
+            return
 
         if request_mode in {
             PromptMode.OBSERVE,
@@ -179,9 +196,23 @@ class NavigationStateMachine:
         force_immediate = (
             (changed and not same_search_prompt_family)
             or reason.startswith("manual_")
-            or reason in {"new_instruction", "first_image_ready", "error_cooldown_finished"}
+            or reason
+            in {
+                "new_instruction",
+                "first_image_ready",
+                "error_cooldown_finished",
+            }
         )
-        if force_immediate and state in {
+        # SPAWN_SCAN captures are gated by the servo (settle then spawn_scan).
+        # Entering the state alone must not fire an API call; block until the
+        # servo explicitly re-issues manual_spawn_scan / manual_spawn.
+        if state == VlnState.SPAWN_SCAN and reason not in {
+            "manual_spawn_scan",
+            "manual_spawn",
+        }:
+            self.last_request_time = time.monotonic()
+        elif force_immediate and state in {
+            VlnState.SPAWN_SCAN,
             VlnState.OBSERVE,
             VlnState.SEARCHING,
             VlnState.TARGET_INFERRED,

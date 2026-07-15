@@ -7,6 +7,7 @@ qwen:
   max_retries: 0
   temperature: 0.0
   max_tokens: 22
+  max_tokens_spawn_scan: 35
   enable_thinking: false
   jpeg_quality: 72
   min_pixels: 65536
@@ -45,6 +46,7 @@ state_machine:
   track_interval_sec: 0.85
   search_interval_sec: 0.9
   verify_interval_sec: 9999.0
+  spawn_scan_interval_sec: 9999.0
   error_cooldown_sec: 3.0
   auto_enter_search: true
 topics:
@@ -56,3 +58,4 @@ topics:
   pixel_point: /qwen_vln/pixel_point
   prompt_text: /qwen_vln/prompt_text
   bridge_status: /image_raw_bridge/status
+  servo_status: /qwen_vln/servo/status

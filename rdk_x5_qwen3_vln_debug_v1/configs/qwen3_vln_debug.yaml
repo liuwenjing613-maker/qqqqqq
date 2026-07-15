@@ -6,8 +6,10 @@ qwen:
   timeout_sec: 20.0
   max_retries: 0
   temperature: 0.0
-  # Protocol is {"s","a","p"} only; keep a little headroom for precise p digits.
+  # Default protocol is {"s","a","p"}; keep tight for observe/track/search/verify.
   max_tokens: 22
+  # SPAWN_SCAN returns {"p","t","r","q"}; needs more headroom than action JSON.
+  max_tokens_spawn_scan: 35
 
   enable_thinking: false
   jpeg_quality: 72
@@ -58,6 +60,7 @@ state_machine:
   track_interval_sec: 2.5
   search_interval_sec: 3.0
   verify_interval_sec: 9999.0
+  spawn_scan_interval_sec: 9999.0
   error_cooldown_sec: 3.0
   auto_enter_search: true
 
@@ -70,3 +73,4 @@ topics:
   pixel_point: /qwen_vln/pixel_point
   prompt_text: /qwen_vln/prompt_text
   bridge_status: /image_raw_bridge/status
+  servo_status: /qwen_vln/servo/status

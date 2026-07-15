@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Tuple
 
 class VlnState(str, Enum):
     WAIT_IMAGE = "WAIT_IMAGE"
+    SPAWN_SCAN = "SPAWN_SCAN"
     OBSERVE = "OBSERVE"
     TARGET_LOCKED = "TARGET_LOCKED"
     TARGET_INFERRED = "TARGET_INFERRED"
@@ -18,6 +19,7 @@ class VlnState(str, Enum):
 
 
 class PromptMode(str, Enum):
+    SPAWN_SCAN = "spawn_scan"
     OBSERVE = "observe"
     TRACK = "track"
     SEARCH = "search"
@@ -43,6 +45,10 @@ class ModelResult:
     # V3 protocol additions. Defaults keep old named/positional construction valid.
     action: str = "POINT"
     confidence: float = 0.0
+    # SPAWN_SCAN scores (t/r/q). Unused by other modes; default 0.
+    score_t: float = 0.0
+    score_r: float = 0.0
+    score_q: float = 0.0
     raw_text: str = ""
     latency_ms: float = 0.0
     request_id: int = 0

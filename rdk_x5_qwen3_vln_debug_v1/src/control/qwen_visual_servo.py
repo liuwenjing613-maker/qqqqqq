@@ -5,6 +5,7 @@ No ROS imports are used here, so parser/control behavior can be tested off-board
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple
@@ -19,6 +20,8 @@ class ServoConfig:
     max_vx: float = 0.07
     max_wz: float = 0.05
     kp_wz: float = 0.05
+    # Fixed |wz| when |error| >= turn_only_threshold (orange rotate-only band).
+    rotate_only_wz: float = 0.06
     angular_sign: float = -1.0
     center_deadband: float = 0.06
     turn_only_threshold: float = 0.40
@@ -44,6 +47,8 @@ class ServoConfig:
     def validate(self) -> None:
         if self.max_vx < 0.0 or self.max_wz < 0.0:
             raise ValueError("max_vx/max_wz must be non-negative")
+        if self.rotate_only_wz < 0.0:
+            raise ValueError("rotate_only_wz must be non-negative")
         if not 0.0 <= self.center_deadband < self.turn_only_threshold <= 1.0:
             raise ValueError(
                 "require 0 <= center_deadband < turn_only_threshold <= 1"
@@ -154,6 +159,12 @@ class QwenVisualServo:
 
         if abs_error <= cfg.center_deadband:
             wz = 0.0
+        elif abs_error >= cfg.turn_only_threshold:
+            # Rotate-only band: use fixed wz (kp_wz*error would be tiny, e.g. 0.006).
+            direction = 1.0 if error > 0.0 else -1.0
+            wz = cfg.angular_sign * cfg.rotate_only_wz * direction * freshness
+            if abs(wz) < cfg.cmd_wz_deadband:
+                wz = 0.0
         else:
             wz = cfg.angular_sign * cfg.kp_wz * error * freshness
             wz = clamp(wz, -cfg.max_wz, cfg.max_wz)
@@ -564,3 +575,332 @@ class CommandRateLimiter:
         if abs(delta) <= limit:
             return target
         return current + (limit if delta > 0.0 else -limit)
+
+
+class SpawnScanPhase(str, Enum):
+    IDLE = "IDLE"
+    DWELL = "DWELL"
+    TURNING = "TURNING"
+    RETURNING = "RETURNING"
+    DONE = "DONE"
+
+
+@dataclass(frozen=True)
+class SpawnScanConfig:
+    enabled: bool = True
+    sectors: int = 6
+    sector_deg: float = 60.0
+    wz: float = 0.06
+    settle_sec: float = 0.5
+    dwell_sec: float = 2.0
+    # After min dwell, wait up to this long for the sector Qwen score.
+    result_wait_sec: float = 3.0
+    yaw_tolerance_deg: float = 3.0
+    odom_stale_sec: float = 0.5
+    finish_command: str = "search"
+
+    def validate(self) -> None:
+        if self.sectors < 2:
+            raise ValueError("spawn_scan.sectors must be >= 2")
+        if self.sector_deg <= 0.0:
+            raise ValueError("spawn_scan.sector_deg must be positive")
+        if self.wz == 0.0:
+            raise ValueError("spawn_scan.wz must be non-zero")
+        if self.settle_sec < 0.0 or self.dwell_sec <= 0.0:
+            raise ValueError("invalid spawn_scan settle_sec/dwell_sec")
+        if self.settle_sec > self.dwell_sec:
+            raise ValueError("spawn_scan.settle_sec must be <= dwell_sec")
+        if self.result_wait_sec < 0.0:
+            raise ValueError("spawn_scan.result_wait_sec must be non-negative")
+        if self.yaw_tolerance_deg <= 0.0:
+            raise ValueError("spawn_scan.yaw_tolerance_deg must be positive")
+        if self.odom_stale_sec <= 0.0:
+            raise ValueError("spawn_scan.odom_stale_sec must be positive")
+
+
+@dataclass(frozen=True)
+class SpawnScanDecision:
+    vx: float
+    wz: float
+    hard_stop: bool
+    phase: SpawnScanPhase
+    reason: str
+    sector_index: int = 0
+    request_observation: bool = False
+    pause_qwen: bool = False
+    finish_command: Optional[str] = None
+    best_sector: Optional[int] = None
+
+
+class SpawnScanController:
+    """Birth panoramic scan: N left turns of sector_deg, dwell, then face best q.
+
+    Angle progress uses odom yaw only (no wz*time open-loop).
+    """
+
+    def __init__(self, config: SpawnScanConfig):
+        config.validate()
+        self.cfg = config
+        self.phase = SpawnScanPhase.IDLE
+        self.sector_index = 0
+        self.scores: list[Optional[float]] = []
+        self._dwell_started_sec = 0.0
+        self._request_sent = False
+        self._score_recorded = False
+        self._yaw_integrated = 0.0
+        self._yaw_target = 0.0
+        self._last_yaw: Optional[float] = None
+        self._best_sector: Optional[int] = None
+        self._finish_sent = False
+
+    @property
+    def active(self) -> bool:
+        return self.phase in {
+            SpawnScanPhase.DWELL,
+            SpawnScanPhase.TURNING,
+            SpawnScanPhase.RETURNING,
+        }
+
+    @property
+    def done(self) -> bool:
+        return self.phase == SpawnScanPhase.DONE
+
+    @property
+    def best_sector(self) -> Optional[int]:
+        return self._best_sector
+
+    def start(self, now_sec: float) -> None:
+        self.phase = SpawnScanPhase.DWELL
+        self.sector_index = 0
+        self.scores = [None] * int(self.cfg.sectors)
+        self._dwell_started_sec = float(now_sec)
+        self._request_sent = False
+        self._score_recorded = False
+        self._yaw_integrated = 0.0
+        self._yaw_target = 0.0
+        self._last_yaw = None
+        self._best_sector = None
+        self._finish_sent = False
+
+    def cancel(self) -> None:
+        # Keep scores/best_sector for HUD after the scan ends.
+        self.phase = SpawnScanPhase.IDLE
+        self.sector_index = 0
+        self._request_sent = False
+        self._score_recorded = False
+        self._yaw_integrated = 0.0
+        self._yaw_target = 0.0
+        self._last_yaw = None
+        self._finish_sent = False
+
+    def note_result(
+        self,
+        result: str,
+        score_q: float,
+        request_id: int,
+    ) -> bool:
+        """Record sector score. Returns True if target-visible abort."""
+        del request_id  # reserved for future one-shot dedupe
+        # TURNING still belongs to the sector just observed; API often returns
+        # a few hundred ms after min dwell, so accept scores there too.
+        if not self.active or self.phase not in {
+            SpawnScanPhase.DWELL,
+            SpawnScanPhase.TURNING,
+        }:
+            return False
+        if str(result).strip().upper() == "TARGET_VISIBLE":
+            self.cancel()
+            return True
+        if not self._score_recorded and 0 <= self.sector_index < len(self.scores):
+            self.scores[self.sector_index] = float(score_q)
+            self._score_recorded = True
+        return False
+
+    def update(
+        self,
+        now_sec: float,
+        yaw_rad: Optional[float],
+        odom_fresh: bool,
+    ) -> SpawnScanDecision:
+        if self.phase == SpawnScanPhase.IDLE:
+            return SpawnScanDecision(
+                0.0, 0.0, True, self.phase, "spawn_scan_idle"
+            )
+        if self.phase == SpawnScanPhase.DONE:
+            finish = None
+            if not self._finish_sent:
+                self._finish_sent = True
+                finish = str(self.cfg.finish_command).strip().lower() or "search"
+            return SpawnScanDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                "spawn_scan_done",
+                sector_index=self.sector_index,
+                finish_command=finish,
+                best_sector=self._best_sector,
+            )
+
+        if self.phase == SpawnScanPhase.DWELL:
+            return self._update_dwell(now_sec)
+
+        # TURNING / RETURNING: integrate leftward odom yaw.
+        if not odom_fresh or yaw_rad is None:
+            return SpawnScanDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                "spawn_scan_wait_odom",
+                sector_index=self.sector_index,
+                pause_qwen=False,
+                best_sector=self._best_sector,
+            )
+
+        if self._last_yaw is None:
+            self._last_yaw = float(yaw_rad)
+        else:
+            delta = _yaw_delta(self._last_yaw, float(yaw_rad))
+            # Left turn accumulates positive CCW yaw only.
+            if delta > 0.0:
+                self._yaw_integrated += delta
+            self._last_yaw = float(yaw_rad)
+
+        tol = math.radians(self.cfg.yaw_tolerance_deg)
+        if self._yaw_integrated + tol >= self._yaw_target:
+            if self.phase == SpawnScanPhase.TURNING:
+                self.sector_index += 1
+                self.phase = SpawnScanPhase.DWELL
+                self._dwell_started_sec = float(now_sec)
+                self._request_sent = False
+                self._score_recorded = False
+                self._yaw_integrated = 0.0
+                self._yaw_target = 0.0
+                self._last_yaw = None
+                return SpawnScanDecision(
+                    0.0,
+                    0.0,
+                    True,
+                    self.phase,
+                    "spawn_scan_dwell",
+                    sector_index=self.sector_index,
+                )
+            # RETURNING finished: face best sector.
+            self.phase = SpawnScanPhase.DONE
+            return SpawnScanDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                "spawn_scan_done",
+                sector_index=self.sector_index,
+                best_sector=self._best_sector,
+            )
+
+        return SpawnScanDecision(
+            0.0,
+            float(self.cfg.wz),
+            False,
+            self.phase,
+            (
+                "spawn_scan_turning"
+                if self.phase == SpawnScanPhase.TURNING
+                else "spawn_scan_returning"
+            ),
+            sector_index=self.sector_index,
+            pause_qwen=False,
+            best_sector=self._best_sector,
+        )
+
+    def _update_dwell(self, now_sec: float) -> SpawnScanDecision:
+        elapsed = max(0.0, float(now_sec) - self._dwell_started_sec)
+        request = False
+        if elapsed >= self.cfg.settle_sec and not self._request_sent:
+            self._request_sent = True
+            request = True
+
+        # Min stop time is dwell_sec. After that, wait for the sector score
+        # (API often returns near/after dwell end) until result_wait_sec.
+        waiting_for_score = (
+            self._request_sent
+            and not self._score_recorded
+            and elapsed < self.cfg.dwell_sec + self.cfg.result_wait_sec
+        )
+        if elapsed < self.cfg.dwell_sec or waiting_for_score:
+            return SpawnScanDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                (
+                    "spawn_scan_wait_score"
+                    if waiting_for_score and elapsed >= self.cfg.dwell_sec
+                    else "spawn_scan_dwell"
+                ),
+                sector_index=self.sector_index,
+                request_observation=request,
+            )
+
+        # Dwell finished: turn to next sector, or return to best-q heading.
+        if self.sector_index < self.cfg.sectors - 1:
+            self.phase = SpawnScanPhase.TURNING
+            self._yaw_target = math.radians(self.cfg.sector_deg)
+            self._yaw_integrated = 0.0
+            self._last_yaw = None
+            return SpawnScanDecision(
+                0.0,
+                float(self.cfg.wz),
+                False,
+                self.phase,
+                "spawn_scan_turning",
+                sector_index=self.sector_index,
+                pause_qwen=False,
+            )
+
+        best = self._pick_best_sector()
+        self._best_sector = best
+        left_steps = (best - self.sector_index) % self.cfg.sectors
+        if left_steps == 0:
+            self.phase = SpawnScanPhase.DONE
+            return SpawnScanDecision(
+                0.0,
+                0.0,
+                True,
+                self.phase,
+                "spawn_scan_done",
+                sector_index=self.sector_index,
+                best_sector=best,
+            )
+
+        self.phase = SpawnScanPhase.RETURNING
+        self._yaw_target = math.radians(self.cfg.sector_deg * left_steps)
+        self._yaw_integrated = 0.0
+        self._last_yaw = None
+        return SpawnScanDecision(
+            0.0,
+            float(self.cfg.wz),
+            False,
+            self.phase,
+            "spawn_scan_returning",
+            sector_index=self.sector_index,
+            pause_qwen=False,
+            best_sector=best,
+        )
+
+    def _pick_best_sector(self) -> int:
+        best_idx = 0
+        best_q = float("-inf")
+        for idx, score in enumerate(self.scores):
+            q = -1.0 if score is None else float(score)
+            if q > best_q:
+                best_q = q
+                best_idx = idx
+        return best_idx
+
+
+def _yaw_delta(prev_yaw: float, current_yaw: float) -> float:
+    return math.atan2(
+        math.sin(current_yaw - prev_yaw),
+        math.cos(current_yaw - prev_yaw),
+    )

@@ -22,8 +22,10 @@ control:
   # Existing POINT visual-servo parameters are intentionally preserved.
   # These are also drawn on /qwen_vln/annotated_image via visualization.servo_overlay_config.
   max_vx: 0.07
-  max_wz: 0.05
+  max_wz: 0.06
   kp_wz: 0.01
+  # Orange rotate-only band (|error|>=turn_only_threshold): fixed wz, not kp*error.
+  rotate_only_wz: 0.06
   angular_sign: -1.0
   center_deadband: 0.20
   turn_only_threshold: 0.7
@@ -34,6 +36,7 @@ control:
   point_results_before_forward: 1
   blocked_states:
     - WAIT_IMAGE
+    - SPAWN_SCAN
     - PAUSED
     - SUCCESS
     - ERROR
@@ -94,3 +97,18 @@ safety:
 goal:
   enabled: true
   success_distance: 0.50
+
+# Birth panoramic scan before SEARCH. Left turns use /odom yaw, not wz*time.
+spawn_scan:
+  enabled: true
+  odom_topic: /odom
+  sectors: 6
+  sector_deg: 60.0
+  wz: 0.06
+  settle_sec: 0.5
+  dwell_sec: 2.0
+  # Keep dwelling after dwell_sec until sector score arrives (API ~1s+).
+  result_wait_sec: 3.0
+  yaw_tolerance_deg: 3.0
+  odom_stale_sec: 0.5
+  finish_command: search

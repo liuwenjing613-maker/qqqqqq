@@ -18,6 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 import rclpy
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
@@ -31,6 +32,9 @@ from control.qwen_visual_servo import (
     RateLimitConfig,
     ServoConfig,
     ServoInput,
+    SpawnScanConfig,
+    SpawnScanController,
+    SpawnScanPhase,
     TurnPendingConfig,
     TurnPendingGate,
     ViewAdjustConfig,
@@ -61,6 +65,7 @@ class QwenVisualServoNode(Node):
             max_vx=float(control.get("max_vx", 0.07)),
             max_wz=float(control.get("max_wz", 0.05)),
             kp_wz=float(control.get("kp_wz", 0.05)),
+            rotate_only_wz=float(control.get("rotate_only_wz", 0.06)),
             angular_sign=float(control.get("angular_sign", -1.0)),
             center_deadband=float(control.get("center_deadband", 0.06)),
             turn_only_threshold=float(
@@ -154,6 +159,36 @@ class QwenVisualServoNode(Node):
             raise ValueError("goal.success_distance must be positive")
         self.mission_success = False
 
+        spawn_cfg = self.config.get("spawn_scan", {})
+        self.spawn_scan = SpawnScanController(
+            SpawnScanConfig(
+                enabled=bool(spawn_cfg.get("enabled", True)),
+                sectors=int(spawn_cfg.get("sectors", 6)),
+                sector_deg=float(spawn_cfg.get("sector_deg", 60.0)),
+                wz=float(spawn_cfg.get("wz", 0.06)),
+                settle_sec=float(spawn_cfg.get("settle_sec", 0.5)),
+                dwell_sec=float(spawn_cfg.get("dwell_sec", 2.0)),
+                result_wait_sec=float(spawn_cfg.get("result_wait_sec", 3.0)),
+                yaw_tolerance_deg=float(
+                    spawn_cfg.get("yaw_tolerance_deg", 3.0)
+                ),
+                odom_stale_sec=float(spawn_cfg.get("odom_stale_sec", 0.5)),
+                finish_command=str(
+                    spawn_cfg.get("finish_command", "search")
+                ).strip().lower()
+                or "search",
+            )
+        )
+        self.odom_topic = str(spawn_cfg.get("odom_topic", "/odom")).strip() or "/odom"
+        self.odom_yaw: Optional[float] = None
+        self.odom_received_sec: Optional[float] = None
+        self.score_t = 0.0
+        self.score_r = 0.0
+        self.score_q = 0.0
+        # Prevent restarting spawn while state topic still says SPAWN_SCAN
+        # after a visible-target abort (FSM already moved to TRACK).
+        self._spawn_abort_holdoff = False
+
         self.limiter = CommandRateLimiter(
             RateLimitConfig(
                 max_linear_accel=float(
@@ -244,6 +279,12 @@ class QwenVisualServoNode(Node):
             self._on_servo_command,
             reliable,
         )
+        self.create_subscription(
+            Odometry,
+            self.odom_topic,
+            self._on_odom,
+            sensor_qos,
+        )
 
         self.cmd_pub = self.create_publisher(
             Twist,
@@ -306,7 +347,11 @@ class QwenVisualServoNode(Node):
             f"pre_stop={self.view_adjust.cfg.pre_turn_stop_sec:.2f}s "
             f"pulse={self.view_adjust.cfg.turn_pulse_sec:.2f}s "
             f"settle={self.view_adjust.cfg.settle_sec:.2f}s "
-            f"goal_success={self.success_distance:.2f}m"
+            f"goal_success={self.success_distance:.2f}m "
+            f"spawn_scan=({self.spawn_scan.cfg.sectors}x"
+            f"{self.spawn_scan.cfg.sector_deg:.0f}deg,"
+            f" wz={self.spawn_scan.cfg.wz:.3f},"
+            f" odom={self.odom_topic})"
         )
         if not self.motion_enabled:
             self.get_logger().warning(
@@ -343,11 +388,26 @@ class QwenVisualServoNode(Node):
             )
             # c is displayed only. It does not choose or suppress an action.
             self.confidence = float(payload.get("confidence", 0.0))
+            self.score_t = float(payload.get("score_t", 0.0))
+            self.score_r = float(payload.get("score_r", 0.0))
+            self.score_q = float(payload.get("score_q", 0.0))
             self.latency_ms = max(
                 0.0,
                 float(payload.get("latency_ms", 0.0)),
             )
             self.result_received_sec = time.monotonic()
+
+            if self.spawn_scan.active:
+                aborted = self.spawn_scan.note_result(
+                    self.result,
+                    self.score_q,
+                    request_id,
+                )
+                if aborted:
+                    self._spawn_abort_holdoff = True
+                    self.get_logger().warning(
+                        "spawn scan aborted: target visible -> TRACK"
+                    )
 
             if self.action == "POINT" and self.point_x is not None:
                 self.point_streak += 1
@@ -357,7 +417,11 @@ class QwenVisualServoNode(Node):
             else:
                 self.point_streak = 0
 
-            if self.action in {"TURN_LEFT", "TURN_RIGHT"}:
+            # Spawn-scan scores are not TURN actions; ignore STOP/POINT here
+            # for turn gating when the panorama controller is driving.
+            if self.spawn_scan.active:
+                pass
+            elif self.action in {"TURN_LEFT", "TURN_RIGHT"}:
                 started = self.turn_gate.start(self.action, request_id)
                 if started:
                     self.get_logger().warning(
@@ -377,6 +441,13 @@ class QwenVisualServoNode(Node):
             self.turn_gate.cancel()
             self.view_adjust.cancel()
             self.get_logger().warning(f"invalid result JSON: {exc}")
+
+    def _on_odom(self, msg: Odometry) -> None:
+        q = msg.pose.pose.orientation
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self.odom_yaw = math.atan2(siny_cosp, cosy_cosp)
+        self.odom_received_sec = time.monotonic()
 
     def _on_scan(self, msg: LaserScan) -> None:
         try:
@@ -416,12 +487,14 @@ class QwenVisualServoNode(Node):
             self.get_logger().warning("motion ENABLED by servo command")
         elif command in {"disable", "stop", "pause"}:
             self.motion_enabled = False
+            self.spawn_scan.cancel()
             self._cancel_turn_and_resume_qwen()
             self._publish_zero()
             self.get_logger().warning("motion DISABLED by servo command")
         elif command == "reset":
             self.point_streak = 0
             self.mission_success = False
+            self.spawn_scan.cancel()
             self._cancel_turn_and_resume_qwen()
             self._publish_zero()
         else:
@@ -447,6 +520,7 @@ class QwenVisualServoNode(Node):
         self.emergency_reverse.reset()
         self.turn_gate.cancel()
         self.view_adjust.cancel()
+        self.spawn_scan.cancel()
         self.qwen_pause_owned = False
         self.limiter.reset()
         self._send_qwen_command("success")
@@ -457,6 +531,34 @@ class QwenVisualServoNode(Node):
             f"<= success_distance={self.success_distance:.3f}m; "
             "stopped and exited navigation"
         )
+
+    def _sync_spawn_scan(self, now: float) -> None:
+        state = str(self.state or "").strip().upper()
+        if not self.spawn_scan.cfg.enabled:
+            if self.spawn_scan.active or self.spawn_scan.done:
+                self.spawn_scan.cancel()
+            self._spawn_abort_holdoff = False
+            return
+        if state == "SPAWN_SCAN":
+            if (
+                self.spawn_scan.phase == SpawnScanPhase.IDLE
+                and not self._spawn_abort_holdoff
+            ):
+                self.spawn_scan.start(now)
+                self.turn_gate.cancel()
+                self.view_adjust.cancel()
+                self.get_logger().warning("spawn scan started")
+        else:
+            self._spawn_abort_holdoff = False
+            # Spawn scan intentionally pauses Qwen while rotating; FSM becomes
+            # PAUSED briefly. That must not tear down an active panorama.
+            if state == "PAUSED" and (
+                self.spawn_scan.active or self.spawn_scan.done
+            ):
+                return
+            if self.spawn_scan.active or self.spawn_scan.done:
+                self.spawn_scan.cancel()
+                self.qwen_pause_owned = False
 
     def _tick(self) -> None:
         now = time.monotonic()
@@ -496,7 +598,9 @@ class QwenVisualServoNode(Node):
             self.emergency_reverse.reset()
             self.turn_gate.cancel()
             self.view_adjust.cancel()
+            self.spawn_scan.cancel()
         else:
+            self._sync_spawn_scan(now)
             was_emergency_reversing = self.emergency_reverse.active
             emergency_reversing = (
                 self.emergency_reverse.update(self.front_distance)
@@ -505,10 +609,23 @@ class QwenVisualServoNode(Node):
             )
             if was_emergency_reversing and not emergency_reversing:
                 self.limiter.reset()
-                self._send_qwen_command(self.resume_command)
-                self.get_logger().warning(
-                    "emergency reverse cleared; requested fresh observation"
-                )
+                if self.spawn_scan.active or self.spawn_scan.done:
+                    self.get_logger().warning(
+                        "emergency reverse cleared during spawn scan; "
+                        "continuing panorama"
+                    )
+                else:
+                    self._send_qwen_command(self.resume_command)
+                    self.get_logger().warning(
+                        "emergency reverse cleared; requested fresh observation"
+                    )
+
+            odom_fresh = (
+                self.odom_yaw is not None
+                and self.odom_received_sec is not None
+                and now - self.odom_received_sec
+                <= self.spawn_scan.cfg.odom_stale_sec
+            )
 
             if emergency_reversing:
                 self.turn_gate.cancel()
@@ -524,6 +641,38 @@ class QwenVisualServoNode(Node):
                     desired_vx = 0.0
                     hard_stop = True
                     reason = "emergency_reverse_wait_lidar"
+            elif self.spawn_scan.active or self.spawn_scan.done:
+                spawn = self.spawn_scan.update(
+                    now,
+                    self.odom_yaw,
+                    odom_fresh,
+                )
+                desired_vx, desired_wz = spawn.vx, spawn.wz
+                hard_stop = spawn.hard_stop
+                reason = spawn.reason
+                view_phase = spawn.phase.value
+                bypass_rate_limit = spawn.phase in {
+                    SpawnScanPhase.TURNING,
+                    SpawnScanPhase.RETURNING,
+                }
+                if spawn.pause_qwen and not self.qwen_pause_owned:
+                    self._send_qwen_command("pause")
+                    self.qwen_pause_owned = True
+                if spawn.request_observation:
+                    self.qwen_pause_owned = False
+                    self._send_qwen_command("spawn_scan")
+                    self.get_logger().info(
+                        f"spawn scan sector={spawn.sector_index} "
+                        "capture requested"
+                    )
+                if spawn.finish_command:
+                    self.qwen_pause_owned = False
+                    self._send_qwen_command(spawn.finish_command)
+                    self.get_logger().warning(
+                        "spawn scan finished; "
+                        f"best_sector={spawn.best_sector} "
+                        f"-> {spawn.finish_command}"
+                    )
             elif self.view_adjust.active:
                 view = self.view_adjust.update(now)
                 desired_vx, desired_wz = view.vx, view.wz
@@ -678,6 +827,18 @@ class QwenVisualServoNode(Node):
             "view_adjust_phase": view_phase,
             "mission_success": self.mission_success,
             "success_distance": round(self.success_distance, 3),
+            "spawn_scan_phase": self.spawn_scan.phase.value,
+            "spawn_scan_sector": self.spawn_scan.sector_index,
+            "spawn_scan_scores": self.spawn_scan.scores,
+            "spawn_best_sector": self.spawn_scan.best_sector,
+            "score_t": round(self.score_t, 3),
+            "score_r": round(self.score_r, 3),
+            "score_q": round(self.score_q, 3),
+            "odom_yaw_deg": (
+                None
+                if self.odom_yaw is None
+                else round(math.degrees(self.odom_yaw), 2)
+            ),
             "emergency_reverse_active": self.emergency_reverse.active,
             "emergency_release_distance": round(
                 self.emergency_reverse.cfg.release_distance,
@@ -726,6 +887,7 @@ class QwenVisualServoNode(Node):
         self.emergency_reverse.reset()
         self.turn_gate.cancel()
         self.view_adjust.cancel()
+        self.spawn_scan.cancel()
         if self.qwen_pause_owned:
             self._release_qwen_pause(send_resume=True)
         self.limiter.reset()

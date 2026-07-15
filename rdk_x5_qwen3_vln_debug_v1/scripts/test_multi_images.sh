@@ -14,6 +14,9 @@ usage:
   test_multi_images.sh INSTRUCTION MODE --dir IMAGE_DIR
 
 examples:
+  bash scripts/test_multi_images.sh "find the bottle" spawn_scan \
+    /root/rdk_x5_vln_robot/data/images/test1.png
+
   bash scripts/test_multi_images.sh "find the bottle" search \
     /root/rdk_x5_vln_robot/data/images/test1.png \
     /root/rdk_x5_vln_robot/data/images/test6.png

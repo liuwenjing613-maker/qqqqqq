@@ -30,7 +30,7 @@ from qwen_vln.prompt_manager import PromptManager
 from qwen_vln.qwen_client import ClientConfig, QwenVisionClient, pixel_to_norm1000
 from qwen_vln.state_machine import NavigationStateMachine, StateMachineConfig
 from qwen_vln.types import ModelResult, PromptMode
-from qwen_vln.visualizer import ResultVisualizer, ServoZoneOverlay
+from qwen_vln.visualizer import ResultVisualizer, ServoZoneOverlay, SpawnScanHud
 
 
 def _load_servo_zone_overlay(
@@ -179,6 +179,12 @@ class QwenVlnDebugNode(Node):
                 max_retries=int(api_cfg["max_retries"]),
                 temperature=float(api_cfg["temperature"]),
                 max_tokens=int(api_cfg["max_tokens"]),
+                max_tokens_spawn_scan=int(
+                    api_cfg.get(
+                        "max_tokens_spawn_scan",
+                        api_cfg["max_tokens"],
+                    )
+                ),
                 enable_thinking=bool(api_cfg.get("enable_thinking", False)),
                 jpeg_quality=int(api_cfg.get("jpeg_quality", 72)),
                 min_pixels=int(api_cfg.get("min_pixels", 65536)),
@@ -206,6 +212,9 @@ class QwenVlnDebugNode(Node):
                 track_interval_sec=float(sm_cfg["track_interval_sec"]),
                 search_interval_sec=float(sm_cfg["search_interval_sec"]),
                 verify_interval_sec=float(sm_cfg["verify_interval_sec"]),
+                spawn_scan_interval_sec=float(
+                    sm_cfg.get("spawn_scan_interval_sec", 9999.0)
+                ),
                 error_cooldown_sec=float(sm_cfg["error_cooldown_sec"]),
                 auto_enter_search=bool(sm_cfg["auto_enter_search"]),
             )
@@ -248,6 +257,8 @@ class QwenVlnDebugNode(Node):
         self.latest_error = ""
         self.latest_prompt = ""
         self.latest_request_mode: Optional[PromptMode] = None
+        self.spawn_scan_hud = SpawnScanHud()
+        self.spawn_scan_lock = threading.Lock()
 
         self.future: Optional[Future] = None
         self.future_meta: Optional[PendingRequest] = None
@@ -274,6 +285,26 @@ class QwenVlnDebugNode(Node):
         self.annotated_raw_pub = self.create_publisher(Image, annotated_raw, 2)
         self.create_subscription(String, topics["instruction"], self._on_instruction, 10)
         self.create_subscription(String, topics["command"], self._on_command, 10)
+        servo_status_topic = str(
+            topics.get("servo_status", "/qwen_vln/servo/status")
+        ).strip() or "/qwen_vln/servo/status"
+        self.create_subscription(
+            String,
+            servo_status_topic,
+            self._on_servo_status,
+            10,
+        )
+        # Prefer sector step from servo overlay config when available.
+        try:
+            servo_path = PROJECT_ROOT / str(
+                vis_cfg.get("servo_overlay_config", "configs/qwen3_vln_servo.yaml")
+            )
+            servo_cfg = yaml.safe_load(servo_path.read_text(encoding="utf-8")) or {}
+            self.spawn_scan_hud.sector_deg = float(
+                (servo_cfg.get("spawn_scan") or {}).get("sector_deg", 60.0)
+            )
+        except Exception:  # noqa: BLE001
+            self.spawn_scan_hud.sector_deg = 60.0
 
         image_topic = (
             image_topic
@@ -380,6 +411,38 @@ class QwenVlnDebugNode(Node):
         except ValueError as exc:
             self.latest_error = str(exc)
             self.get_logger().error(str(exc))
+
+    def _on_servo_status(self, msg: String) -> None:
+        try:
+            payload = json.loads(msg.data)
+        except Exception:  # noqa: BLE001
+            return
+        scores_raw = payload.get("spawn_scan_scores") or []
+        scores: list[Optional[float]] = []
+        if isinstance(scores_raw, list):
+            for item in scores_raw:
+                if item is None:
+                    scores.append(None)
+                else:
+                    try:
+                        scores.append(float(item))
+                    except (TypeError, ValueError):
+                        scores.append(None)
+        best = payload.get("spawn_best_sector")
+        try:
+            best_sector = None if best is None else int(best)
+        except (TypeError, ValueError):
+            best_sector = None
+        try:
+            sector = int(payload.get("spawn_scan_sector", 0))
+        except (TypeError, ValueError):
+            sector = 0
+        phase = str(payload.get("spawn_scan_phase", "IDLE") or "IDLE")
+        with self.spawn_scan_lock:
+            self.spawn_scan_hud.phase = phase
+            self.spawn_scan_hud.sector = sector
+            self.spawn_scan_hud.scores = scores
+            self.spawn_scan_hud.best_sector = best_sector
 
     def _on_timer(self) -> None:
         self._consume_future()
@@ -493,14 +556,21 @@ class QwenVlnDebugNode(Node):
             frame = self.result_frame.copy()
             header = copy.deepcopy(self.result_header)
             result = self.latest_result
-            frame_note = f"exact API input image for request {result.request_id}"
         else:
             if live_frame is None:
                 return
             frame = live_frame
             header = live_header
             result = None
-            frame_note = "live camera image; waiting for first API result"
+
+        with self.spawn_scan_lock:
+            spawn_hud = SpawnScanHud(
+                phase=self.spawn_scan_hud.phase,
+                sector=self.spawn_scan_hud.sector,
+                scores=list(self.spawn_scan_hud.scores),
+                best_sector=self.spawn_scan_hud.best_sector,
+                sector_deg=self.spawn_scan_hud.sector_deg,
+            )
 
         annotated = self.visualizer.draw(
             frame,
@@ -509,7 +579,7 @@ class QwenVlnDebugNode(Node):
             result,
             self.future is not None,
             self.latest_error,
-            frame_note,
+            spawn_scan=spawn_hud,
         )
 
         stamp_header = header

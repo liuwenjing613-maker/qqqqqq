@@ -15,7 +15,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from qwen_vln.prompt_manager import PromptManager
 from qwen_vln.qwen_client import ClientConfig, QwenVisionClient
 from qwen_vln.types import PromptMode, VlnState
-from qwen_vln.visualizer import ResultVisualizer
+from qwen_vln.visualizer import ResultVisualizer, SpawnScanHud
 
 
 def resize_for_api(image, max_width: int, max_height: int = 0):
@@ -73,6 +73,12 @@ def main() -> int:
             max_retries=int(api_cfg["max_retries"]),
             temperature=float(api_cfg["temperature"]),
             max_tokens=int(api_cfg["max_tokens"]),
+            max_tokens_spawn_scan=int(
+                api_cfg.get(
+                    "max_tokens_spawn_scan",
+                    api_cfg["max_tokens"],
+                )
+            ),
             enable_thinking=bool(api_cfg["enable_thinking"]),
             jpeg_quality=int(api_cfg.get("jpeg_quality", 72)),
             min_pixels=int(api_cfg.get("min_pixels", 65536)),
@@ -102,6 +108,7 @@ def main() -> int:
         return VlnState.SEARCHING
 
     state_by_mode = {
+        PromptMode.SPAWN_SCAN: VlnState.SPAWN_SCAN,
         PromptMode.OBSERVE: _state_for_result(result.result),
         PromptMode.TRACK: _state_for_result(result.result),
         PromptMode.SEARCH: _state_for_result(result.result),
@@ -109,13 +116,22 @@ def main() -> int:
     }
     visualizer = ResultVisualizer(history_length=1)
     visualizer.add_result(result)
+    spawn_hud = None
+    if mode == PromptMode.SPAWN_SCAN:
+        spawn_hud = SpawnScanHud(
+            phase="DWELL",
+            sector=0,
+            scores=[float(result.score_q)],
+            best_sector=0,
+            sector_deg=60.0,
+        )
     annotated = visualizer.draw(
         image,
         state_by_mode[mode],
         args.instruction,
         result,
         False,
-        frame_note="exact local input image",
+        spawn_scan=spawn_hud,
     )
     cv2.imwrite(str(image_path), annotated)
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))

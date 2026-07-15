@@ -26,6 +26,7 @@ _STATUS_TO_RESULT = {
     "F": "VERIFY_FAILED",
 }
 _ALLOWED_STATUS_BY_MODE = {
+    PromptMode.SPAWN_SCAN: {"V", "I"},
     PromptMode.OBSERVE: {"V", "I"},
     PromptMode.TRACK: {"V", "I"},
     PromptMode.SEARCH: {"V", "I"},
@@ -54,6 +55,8 @@ class ClientConfig:
     max_retries: int = 0
     temperature: float = 0.0
     max_tokens: int = 96
+    # SPAWN_SCAN {"p","t","r","q"} needs more tokens than action JSON.
+    max_tokens_spawn_scan: int = 48
     enable_thinking: bool = False
     jpeg_quality: int = 72
     min_pixels: int = 65536
@@ -110,6 +113,11 @@ class QwenVisionClient:
             "image_url": {"url": data_url},
         }
 
+        max_tokens = (
+            int(self.config.max_tokens_spawn_scan)
+            if mode == PromptMode.SPAWN_SCAN
+            else int(self.config.max_tokens)
+        )
         api_started = time.perf_counter()
         completion = self._client.chat.completions.create(
             model=self.config.model,
@@ -124,7 +132,7 @@ class QwenVisionClient:
             ],
             response_format={"type": "json_object"},
             temperature=float(self.config.temperature),
-            max_tokens=int(self.config.max_tokens),
+            max_tokens=max_tokens,
             extra_body={
                 "enable_thinking": bool(self.config.enable_thinking),
                 "vl_high_resolution_images": bool(
@@ -369,6 +377,63 @@ def _parse_confidence(value: Any) -> float:
     return confidence
 
 
+def _parse_unit_score(value: Any, name: str) -> float:
+    if value is None:
+        raise ValueError(f"Missing required JSON field: {name}")
+    if isinstance(value, bool):
+        raise ValueError(f"{name} cannot be boolean")
+    try:
+        score = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric in [0,1]") from exc
+    if not 0.0 <= score <= 1.0:
+        raise ValueError(f"{name}={score} is outside [0,1]")
+    return score
+
+
+def _parse_spawn_scan_output(
+    data: Dict[str, Any],
+    image_width: int,
+    image_height: int,
+) -> ModelResult:
+    """Parse SPAWN_SCAN protocol: {"p","t","r","q"} (no s / no motion action).
+
+    Visibility is inferred from p only: non-null => TARGET_VISIBLE, null => TARGET_INFERRED.
+    """
+    required = {"p", "t", "r", "q"}
+    missing = sorted(required.difference(data))
+    if missing:
+        raise ValueError(f"Missing required JSON fields: {missing}")
+
+    point = _parse_point(data.get("p"), image_width, image_height)
+    if point is not None:
+        result_name = "TARGET_VISIBLE"
+        action = "POINT"
+        role = "target"
+        reason = "spawn_visible"
+    else:
+        result_name = "TARGET_INFERRED"
+        action = "STOP"
+        role = "none"
+        reason = "spawn_inferred"
+
+    score_t = _parse_unit_score(data.get("t"), "t")
+    score_r = _parse_unit_score(data.get("r"), "r")
+    score_q = _parse_unit_score(data.get("q"), "q")
+    return ModelResult(
+        result=result_name,
+        point=point,
+        point_role=role,
+        label="",
+        reason_code=reason,
+        action=action,
+        confidence=0.0,
+        score_t=score_t,
+        score_r=score_r,
+        score_q=score_q,
+    )
+
+
 def parse_model_output(
     raw_text: str,
     mode: PromptMode,
@@ -379,9 +444,13 @@ def parse_model_output(
 
     Preferred: {"s":"I","a":"TURN_RIGHT","p":null}
     Legacy:    {"s":"I","p":[800,650]} -> inferred as a=POINT
+    SPAWN_SCAN: {"p":null,"t":0.1,"r":0.2,"q":0.3}
     Optional:  "c" remains accepted if the model still emits it.
     """
     data = _extract_json(raw_text)
+    if mode == PromptMode.SPAWN_SCAN:
+        return _parse_spawn_scan_output(data, image_width, image_height)
+
     required = {"s", "p"}
     missing = sorted(required.difference(data))
     if missing:

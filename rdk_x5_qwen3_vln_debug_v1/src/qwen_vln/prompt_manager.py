@@ -28,6 +28,8 @@ class PromptManager:
             PromptMode.TRACK: "track.txt",
             PromptMode.SEARCH: "search.txt",
             PromptMode.VERIFY: "verify.txt",
+            # Keep the existing filename spelling used by the user.
+            PromptMode.SPAWN_SCAN: "spawn_sacn.txt",
         }
         self.common = self._read("common.txt")
         self.mode_templates = {
@@ -48,8 +50,15 @@ class PromptManager:
         image_height: int,
         previous_point: str = "none",
     ) -> str:
+        instruction_json = json.dumps(instruction, ensure_ascii=False)
+        # Spawn scan uses its own standalone prompt (no common.txt mix-in).
+        if mode == PromptMode.SPAWN_SCAN:
+            return self.mode_templates[mode].safe_substitute(
+                instruction_json=instruction_json,
+            )
+
         common = self.common.safe_substitute(
-            instruction_json=json.dumps(instruction, ensure_ascii=False),
+            instruction_json=instruction_json,
             width=image_width,
             height=image_height,
             # Pixel extremes are only negative examples. Model output remains 0..1000.

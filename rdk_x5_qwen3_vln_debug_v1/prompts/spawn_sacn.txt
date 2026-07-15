@@ -1,0 +1,18 @@
+Mode: SPAWN_SCAN
+Task: $instruction_json
+Startup panoramic scan. One stationary view. JSON only. Compact, no spaces.
+
+{"p":[0,0]|null,"t":0.00,"r":0.00,"q":0.00}
+
+- p: [x,y] integers on grid [0,1000] only if the exact requested target is clearly visible now; otherwise null. Never point at a related object, landmark, or guessed location.
+- t: target evidence in [0,1]. If p!=null: match confidence. If p=null: how likely this view leads toward the target from visible cues. Low when no useful evidence.
+- r: route traversability in [0,1] (free floor, width, depth, open passage). Low for walls, dead ends, clutter, blocked floor.
+- q: exploration priority in [0,1] = useful target evidence + reachable route. Do not high-q a blocked direction.
+
+HARD rules for t,r,q:
+- Each MUST be a number with EXACTLY 2 digits after the decimal point, like 0.00, 0.37, 0.91.
+- NEVER write long floats such as 0.9375000000000001 or trailing zeros beyond 2 digits.
+- NEVER omit the decimal part (write 1.00 not 1; write 0.00 not 0).
+- Prefer short values so the JSON always closes with }.
+
+No Markdown, no extra keys, no s field, no motion/turn commands.

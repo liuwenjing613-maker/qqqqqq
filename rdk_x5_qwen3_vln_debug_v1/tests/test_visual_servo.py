@@ -134,6 +134,44 @@ class ServoTests(unittest.TestCase):
         view.start("TURN_RIGHT", 2, 1.0)
         self.assertLess(view.update(1.2).wz, 0.0)
 
+    def test_rotate_only_band_uses_fixed_wz(self) -> None:
+        servo = QwenVisualServo(
+            ServoConfig(
+                kp_wz=0.01,
+                rotate_only_wz=0.06,
+                max_wz=0.06,
+                center_deadband=0.2,
+                turn_only_threshold=0.7,
+                angular_sign=-1.0,
+            )
+        )
+        half = 0.5 * 959.0
+        point_x = half + 0.8 * half
+        decision = servo.compute(
+            self.input(point_x=point_x, image_width=960)
+        )
+        self.assertEqual(decision.reason, "rotate_only_large_error")
+        self.assertAlmostEqual(decision.wz, -0.06, places=4)
+
+    def test_steer_drive_band_still_uses_kp(self) -> None:
+        servo = QwenVisualServo(
+            ServoConfig(
+                kp_wz=0.01,
+                rotate_only_wz=0.06,
+                max_wz=0.06,
+                center_deadband=0.2,
+                turn_only_threshold=0.7,
+                angular_sign=-1.0,
+            )
+        )
+        half = 0.5 * 959.0
+        point_x = half + 0.65 * half
+        decision = servo.compute(
+            self.input(point_x=point_x, image_width=960)
+        )
+        self.assertIn("visual_servo", decision.reason)
+        self.assertAlmostEqual(decision.wz, -0.0065, places=4)
+
     def test_turn_pending_requires_consecutive_near_lidar(self) -> None:
         gate = TurnPendingGate(
             TurnPendingConfig(

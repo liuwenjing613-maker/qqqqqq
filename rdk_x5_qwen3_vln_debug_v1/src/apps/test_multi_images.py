@@ -16,7 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from qwen_vln.prompt_manager import PromptManager
 from qwen_vln.qwen_client import ClientConfig, QwenVisionClient
 from qwen_vln.types import PromptMode, VlnState
-from qwen_vln.visualizer import ResultVisualizer
+from qwen_vln.visualizer import ResultVisualizer, SpawnScanHud
 
 
 def resize_for_api(image, max_width: int, max_height: int = 0):
@@ -115,6 +115,12 @@ def main() -> int:
             max_retries=int(api_cfg["max_retries"]),
             temperature=float(api_cfg["temperature"]),
             max_tokens=int(api_cfg["max_tokens"]),
+            max_tokens_spawn_scan=int(
+                api_cfg.get(
+                    "max_tokens_spawn_scan",
+                    api_cfg["max_tokens"],
+                )
+            ),
             enable_thinking=bool(api_cfg.get("enable_thinking", False)),
             jpeg_quality=int(api_cfg.get("jpeg_quality", 72)),
             min_pixels=int(api_cfg.get("min_pixels", 65536)),
@@ -168,13 +174,27 @@ def main() -> int:
 
         visualizer = ResultVisualizer(history_length=1)
         visualizer.add_result(result)
+        draw_state = (
+            VlnState.SPAWN_SCAN
+            if mode == PromptMode.SPAWN_SCAN
+            else _state_for_result(result.result)
+        )
+        spawn_hud = None
+        if mode == PromptMode.SPAWN_SCAN:
+            spawn_hud = SpawnScanHud(
+                phase="DWELL",
+                sector=index - 1,
+                scores=[float(result.score_q)],
+                best_sector=0,
+                sector_deg=60.0,
+            )
         annotated = visualizer.draw(
             image,
-            _state_for_result(result.result),
+            draw_state,
             args.instruction,
             result,
             False,
-            frame_note=f"batch {index}/{len(image_paths)}: {image_path.name}",
+            spawn_scan=spawn_hud,
         )
         cv2.imwrite(str(annotated_path), annotated)
 
