@@ -1,0 +1,23 @@
+{
+  "snapshot_id": "RS_TEST_GLOBAL_0001",
+  "visual_context_id": "VC_TEST_0001",
+  "selection_strategy": "GLOBAL_REGION_PROPOSAL",
+  "task_interpretation": "错误选择墙面",
+  "ranked_region_proposals": [
+    {
+      "proposal_id": "GP_1",
+      "rank": 1,
+      "region_type": "FRONTIER_EXPLORATION_REGION",
+      "map_image_center": {"u": 0.20, "v": 0.20},
+      "map_image_bbox": {"u_min": 0.10, "v_min": 0.10, "u_max": 0.30, "v_max": 0.30},
+      "direction_hint": "LEFT",
+      "supporting_view_ids": ["VIEW_270"],
+      "confidence": 0.55,
+      "reason_code": "WALL_SURFACE",
+      "map_evidence": ["误选墙面"],
+      "visual_evidence": [],
+      "risk_flags": []
+    }
+  ],
+  "fallback_recommendation": "USE_CANDIDATE_RANKING"
+}

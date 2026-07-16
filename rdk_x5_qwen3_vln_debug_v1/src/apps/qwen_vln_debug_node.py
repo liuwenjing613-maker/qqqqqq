@@ -26,6 +26,7 @@ from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import Float32, String
 
+from qwen_vln.image_prep import resize_for_api
 from qwen_vln.prompt_manager import PromptManager
 from qwen_vln.qwen_client import ClientConfig, QwenVisionClient, pixel_to_norm1000
 from qwen_vln.state_machine import NavigationStateMachine, StateMachineConfig
@@ -66,21 +67,6 @@ def _load_servo_zone_overlay(
         )
     except Exception:  # noqa: BLE001
         return None
-
-
-def resize_for_api(image, max_width: int, max_height: int = 0):
-    """Downscale for API while preserving aspect ratio."""
-    height, width = image.shape[:2]
-    scale = 1.0
-    if max_width > 0 and width > max_width:
-        scale = min(scale, max_width / float(width))
-    if max_height > 0 and height > max_height:
-        scale = min(scale, max_height / float(height))
-    if scale >= 0.999:
-        return image
-    new_w = max(1, int(round(width * scale)))
-    new_h = max(1, int(round(height * scale)))
-    return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
 def _section(config: dict, *names: str) -> dict:
@@ -246,6 +232,8 @@ class QwenVlnDebugNode(Node):
             )
         self.api_max_width = int(camera_cfg.get("api_max_width", 960))
         self.api_max_height = int(camera_cfg.get("api_max_height", 0))
+        self.api_min_pixels = int(api_cfg.get("min_pixels", 65536))
+        self.api_max_pixels = int(api_cfg.get("max_pixels", 442368))
         self.expected_encoding = str(camera_cfg.get("expected_encoding", "bgr8")).strip().lower()
         self.output_jpeg_quality = int(vis_cfg.get("jpeg_quality", 90))
 
@@ -391,7 +379,13 @@ class QwenVlnDebugNode(Node):
             self.latest_error = f"compressed_image_decode: {exc}"
 
     def _store_frame(self, frame, header) -> None:
-        frame = resize_for_api(frame, self.api_max_width, self.api_max_height)
+        frame = resize_for_api(
+            frame,
+            self.api_max_width,
+            self.api_max_height,
+            min_pixels=self.api_min_pixels,
+            max_pixels=self.api_max_pixels,
+        )
         with self.frame_lock:
             self.latest_frame = frame
             self.latest_header = copy.deepcopy(header)

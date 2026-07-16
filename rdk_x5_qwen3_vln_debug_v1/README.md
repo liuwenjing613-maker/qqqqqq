@@ -274,7 +274,7 @@ ros2 topic pub --once /qwen_vln/command std_msgs/msg/String "{data: 'reset'}"
 `point` 使用 Qwen3-VL 相对坐标网格 `[0, 1000]`（不是像素，也不是 0～1）。
 解析器会换算为送入 API 的缩放图像像素：
 
-`pixel = round(coord / 1000 * (size - 1))`
+`pixel = round(coord / 1000 * size)` clamped to `[0, size-1]`
 
 其中 `size` 为图像宽或高。0～1 归一化坐标会被拒绝。ROS 话题 `/qwen_vln/pixel_point` 与标注图上的点均为换算后的像素。
 

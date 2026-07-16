@@ -8,7 +8,10 @@ set -u
 
 # shellcheck source=scripts/lib/slam_calibrated_env.sh
 source "${PWD}/scripts/lib/slam_calibrated_env.sh"
+# shellcheck source=scripts/lib/ros_dds_env.sh
+source "${PWD}/scripts/lib/ros_dds_env.sh"
 export SLAM_USE_CALIBRATION=1
+prepare_ros_dds_env
 
 echo "[INFO] Starting calibrated SLAM stack..."
 echo "[INFO] CHASSIS_MOTOR_TRIMS=${CHASSIS_MOTOR_TRIMS}"

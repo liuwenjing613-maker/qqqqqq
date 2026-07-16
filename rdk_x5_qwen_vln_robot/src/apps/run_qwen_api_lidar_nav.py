@@ -361,6 +361,13 @@ class RunQwenApiLidarNav(Node):
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, 10)
         self.json_pub = self.create_publisher(String, self.json_topic, 10)
         self.state_pub = self.create_publisher(String, self.state_topic, 10)
+        # Voice pipeline may publish English instructions here (phase 1: update string only).
+        self.voice_instruction_sub = self.create_subscription(
+            String,
+            "/voice/instruction",
+            self._on_voice_instruction,
+            10,
+        )
         self.create_timer(1.0 / max(self.control_hz, 1e-3), self.control_timer_cb)
         self.create_timer(1.0 / max(self.decision_hz, 1e-3), self.decision_timer_cb)
 
@@ -377,8 +384,17 @@ class RunQwenApiLidarNav(Node):
             f"scan_odom={self.full_scan_use_odom_yaw} odom_topic={self.odom_topic} "
             f"scan_query_iv={self.full_scan_query_interval_sec}s"
         )
+        self.get_logger().info("Subscribed to /voice/instruction for runtime instruction updates")
         if self.explore_enable:
             self._start_target_scan_360()
+
+    def _on_voice_instruction(self, msg: String) -> None:
+        """Phase 1: accept English instruction from voice; no state reset yet."""
+        instruction = (msg.data or "").strip()
+        if not instruction:
+            return
+        self.instruction = instruction
+        self.get_logger().info(f"Received new instruction: {self.instruction}")
 
     def image_callback(self, msg: Image):
         try:

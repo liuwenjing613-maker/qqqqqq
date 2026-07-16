@@ -4,6 +4,38 @@ selector:
   allow_nav2: false
   allow_coordinates: false
 
+region_selection:
+  # CANDIDATE_RANKING | GLOBAL_REGION_PROPOSAL
+  strategy: GLOBAL_REGION_PROPOSAL
+  fallback_strategy: CANDIDATE_RANKING
+  strict_strategy_validation: true
+
+global_region_proposal:
+  enabled: true
+  max_ranked_proposals: 3
+  coordinate_space: NORMALIZED_MAP_VIEWPORT
+  require_frontier_match: true
+  max_frontier_snap_distance_m: 0.75
+  minimum_bbox_width_normalized: 0.04
+  minimum_bbox_height_normalized: 0.04
+  maximum_bbox_width_normalized: 0.45
+  maximum_bbox_height_normalized: 0.45
+  minimum_frontier_overlap_ratio: 0.10
+  maximum_occupied_ratio: 0.25
+  allow_map_only_fallback: true
+  try_next_proposal_on_validation_failure: true
+  fallback_to_candidate_ranking: true
+
+qwen_visual_input:
+  payload_mode: DECISION_BOARD
+  include_annotated_map: true
+  include_trajectory: true
+  include_visited_corridor: true
+  include_observation_poses: true
+  include_robot_pose: true
+  include_360_views: true
+  include_map_reference_grid: true
+
 qwen:
   model_env: QWEN_MODEL
   api_key_env: DASHSCOPE_API_KEY
@@ -12,7 +44,7 @@ qwen:
   default_base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   request_timeout_s: 30
   max_retries: 1
-  max_tokens: 256
+  max_tokens: 512
   require_image_input: true
   use_low_randomness: true
 
@@ -28,6 +60,7 @@ logging:
   save_raw_response: true
   save_request_manifest: true
   save_validation: true
+  save_global_proposal_validation: true
 
 ros:
   max_snapshot_age_s: 300
@@ -61,3 +94,6 @@ safety:
   observation_only: true
   motion_enabled: false
   nav2_enabled: false
+
+data_contract:
+  config_file: configs/exploration_data_contract.yaml

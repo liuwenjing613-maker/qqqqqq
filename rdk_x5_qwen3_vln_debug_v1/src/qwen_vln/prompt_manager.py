@@ -57,13 +57,11 @@ class PromptManager:
                 instruction_json=instruction_json,
             )
 
+        # image_width/height stay in the signature for callers, but are not
+        # injected into the prompt (relative [0,1000] only).
+        _ = (image_width, image_height)
         common = self.common.safe_substitute(
             instruction_json=instruction_json,
-            width=image_width,
-            height=image_height,
-            # Pixel extremes are only negative examples. Model output remains 0..1000.
-            max_x=image_width - 1,
-            max_y=image_height - 1,
             json_template=_JSON_TEMPLATE,
         )
         mode_text = self.mode_templates[mode].safe_substitute(

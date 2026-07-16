@@ -63,7 +63,8 @@ recovery_observe_frames: 6
 # -----------------------------
 # 底盘串口（Rosmaster M1，全项目唯一入口，改这里即可）
 # 确认方法: python3 v0/test_rosmaster_connection.py --port <端口>  正确时 battery>0
-# 常见设备: /dev/ttyUSB0  /dev/ttyUSB1  /dev/myserial  /dev/rosmaster
+# 常见设备: /dev/rosmaster  /dev/ttyUSB0  /dev/ttyUSB1  /dev/myserial
+# 当前板子: /dev/rosmaster -> /dev/ttyUSB0
 chassis_port: /dev/ttyUSB1
 chassis_max_vx: 0.06
 chassis_max_wz: 0.06

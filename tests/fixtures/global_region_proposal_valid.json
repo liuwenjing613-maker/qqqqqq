@@ -1,0 +1,23 @@
+{
+  "snapshot_id": "RS_TEST_GLOBAL_0001",
+  "visual_context_id": "VC_TEST_0001",
+  "selection_strategy": "GLOBAL_REGION_PROPOSAL",
+  "task_interpretation": "探索尚未覆盖的右侧前沿区域",
+  "ranked_region_proposals": [
+    {
+      "proposal_id": "GP_1",
+      "rank": 1,
+      "region_type": "FRONTIER_EXPLORATION_REGION",
+      "map_image_center": {"u": 0.72, "v": 0.48},
+      "map_image_bbox": {"u_min": 0.62, "v_min": 0.38, "u_max": 0.82, "v_max": 0.58},
+      "direction_hint": "RIGHT",
+      "supporting_view_ids": ["VIEW_090"],
+      "confidence": 0.84,
+      "reason_code": "UNVISITED_OPEN_FRONTIER",
+      "map_evidence": ["位于已知自由区与未知区交界附近"],
+      "visual_evidence": [{"view_id": "VIEW_090", "observation": "方向较开放"}],
+      "risk_flags": ["区域尚未经过栅格前沿验证"]
+    }
+  ],
+  "fallback_recommendation": "USE_CANDIDATE_RANKING"
+}

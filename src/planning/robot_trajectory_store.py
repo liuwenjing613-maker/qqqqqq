@@ -10,7 +10,14 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover
+    np = None  # type: ignore[assignment]
+
+from src.planning.trajectory_tf_validation import validate_trajectory_tf_config
 
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -102,9 +109,11 @@ def validate_trajectory_config(cfg: Dict[str, Any]) -> List[str]:
     if sample_period <= 0:
         errors.append("trajectory.sample_period_s must be > 0")
 
-    max_tf_age = float(tcfg.get("max_tf_age_s", 0.30))
-    if max_tf_age < 0:
-        errors.append("trajectory.max_tf_age_s must be >= 0")
+    max_tf_age = float(tcfg.get("max_tf_age_s", 1.50))
+    if max_tf_age <= 0:
+        errors.append("trajectory.max_tf_age_s must be > 0")
+
+    errors.extend(validate_trajectory_tf_config(cfg))
 
     min_dist = float(tcfg.get("min_vertex_distance_m", 0.05))
     if min_dist < 0:
@@ -476,6 +485,35 @@ def _empty_session(map_frame: str = "map") -> TrajectorySession:
     )
 
 
+def vertices_from_xy(polyline: Sequence[Tuple[float, float]]) -> List[TrajectoryVertex]:
+    """Build minimal TrajectoryVertex list for corridor rasterization."""
+    verts: List[TrajectoryVertex] = []
+    prev: Optional[Tuple[float, float]] = None
+    for i, (x, y) in enumerate(polyline):
+        dist = 0.0 if prev is None else math.hypot(x - prev[0], y - prev[1])
+        verts.append(
+            TrajectoryVertex(
+                vertex_id=i + 1,
+                stamp_sec=float(i),
+                x=float(x),
+                y=float(y),
+                yaw_rad=0.0,
+                distance_from_previous_m=dist,
+                yaw_change_from_previous_deg=0.0,
+                elapsed_from_previous_s=0.0,
+                creation_reason="synthetic_polyline",
+            )
+        )
+        prev = (x, y)
+    return verts
+
+
+def _free_mask_allows(free_mask: Optional[Any], row: int, col: int) -> bool:
+    if free_mask is None:
+        return True
+    return bool(free_mask[row, col])
+
+
 def rasterize_visited_corridor(
     *,
     width: int,
@@ -485,8 +523,12 @@ def rasterize_visited_corridor(
     origin_y: float,
     vertices: Sequence[TrajectoryVertex],
     corridor_radius_m: float,
+    free_mask: Optional[Any] = None,
 ) -> List[int]:
-    """Return flat OccupancyGrid data: 0=unvisited, 100=visited corridor."""
+    """Return flat OccupancyGrid data: 0=unvisited, 100=visited corridor.
+
+    When free_mask is provided (H x W bool), visited stamps only apply on True cells.
+    """
     data = [0] * (width * height)
     if not vertices or corridor_radius_m <= 0 or resolution <= 0:
         return data
@@ -522,7 +564,8 @@ def rasterize_visited_corridor(
                         continue
                     r, c = cr + dr, cc + dc
                     if 0 <= r < height and 0 <= c < width:
-                        data[r * width + c] = 100
+                        if _free_mask_allows(free_mask, r, c):
+                            data[r * width + c] = 100
     return data
 
 
@@ -581,24 +624,9 @@ class RobotTrajectoryStore:
         yaw_rad: float,
         tf_stamp_sec: float,
         tf_age_s: float,
-        max_tf_age_s: float,
+        status: str = "OK",
     ) -> Tuple[TrajectoryPoseSample, Optional[TrajectoryVertex], str]:
-        """Validate TF sample and add to session. Returns (sample, vertex, status_code)."""
-        if tf_age_s > max_tf_age_s:
-            sample, _ = add_pose_sample(
-                self.session,
-                self.cfg,
-                stamp_sec=stamp_sec,
-                x=x,
-                y=y,
-                yaw_rad=yaw_rad,
-                tf_stamp_sec=tf_stamp_sec,
-                tf_age_s=tf_age_s,
-                valid=False,
-                rejection_reason="TRAJECTORY_TF_STALE",
-            )
-            return sample, None, "TRAJECTORY_TF_STALE"
-
+        """Append a TF-validated map-frame pose sample."""
         if not math.isfinite(x) or not math.isfinite(y) or not math.isfinite(yaw_rad):
             sample, _ = add_pose_sample(
                 self.session,
@@ -624,18 +652,30 @@ class RobotTrajectoryStore:
             tf_stamp_sec=tf_stamp_sec,
             tf_age_s=tf_age_s,
             valid=True,
-        ) + ("OK",)
+        ) + (status,)
 
-    def ingest_tf_missing(self, stamp_sec: float) -> TrajectoryPoseSample:
+    def ingest_tf_rejected(
+        self,
+        *,
+        stamp_sec: float,
+        rejection_reason: str,
+        x: float = 0.0,
+        y: float = 0.0,
+        yaw_rad: float = 0.0,
+        tf_stamp_sec: float = 0.0,
+        tf_age_s: float = 0.0,
+    ) -> TrajectoryPoseSample:
         sample, _ = add_pose_sample(
             self.session,
             self.cfg,
             stamp_sec=stamp_sec,
-            x=0.0,
-            y=0.0,
-            yaw_rad=0.0,
+            x=x,
+            y=y,
+            yaw_rad=yaw_rad,
+            tf_stamp_sec=tf_stamp_sec,
+            tf_age_s=tf_age_s,
             valid=False,
-            rejection_reason="TRAJECTORY_TF_MISSING",
+            rejection_reason=rejection_reason,
         )
         return sample
 
@@ -654,7 +694,10 @@ class RobotTrajectoryStore:
     def to_dict(self) -> Dict[str, Any]:
         return session_to_dict(self.session)
 
-    def trajectory_json_payload(self) -> Dict[str, Any]:
+    def trajectory_json_payload(
+        self,
+        tf_diagnostics: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         tcfg = _trajectory_cfg(self.cfg)
         latest = self.session.vertices[-1] if self.session.vertices else None
         latest_pose: Dict[str, Any] = {}
@@ -668,17 +711,30 @@ class RobotTrajectoryStore:
             s = self.session.raw_samples[-1]
             latest_pose = {"x": s.x, "y": s.y, "yaw_deg": math.degrees(s.yaw_rad)}
 
-        return {
+        valid_count = sum(1 for s in self.session.raw_samples if s.valid)
+        invalid_count = len(self.session.raw_samples) - valid_count
+        rejection_counts: Dict[str, int] = {}
+        for s in self.session.raw_samples:
+            if not s.valid and s.rejection_reason:
+                rejection_counts[s.rejection_reason] = rejection_counts.get(s.rejection_reason, 0) + 1
+
+        payload = {
             "trajectory_session_id": self.session.trajectory_session_id,
             "trajectory_revision": self.session.revision,
             "map_frame": self.session.map_frame,
             "raw_sample_count": len(self.session.raw_samples),
+            "valid_raw_count": valid_count,
+            "invalid_raw_count": invalid_count,
             "vertex_count": len(self.session.vertices),
             "trajectory_length_m": round(self.session.trajectory_length_m, 4),
             "latest_pose": latest_pose,
+            "rejection_reason_counts": rejection_counts,
             "visited_corridor_radius_m": float(tcfg.get("visited_corridor_radius_m", 0.35)),
             "runtime_validation": "NOT_RUN",
         }
+        if tf_diagnostics:
+            payload.update(tf_diagnostics)
+        return payload
 
     def build_visited_area_data(
         self,
@@ -688,6 +744,7 @@ class RobotTrajectoryStore:
         resolution: float,
         origin_x: float,
         origin_y: float,
+        free_mask: Optional[Any] = None,
     ) -> List[int]:
         tcfg = _trajectory_cfg(self.cfg)
         return rasterize_visited_corridor(
@@ -698,4 +755,5 @@ class RobotTrajectoryStore:
             origin_y=origin_y,
             vertices=self.session.vertices,
             corridor_radius_m=float(tcfg.get("visited_corridor_radius_m", 0.35)),
+            free_mask=free_mask,
         )

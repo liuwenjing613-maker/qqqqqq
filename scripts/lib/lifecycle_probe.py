@@ -3,8 +3,14 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
+
+# Must match running Nav2 stack (UDP-only Fast DDS).
+_DEFAULT_FASTDDS = "/root/rdk_x5_vln_robot/configs/fastdds_no_shm.xml"
+if not os.environ.get("FASTRTPS_DEFAULT_PROFILES"):
+    os.environ["FASTRTPS_DEFAULT_PROFILES"] = _DEFAULT_FASTDDS
 
 import rclpy
 from lifecycle_msgs.srv import GetState
@@ -15,30 +21,40 @@ from rclpy.node import Node
 PRIMARY_STATE_ACTIVE = 3
 
 
+def _ensure_rclpy_init() -> None:
+    if not rclpy.ok():
+        rclpy.init()
+
+
+def _safe_shutdown() -> None:
+    if rclpy.ok():
+        rclpy.shutdown()
+
+
 def _node_name(raw: str) -> str:
-    return raw.strip().lstrip('/')
+    return raw.strip().lstrip("/")
 
 
 def get_lifecycle_state(node: Node, target: str, call_timeout: float = 8.0) -> tuple[int | None, str]:
     target = _node_name(target)
-    client = node.create_client(GetState, f'/{target}/get_state')
+    client = node.create_client(GetState, f"/{target}/get_state")
     if not client.wait_for_service(timeout_sec=3.0):
-        return None, 'no_service'
+        return None, "no_service"
     req = GetState.Request()
     fut = client.call_async(req)
     rclpy.spin_until_future_complete(node, fut, timeout_sec=call_timeout)
     if not fut.done() or fut.result() is None:
-        return None, 'call_failed'
+        return None, "call_failed"
     st = fut.result().current_state
-    return int(st.id), f'{st.label} [{st.id}]'
+    return int(st.id), f"{st.label} [{st.id}]"
 
 
 def wait_lifecycle_active(target: str, timeout_sec: float) -> int:
     target = _node_name(target)
-    rclpy.init()
-    node = Node('lifecycle_wait')
+    _ensure_rclpy_init()
+    node = Node("lifecycle_wait")
     deadline = time.time() + timeout_sec
-    last = 'NO RESPONSE'
+    last = "NO RESPONSE"
     try:
         while time.time() < deadline:
             state_id, label = get_lifecycle_state(node, target)
@@ -53,45 +69,58 @@ def wait_lifecycle_active(target: str, timeout_sec: float) -> int:
         return 1
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        _safe_shutdown()
 
 
 def wait_nav_actions(timeout_sec: float) -> int:
-    rclpy.init()
-    node = Node('nav_action_wait')
-    nav = ActionClient(node, NavigateToPose, '/navigate_to_pose')
-    plan = ActionClient(node, ComputePathToPose, '/compute_path_to_pose')
     deadline = time.time() + timeout_sec
-    try:
-        while time.time() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.2)
-            if nav.server_is_ready() and plan.server_is_ready():
-                print('nav_actions_ready')
-                return 0
-            time.sleep(0.8)
-        print('nav_actions_not_ready')
-        return 1
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    last_err = ""
+
+    while time.time() < deadline:
+        _ensure_rclpy_init()
+        node = None
+        try:
+            node = Node("nav_action_wait")
+            nav = ActionClient(node, NavigateToPose, "/navigate_to_pose")
+            plan = ActionClient(node, ComputePathToPose, "/compute_path_to_pose")
+            action_deadline = time.time() + min(30.0, max(5.0, deadline - time.time()))
+            while time.time() < action_deadline:
+                rclpy.spin_once(node, timeout_sec=0.2)
+                if nav.server_is_ready() and plan.server_is_ready():
+                    print("nav_actions_ready")
+                    return 0
+                time.sleep(0.8)
+        except ValueError as exc:
+            last_err = str(exc)
+            time.sleep(2.0)
+        finally:
+            if node is not None:
+                node.destroy_node()
+            _safe_shutdown()
+
+    if last_err:
+        print(f"nav_actions_not_ready: {last_err}")
+    else:
+        print("nav_actions_not_ready")
+    return 1
 
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print('usage: lifecycle_probe.py wait <node> [timeout_sec]', file=sys.stderr)
-        print('       lifecycle_probe.py nav-actions [timeout_sec]', file=sys.stderr)
+        print("usage: lifecycle_probe.py wait <node> [timeout_sec]", file=sys.stderr)
+        print("       lifecycle_probe.py nav-actions [timeout_sec]", file=sys.stderr)
         return 2
     cmd = sys.argv[1]
-    if cmd == 'wait':
+    if cmd == "wait":
         node = sys.argv[2]
         timeout = float(sys.argv[3]) if len(sys.argv) > 3 else 120.0
         return wait_lifecycle_active(node, timeout)
-    if cmd == 'nav-actions':
+    if cmd == "nav-actions":
         timeout = float(sys.argv[2]) if len(sys.argv) > 2 else 180.0
         return wait_nav_actions(timeout)
-    print(f'unknown command: {cmd}', file=sys.stderr)
+    print(f"unknown command: {cmd}", file=sys.stderr)
     return 2
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

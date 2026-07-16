@@ -1314,6 +1314,224 @@ def render_annotated_map(
     return img
 
 
+def render_global_exploration_map(
+    data: np.ndarray,
+    meta: MapMetadata,
+    robot: Optional[RobotPose2D],
+    result: FrontierAnalysisResult,
+    cycle_id: int,
+    cfg: Optional[Dict[str, Any]] = None,
+    trajectory_overlay: Optional[Dict[str, Any]] = None,
+    *,
+    panel_size_px: int = 900,
+    content_padding_px: int = 40,
+    grid_divisions: int = 10,
+) -> Tuple[Optional[np.ndarray], Dict[str, Any]]:
+    """Render map panel for GLOBAL_REGION_PROPOSAL (no A/B/C candidate labels)."""
+    if not _CV2_AVAILABLE or cv2 is None:
+        metadata = build_map_render_metadata(
+            meta,
+            snapshot_id="",
+            panel_size_px=panel_size_px,
+            content_padding_px=content_padding_px,
+        )
+        return None, metadata
+
+    base = render_annotated_map(
+        data,
+        meta,
+        robot,
+        result,
+        cycle_id,
+        cfg,
+        trajectory_overlay,
+    )
+    if base is None:
+        metadata = build_map_render_metadata(
+            meta,
+            snapshot_id="",
+            panel_size_px=panel_size_px,
+            content_padding_px=content_padding_px,
+        )
+        return None, metadata
+
+    h, w = base.shape[:2]
+    # Strip candidate labels by re-rendering without region label loop
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    unknown_value, free_max, occupied_min = _map_values_cfg(cfg or {})
+    cats, _ = classify_map_cells(data, unknown_value, free_max, occupied_min)
+    img[cats == 0] = (240, 240, 240)
+    img[cats == 1] = (40, 40, 40)
+    img[cats == 2] = (180, 180, 180)
+    img[cats == 3] = (0, 0, 180)
+    if result.filtered_frontier_mask is not None:
+        img[result.filtered_frontier_mask] = (0, 255, 255)
+
+    overlay = trajectory_overlay or {}
+    visited_data = overlay.get("visited_area_data")
+    if visited_data is not None and len(visited_data) == h * w:
+        for idx, val in enumerate(visited_data):
+            if val >= 100:
+                r = idx // w
+                c = idx % w
+                img[r, c] = (200, 180, 120)
+
+    vertices = overlay.get("vertices") or []
+    if len(vertices) >= 2:
+        pts = []
+        for v in vertices:
+            if isinstance(v, dict):
+                vx = float(v.get("x", 0.0))
+                vy = float(v.get("y", 0.0))
+            else:
+                vx = float(v[0])
+                vy = float(v[1])
+            vr, vc = world_to_grid(float(vx), float(vy), meta)
+            iy = grid_row_to_image_y(vr, h)
+            pts.append((int(vc), int(iy)))
+        for i in range(len(pts) - 1):
+            cv2.line(img, pts[i], pts[i + 1], (0, 140, 255), 2, cv2.LINE_AA)
+
+    for pose in overlay.get("observation_poses") or []:
+        ox = float(pose.get("x", 0.0))
+        oy = float(pose.get("y", 0.0))
+        orow, ocol = world_to_grid(ox, oy, meta)
+        oiy = grid_row_to_image_y(orow, h)
+        cv2.circle(img, (ocol, oiy), 4, (255, 0, 255), -1)
+
+    if robot is not None:
+        rr, rc = world_to_grid(robot.x, robot.y, meta)
+        iy = grid_row_to_image_y(rr, h)
+        cv2.circle(img, (rc, iy), 5, (255, 0, 0), -1)
+        arrow_len = 8
+        ex = int(rc + arrow_len * math.cos(robot.yaw_rad))
+        ey = int(iy - arrow_len * math.sin(robot.yaw_rad))
+        cv2.arrowedLine(img, (rc, iy), (ex, ey), (255, 0, 0), 2, tipLength=0.3)
+
+    pad = int(content_padding_px)
+    panel = np.full((panel_size_px, panel_size_px, 3), 255, dtype=np.uint8)
+    content_max = panel_size_px - pad
+    scale = min((content_max - pad) / max(w, 1), (content_max - pad) / max(h, 1))
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    resized = cv2.resize(img, (new_w, new_h))
+    x_off = (panel_size_px - new_w) // 2
+    y_off = (panel_size_px - new_h) // 2
+    panel[y_off : y_off + new_h, x_off : x_off + new_w] = resized
+
+    x_min = x_off
+    y_min = y_off
+    x_max = x_off + new_w
+    y_max = y_off + new_h
+    content_w = max(1, x_max - x_min)
+    content_h = max(1, y_max - y_min)
+
+    for i in range(1, grid_divisions):
+        frac = i / grid_divisions
+        gx = int(x_min + frac * content_w)
+        gy = int(y_min + frac * content_h)
+        cv2.line(panel, (gx, y_min), (gx, y_max), (200, 200, 200), 1, cv2.LINE_AA)
+        cv2.line(panel, (x_min, gy), (x_max, gy), (200, 200, 200), 1, cv2.LINE_AA)
+        cv2.putText(
+            panel,
+            f"{frac:.1f}",
+            (gx - 12, y_min - 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.28,
+            (120, 120, 120),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            panel,
+            f"{frac:.1f}",
+            (x_min - 28, gy + 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.28,
+            (120, 120, 120),
+            1,
+            cv2.LINE_AA,
+        )
+
+    legend_lines = [
+        "FRONTIER BOUNDARY",
+        "TRAVELED PATH",
+        "VISITED CORRIDOR",
+        "OBSERVATION POSE",
+        "ROBOT",
+        "FREE / OCCUPIED / UNKNOWN",
+    ]
+    for i, line in enumerate(legend_lines):
+        cv2.putText(
+            panel,
+            line,
+            (5, 15 + i * 14),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.32,
+            (30, 30, 30),
+            1,
+            cv2.LINE_AA,
+        )
+
+    metadata = build_map_render_metadata(
+        meta,
+        snapshot_id="",
+        panel_size_px=panel_size_px,
+        content_padding_px=content_padding_px,
+        content_x_min_px=x_min,
+        content_y_min_px=y_min,
+        content_x_max_px=x_max,
+        content_y_max_px=y_max,
+    )
+    return panel, metadata
+
+
+def build_map_render_metadata(
+    meta: MapMetadata,
+    *,
+    snapshot_id: str,
+    panel_size_px: int = 900,
+    content_padding_px: int = 40,
+    content_x_min_px: Optional[int] = None,
+    content_y_min_px: Optional[int] = None,
+    content_x_max_px: Optional[int] = None,
+    content_y_max_px: Optional[int] = None,
+) -> Dict[str, Any]:
+    pad = int(content_padding_px)
+    size = int(panel_size_px)
+    x_min = pad if content_x_min_px is None else int(content_x_min_px)
+    y_min = pad if content_y_min_px is None else int(content_y_min_px)
+    x_max = size - pad if content_x_max_px is None else int(content_x_max_px)
+    y_max = size - pad if content_y_max_px is None else int(content_y_max_px)
+    return {
+        "snapshot_id": snapshot_id,
+        "map_panel": {
+            "image_width_px": size,
+            "image_height_px": size,
+            "content_x_min_px": x_min,
+            "content_y_min_px": y_min,
+            "content_x_max_px": x_max,
+            "content_y_max_px": y_max,
+        },
+        "coordinate_space": "NORMALIZED_MAP_VIEWPORT",
+        "u_direction": "LEFT_TO_RIGHT",
+        "v_direction": "TOP_TO_BOTTOM",
+        "map_grid": {
+            "width": meta.width,
+            "height": meta.height,
+            "resolution": meta.resolution,
+            "origin_x": meta.origin_x,
+            "origin_y": meta.origin_y,
+            "origin_yaw": 0.0,
+        },
+        "render_transform": {
+            "grid_x_flipped": False,
+            "grid_y_flipped": True,
+            "rotation_deg": 0.0,
+        },
+    }
+
+
 def deep_copy_grid_data(data: np.ndarray) -> np.ndarray:
     return copy.deepcopy(data)
 
@@ -1432,12 +1650,14 @@ def build_region_snapshot_payload(
     trajectory_meta: Optional[Dict[str, Any]] = None,
     map_data: Optional[Sequence[int]] = None,
     contract_cfg: Optional[Dict[str, Any]] = None,
+    map_render_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     from src.planning.exploration_contracts import (  # noqa: WPS433
         EXPLORATION_CONTRACT_VERSION,
         REGION_SNAPSHOT_SCHEMA_VERSION,
         TRAJECTORY_SCHEMA_VERSION,
         build_map_fingerprint,
+        build_map_render_metadata_fingerprint,
     )
     eligible = [
         r for r in result.regions
@@ -1557,6 +1777,14 @@ def build_region_snapshot_payload(
         },
         "guard_summary": obs.get("guard_summary", {}),
     }
+    if map_render_metadata:
+        mrm = dict(map_render_metadata)
+        mrm["snapshot_id"] = snapshot_id
+        payload["map_render_metadata"] = mrm
+        payload["map_render_metadata_fingerprint"] = build_map_render_metadata_fingerprint(
+            mrm, cfg=contract_cfg
+        )
+    payload["trajectory_meta"] = dict(traj)
     payload["trajectory_schema_version"] = str(
         traj.get("trajectory_schema_version", TRAJECTORY_SCHEMA_VERSION)
     )

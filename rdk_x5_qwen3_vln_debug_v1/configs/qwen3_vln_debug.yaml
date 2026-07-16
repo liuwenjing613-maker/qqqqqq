@@ -28,9 +28,8 @@ camera:
   image_topic: /image_raw
   input_transport: raw
   expected_encoding: bgr8
-  # Match the first successful pixel-alignment setup: scale by width only.
-  # Keep the exact resized JPEG as both API input and draw canvas so
-  # norm1000 -> pixel mapping stays one-to-one.
+  # Fit inside this box, then Qwen smart_resize (factor=32) within min/max_pixels
+  # so the drawn canvas matches the model token grid.
   api_max_width: 960
   api_max_height: 540
   subscriber_reliability: reliable

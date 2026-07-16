@@ -78,6 +78,14 @@ class ExplorationDecisionBundle:
     region_snapshot_eligible: bool
     region_blacklisted: bool
     region_geo_score: float
+    configured_selection_strategy: str = "CANDIDATE_RANKING"
+    effective_selection_strategy: str = "CANDIDATE_RANKING"
+    region_source: str = "ALGORITHM_CANDIDATE"
+    qwen_global_proposal_id: Optional[str] = None
+    qwen_global_proposal_rank: Optional[int] = None
+    proposal_validation_passed: bool = False
+    proposal_validation_errors: List[str] = field(default_factory=list)
+    map_render_metadata_fingerprint: str = ""
     path_checked: bool = False
     reachable: Optional[bool] = None
     safe_viewpoint_request_ready: bool = False
@@ -369,6 +377,20 @@ def build_exploration_decision_bundle(
         region_snapshot_eligible=bool(geo_entry.get("snapshot_eligible", False)),
         region_blacklisted=bool(geo_entry.get("blacklisted", False)),
         region_geo_score=float(geo_entry.get("geo_score", 0.0)),
+        configured_selection_strategy=str(
+            qwen_decision.get("configured_strategy", "CANDIDATE_RANKING")
+        ),
+        effective_selection_strategy=str(
+            qwen_decision.get("effective_strategy", qwen_decision.get("configured_strategy", "CANDIDATE_RANKING"))
+        ),
+        region_source=str(qwen_decision.get("region_source", "ALGORITHM_CANDIDATE")),
+        qwen_global_proposal_id=qwen_decision.get("qwen_global_proposal_id"),
+        qwen_global_proposal_rank=qwen_decision.get("qwen_global_proposal_rank"),
+        proposal_validation_passed=bool(qwen_decision.get("proposal_validation_passed", False)),
+        proposal_validation_errors=list(qwen_decision.get("proposal_validation_errors", [])),
+        map_render_metadata_fingerprint=str(
+            region_snapshot.get("map_render_metadata_fingerprint", "")
+        ),
         path_checked=False,
         reachable=None,
         safe_viewpoint_request_ready=False,

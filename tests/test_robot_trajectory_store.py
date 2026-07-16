@@ -34,7 +34,12 @@ CFG = {
     "trajectory": {
         "enabled": True,
         "sample_period_s": 1.0,
-        "max_tf_age_s": 0.30,
+        "tf_lookup_timeout_s": 0.30,
+        "tf_warmup_s": 2.0,
+        "tf_warn_age_s": 0.50,
+        "max_tf_age_s": 1.50,
+        "max_clock_future_skew_s": 0.10,
+        "require_consecutive_valid_tf": 2,
         "min_vertex_distance_m": 0.05,
         "min_vertex_yaw_change_deg": 10.0,
         "max_vertex_interval_s": 5.0,
@@ -267,7 +272,6 @@ class TestPersistence(unittest.TestCase):
                 yaw_rad=0.0,
                 tf_stamp_sec=1.0,
                 tf_age_s=0.0,
-                max_tf_age_s=0.3,
             )
             self.assertGreater(len(store.session.vertices), 0)
             store.reset()

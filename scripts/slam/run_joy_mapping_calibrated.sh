@@ -11,6 +11,8 @@ cd ~/rdk_x5_vln_robot
 source "${PWD}/scripts/lib/cleanup_lidar_slam_nav.sh"
 # shellcheck source=scripts/lib/slam_calibrated_env.sh
 source "${PWD}/scripts/lib/slam_calibrated_env.sh"
+# shellcheck source=scripts/lib/ros_dds_env.sh
+source "${PWD}/scripts/lib/ros_dds_env.sh"
 export SLAM_USE_CALIBRATION=1
 
 LOG_DIR="$PWD/logs/joy_mapping_calibrated"
@@ -44,6 +46,7 @@ source_ros() {
     source "$HOME/ydlidar_ws/install/setup.bash"
   fi
 
+  prepare_ros_dds_env
   set -u
   ROS_ENV_READY=1
 }

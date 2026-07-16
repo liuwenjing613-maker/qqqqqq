@@ -28,9 +28,9 @@ class ServoConfig:
     angular_sign: float = -1.0
     center_deadband: float = 0.06
     turn_only_threshold: float = 0.40
-    # Chassis ignores |wz| below this; such commands are zeroed (not floored).
-    # Keep kp_wz high enough that cyan-band |kp*error| clears this at the
-    # deadband edge: kp_wz >= cmd_wz_deadband / center_deadband.
+    # Used to drop near-zero rotate-only commands (e.g. after freshness decay).
+    # Not applied in the cyan steer+drive band: green center_deadband already
+    # zeros heading, and cyan must keep small kp*error (e.g. 0.01*0.36=0.0036).
     cmd_wz_deadband: float = 0.006
     min_confidence: float = 0.0
     point_results_before_forward: int = 1
@@ -178,12 +178,11 @@ class QwenVisualServo:
             if abs(wz) < cfg.cmd_wz_deadband:
                 wz = 0.0
         else:
-            # Cyan steer+drive: proportional fine turn. Do NOT floor tiny |wz|
-            # up to cmd_wz_deadband — that becomes bang-bang and overshoots.
+            # Cyan fine turn: keep kp*error as-is. Do not apply cmd_wz_deadband
+            # here — with kp=0.01 that zeroed most of the cyan band and forced
+            # either "no turn" or a raised kp / bang-bang floor that overshoots.
             wz = cfg.angular_sign * cfg.kp_wz * error * freshness
             wz = clamp(wz, -cfg.max_wz, cfg.max_wz)
-            if abs(wz) < cfg.cmd_wz_deadband:
-                wz = 0.0
 
         heading_scale = self._heading_scale(abs_error)
         obstacle_scale = self._obstacle_scale(usable_front)

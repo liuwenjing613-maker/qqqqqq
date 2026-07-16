@@ -40,6 +40,7 @@ from src.planning.frontier_region_debug_core import (  # noqa: E402
     analyze_frontier_regions,
     build_region_geometry_payload,
     build_region_snapshot_payload,
+    classify_map_cells,
     generate_snapshot_id,
     grid_row_to_image_y,
     grid_to_world,
@@ -48,6 +49,7 @@ from src.planning.frontier_region_debug_core import (  # noqa: E402
     result_to_dict,
     validate_config,
     world_to_grid,
+    _map_values_cfg,
 )
 from src.planning.region_candidate_guard import (  # noqa: E402
     ObservationWindow,
@@ -60,6 +62,7 @@ from src.planning.region_history_store import (  # noqa: E402
     RegionHistoryStore,
 )
 from src.planning.robot_trajectory_store import RobotTrajectoryStore  # noqa: E402
+from src.planning.trajectory_tf_validation import TrajectoryTfTracker  # noqa: E402
 
 try:
     import cv2  # type: ignore
@@ -131,13 +134,19 @@ class FrontierRegionDebugNode(Node):
         traj_runtime = ROOT / str(traj_cfg.get("runtime_file", "runtime/qwen_region_debug/trajectory_session.json"))
         self._trajectory = RobotTrajectoryStore(cfg, traj_runtime, map_frame=str(cfg.get("frames", {}).get("map", "map")))
         self._trajectory_status = "INIT"
+        self._tf_tracker = TrajectoryTfTracker(cfg)
+        self._node_start_ns = self.get_clock().now().nanoseconds
         self._last_visited_grid_sig: Optional[Tuple[int, int, int, float, float]] = None
 
         topics = cfg["topics"]
         frames = cfg["frames"]
         self.map_frame = str(frames.get("map", "map"))
         self.robot_frame = str(frames.get("robot", "base_link"))
+        self.odom_frame = str(frames.get("odom", "odom"))
         self.tf_timeout_s = float(frames.get("tf_timeout_s", 0.5))
+        self._trajectory_tf_lookup_timeout_s = float(
+            traj_cfg.get("tf_lookup_timeout_s", 0.30)
+        )
 
         map_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -236,26 +245,33 @@ class FrontierRegionDebugNode(Node):
         self._latest_meta = meta
 
     def _lookup_robot_pose(self) -> Tuple[Optional[RobotPose2D], Optional[str], List[Dict[str, Any]]]:
-        robot, code, errors, _, _ = self._lookup_robot_tf_detail()
+        robot, code, errors, _, _, _, _, _ = self._lookup_robot_tf_detail()
         return robot, code, errors
 
     def _lookup_robot_tf_detail(
         self,
-    ) -> Tuple[Optional[RobotPose2D], Optional[str], List[Dict[str, Any]], float, float]:
+        *,
+        lookup_timeout_s: Optional[float] = None,
+    ) -> Tuple[Optional[RobotPose2D], Optional[str], List[Dict[str, Any]], float, float, str, int, int]:
         errors: List[Dict[str, Any]] = []
+        timeout_s = (
+            float(lookup_timeout_s)
+            if lookup_timeout_s is not None
+            else self.tf_timeout_s
+        )
         try:
             tf = self.tf_buffer.lookup_transform(
                 self.map_frame,
                 self.robot_frame,
                 rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=self.tf_timeout_s),
+                timeout=rclpy.duration.Duration(seconds=timeout_s),
             )
             t = tf.transform.translation
             q = tf.transform.rotation
             yaw = _quat_to_yaw(q)
-            now_ns = self.get_clock().now().nanoseconds
-            tf_ns = tf.header.stamp.sec * 1_000_000_000 + tf.header.stamp.nanosec
-            tf_age_s = max(0.0, (now_ns - tf_ns) * 1e-9)
+            now_time = self.get_clock().now()
+            tf_time = rclpy.time.Time.from_msg(tf.header.stamp)
+            tf_age_s = (now_time - tf_time).nanoseconds / 1e9
             tf_stamp_sec = float(tf.header.stamp.sec) + float(tf.header.stamp.nanosec) * 1e-9
             return (
                 RobotPose2D(x=float(t.x), y=float(t.y), yaw_rad=yaw),
@@ -263,6 +279,9 @@ class FrontierRegionDebugNode(Node):
                 errors,
                 tf_stamp_sec,
                 tf_age_s,
+                "",
+                int(tf.header.stamp.sec),
+                int(tf.header.stamp.nanosec),
             )
         except TransformException as exc:
             msg = str(exc)
@@ -273,10 +292,27 @@ class FrontierRegionDebugNode(Node):
             else:
                 code = "TF_MAP_BASE_MISSING"
             errors.append({"code": code, "detail": msg})
-            return None, code, errors, 0.0, 0.0
+            return None, code, errors, 0.0, 0.0, msg, 0, 0
         except Exception as exc:  # pragma: no cover
-            errors.append({"code": "TF_INVALID_QUATERNION", "detail": str(exc)})
-            return None, "TF_INVALID_QUATERNION", errors, 0.0, 0.0
+            msg = str(exc)
+            errors.append({"code": "TF_INVALID_QUATERNION", "detail": msg})
+            return None, "TF_INVALID_QUATERNION", errors, 0.0, 0.0, msg, 0, 0
+
+    def _lookup_odom_tf_for_diagnostics(self) -> bool:
+        try:
+            self.tf_buffer.lookup_transform(
+                self.odom_frame,
+                self.robot_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=self._trajectory_tf_lookup_timeout_s),
+            )
+            return True
+        except TransformException:
+            return False
+
+    def _node_uptime_s(self) -> float:
+        now_ns = self.get_clock().now().nanoseconds
+        return max(0.0, (now_ns - self._node_start_ns) / 1e9)
 
     def _publish_heartbeat(
         self,
@@ -315,6 +351,7 @@ class FrontierRegionDebugNode(Node):
             "trajectory_status": self._trajectory_status,
             "timestamp": _utc_now_iso(),
         }
+        payload.update(self._tf_tracker.diagnostics_payload(self._node_uptime_s()))
         msg = String()
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.pub_heartbeat.publish(msg)
@@ -720,6 +757,15 @@ class FrontierRegionDebugNode(Node):
             ),
         }
 
+    def _build_trajectory_free_mask(self) -> Optional[Any]:
+        """OccupancyGrid free cells only — visited corridor must not stamp walls/unknown."""
+        if self._latest_grid is None:
+            return None
+        data, _ = occupancy_grid_to_array(self._latest_grid)
+        unknown_value, free_max, occupied_min = _map_values_cfg(self.cfg)
+        cats, _ = classify_map_cells(data, unknown_value, free_max, occupied_min)
+        return cats == 0
+
     def _trajectory_overlay_dict(self, meta: MapMetadata) -> Dict[str, Any]:
         tcfg = self.cfg.get("trajectory", {})
         overlay: Dict[str, Any] = {
@@ -737,6 +783,7 @@ class FrontierRegionDebugNode(Node):
                 resolution=meta.resolution,
                 origin_x=meta.origin_x,
                 origin_y=meta.origin_y,
+                free_mask=self._build_trajectory_free_mask(),
             )
         return overlay
 
@@ -744,32 +791,73 @@ class FrontierRegionDebugNode(Node):
         if not bool(self.cfg.get("trajectory", {}).get("enabled", True)):
             return
         now_sec = self.get_clock().now().nanoseconds * 1e-9
-        max_tf_age = float(self.cfg.get("trajectory", {}).get("max_tf_age_s", 0.30))
-        robot, tf_code, _, tf_stamp_sec, tf_age_s = self._lookup_robot_tf_detail()
+        uptime_s = self._node_uptime_s()
+        self._tf_tracker.odom_tf_available_for_diagnostics = self._lookup_odom_tf_for_diagnostics()
+
+        robot, tf_code, tf_errors, tf_stamp_sec, tf_age_s, tf_exception, stamp_sec, stamp_nanosec = (
+            self._lookup_robot_tf_detail(lookup_timeout_s=self._trajectory_tf_lookup_timeout_s)
+        )
+
         if robot is None:
-            sample = self._trajectory.ingest_tf_missing(now_sec)
-            self._trajectory_status = tf_code or "TRAJECTORY_TF_MISSING"
-            self._log_jsonl(
-                self._jl_traj,
-                {
-                    "stamp_sec": now_sec,
-                    "status": self._trajectory_status,
-                    "valid": sample.valid,
-                    "rejection_reason": sample.rejection_reason,
-                },
-            )
-        else:
-            sample, vertex, status = self._trajectory.ingest_tf_pose(
+            if tf_exception:
+                evaluation = self._tf_tracker.evaluate_lookup_failure(
+                    node_uptime_s=uptime_s,
+                    exception_text=tf_exception,
+                )
+            else:
+                evaluation = self._tf_tracker.evaluate_missing(node_uptime_s=uptime_s)
+            sample = self._trajectory.ingest_tf_rejected(
                 stamp_sec=now_sec,
+                rejection_reason=evaluation.rejection_reason,
+                tf_stamp_sec=evaluation.tf_stamp_sec,
+                tf_age_s=evaluation.tf_age_s,
+            )
+            self._trajectory_status = evaluation.status
+            record: Dict[str, Any] = {
+                "stamp_sec": now_sec,
+                "status": evaluation.status,
+                "valid": sample.valid,
+                "rejection_reason": sample.rejection_reason,
+                "tf_exception": evaluation.exception_text,
+                "odom_tf_available_for_diagnostics": self._tf_tracker.odom_tf_available_for_diagnostics,
+            }
+            if tf_errors:
+                record["tf_errors"] = tf_errors
+            self._log_jsonl(self._jl_traj, record)
+        else:
+            evaluation = self._tf_tracker.evaluate_transform(
+                now_ns=self.get_clock().now().nanoseconds,
+                node_uptime_s=uptime_s,
+                stamp_sec=stamp_sec,
+                stamp_nanosec=stamp_nanosec,
                 x=robot.x,
                 y=robot.y,
                 yaw_rad=robot.yaw_rad,
-                tf_stamp_sec=tf_stamp_sec,
-                tf_age_s=tf_age_s,
-                max_tf_age_s=max_tf_age,
             )
+            if evaluation.valid:
+                sample, vertex, status = self._trajectory.ingest_tf_pose(
+                    stamp_sec=now_sec,
+                    x=robot.x,
+                    y=robot.y,
+                    yaw_rad=robot.yaw_rad,
+                    tf_stamp_sec=evaluation.tf_stamp_sec,
+                    tf_age_s=evaluation.tf_age_s,
+                    status=evaluation.status,
+                )
+            else:
+                sample = self._trajectory.ingest_tf_rejected(
+                    stamp_sec=now_sec,
+                    rejection_reason=evaluation.rejection_reason,
+                    x=robot.x,
+                    y=robot.y,
+                    yaw_rad=robot.yaw_rad,
+                    tf_stamp_sec=evaluation.tf_stamp_sec,
+                    tf_age_s=evaluation.tf_age_s,
+                )
+                vertex = None
+                status = evaluation.status
             self._trajectory_status = status
-            record: Dict[str, Any] = {
+            record = {
                 "stamp_sec": now_sec,
                 "status": status,
                 "valid": sample.valid,
@@ -777,6 +865,9 @@ class FrontierRegionDebugNode(Node):
                 "y": sample.y,
                 "yaw_deg": math.degrees(sample.yaw_rad),
                 "rejection_reason": sample.rejection_reason,
+                "tf_age_s": round(evaluation.tf_age_s, 6),
+                "tf_stamp_sec": round(evaluation.tf_stamp_sec, 6),
+                "odom_tf_available_for_diagnostics": self._tf_tracker.odom_tf_available_for_diagnostics,
             }
             if vertex is not None:
                 record["vertex_id"] = vertex.vertex_id
@@ -877,12 +968,15 @@ class FrontierRegionDebugNode(Node):
                 resolution=meta.resolution,
                 origin_x=meta.origin_x,
                 origin_y=meta.origin_y,
+                free_mask=self._build_trajectory_free_mask(),
             )
             self._last_visited_grid_sig = sig
             self.pub_visited_area_grid.publish(grid)
 
         if bool(tcfg.get("publish_trajectory_json", True)):
-            payload = self._trajectory.trajectory_json_payload()
+            payload = self._trajectory.trajectory_json_payload(
+                self._tf_tracker.diagnostics_payload(self._node_uptime_s())
+            )
             msg = String()
             msg.data = json.dumps(payload, ensure_ascii=False)
             self.pub_trajectory_json.publish(msg)
@@ -895,6 +989,8 @@ class FrontierRegionDebugNode(Node):
         self._trajectory.reset()
         self._trajectory.save_atomic()
         self._trajectory_status = "RESET"
+        self._tf_tracker = TrajectoryTfTracker(self.cfg)
+        self._node_start_ns = self.get_clock().now().nanoseconds
         self._last_visited_grid_sig = None
         self._publish_trajectory_diagnostics()
         response.success = True

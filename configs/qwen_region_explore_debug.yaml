@@ -24,6 +24,7 @@ topics:
 frames:
   map: map
   robot: base_link
+  odom: odom
   tf_timeout_s: 0.5
   warn_tf_age_s: 1.0
 
@@ -154,7 +155,12 @@ geometric_scoring:
 trajectory:
   enabled: true
   sample_period_s: 1.0
-  max_tf_age_s: 0.30
+  tf_lookup_timeout_s: 0.30
+  tf_warmup_s: 2.0
+  tf_warn_age_s: 0.50
+  max_tf_age_s: 1.50
+  max_clock_future_skew_s: 0.10
+  require_consecutive_valid_tf: 2
   min_vertex_distance_m: 0.05
   min_vertex_yaw_change_deg: 10.0
   max_vertex_interval_s: 5.0
@@ -164,7 +170,7 @@ trajectory:
   max_vertices: 10000
   atomic_save_interval_s: 5.0
   persist_across_node_restart: false
-  visited_corridor_radius_m: 0.35
+  visited_corridor_radius_m: 0.60
   recent_path_window_s: 60.0
   local_region_analysis_radius_m: 0.80
   strong_revisit_distance_m: 0.45

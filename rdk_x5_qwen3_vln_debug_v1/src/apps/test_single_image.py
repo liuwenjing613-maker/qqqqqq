@@ -12,24 +12,11 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from qwen_vln.image_prep import resize_for_api
 from qwen_vln.prompt_manager import PromptManager
 from qwen_vln.qwen_client import ClientConfig, QwenVisionClient
 from qwen_vln.types import PromptMode, VlnState
 from qwen_vln.visualizer import ResultVisualizer, SpawnScanHud
-
-
-def resize_for_api(image, max_width: int, max_height: int = 0):
-    height, width = image.shape[:2]
-    scale = 1.0
-    if max_width > 0 and width > max_width:
-        scale = min(scale, max_width / float(width))
-    if max_height > 0 and height > max_height:
-        scale = min(scale, max_height / float(height))
-    if scale >= 0.999:
-        return image
-    new_w = max(1, int(round(width * scale)))
-    new_h = max(1, int(round(height * scale)))
-    return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
 def main() -> int:
@@ -61,6 +48,8 @@ def main() -> int:
         image,
         int(camera_cfg.get("api_max_width", 960)),
         int(camera_cfg.get("api_max_height", 0)),
+        min_pixels=int(api_cfg.get("min_pixels", 65536)),
+        max_pixels=int(api_cfg.get("max_pixels", 442368)),
     )
     height, width = image.shape[:2]
     client = QwenVisionClient(

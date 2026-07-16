@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Stop mapping + saved-map Nav2 stacks. Prefer this over partial pkill lists.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -6,50 +7,25 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=scripts/lib/ros_dds_env.sh
 source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
 
-pkill -TERM -f run_shared_nav_semantic_explore 2>/dev/null || true
-pkill -TERM -f semantic_mapper_node 2>/dev/null || true
-pkill -TERM -f explore_goal_selector 2>/dev/null || true
-sleep 1
-pkill -KILL -f run_shared_nav_semantic_explore 2>/dev/null || true
-pkill -KILL -f semantic_mapper_node 2>/dev/null || true
-pkill -KILL -f explore_goal_selector 2>/dev/null || true
-pkill -f run_shared_nav.py || true
-pkill -f yolov5s_bpu_web_node.py || true
-pkill -f yolo_world_to_bbox_json.py || true
-pkill -f hobot_yolo_world || true
-pkill -f compressed_to_raw_image.py || true
-pkill -f hobot_usb_cam || true
-pkill -TERM -f "run_slam_calibrated.sh" 2>/dev/null || true
-pkill -TERM -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
-pkill -TERM -f "async_slam_toolbox_node" 2>/dev/null || true
-sleep 1
-pkill -KILL -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
-pkill -KILL -f "run_slam_calibrated.sh" 2>/dev/null || true
-pkill -KILL -f "async_slam_toolbox_node" 2>/dev/null || true
-pkill -f ydlidar_ros2_driver_node || true
-pkill -f m1_pwm_cmd_vel_bridge.py || true
-pkill -f cmd_vel_to_rosmaster.py || true
-pkill -f foxglove_bridge || true
-pkill -TERM -f cmd_vel_priority_mux.py 2>/dev/null || true
-pkill -TERM -f teleop_twist_joy 2>/dev/null || true
-pkill -TERM -f "joy/joy_node" 2>/dev/null || true
-pkill -TERM -f "lib/joy/joy_node" 2>/dev/null || true
-pkill -TERM -f simple_scan_filter.py 2>/dev/null || true
-pkill -TERM -f static_transform_publisher 2>/dev/null || true
-pkill -TERM -f capture_navigation_video.py 2>/dev/null || true
-sleep 1
-pkill -KILL -f cmd_vel_priority_mux.py 2>/dev/null || true
-pkill -KILL -f teleop_twist_joy 2>/dev/null || true
-pkill -KILL -f "joy/joy_node" 2>/dev/null || true
-pkill -KILL -f "lib/joy/joy_node" 2>/dev/null || true
-pkill -KILL -f simple_scan_filter.py 2>/dev/null || true
-pkill -KILL -f static_transform_publisher 2>/dev/null || true
-pkill -KILL -f capture_navigation_video.py 2>/dev/null || true
+set +u
+if [[ -f /opt/tros/humble/setup.bash ]]; then
+  # shellcheck disable=SC1091
+  source /opt/tros/humble/setup.bash
+elif [[ -f /opt/ros/humble/setup.bash ]]; then
+  # shellcheck disable=SC1091
+  source /opt/ros/humble/setup.bash
+fi
+if [[ -f "${HOME}/ydlidar_ws/install/setup.bash" ]]; then
+  # shellcheck disable=SC1091
+  source "${HOME}/ydlidar_ws/install/setup.bash"
+fi
+set -u
+prepare_ros_dds_env
 
-timeout 1 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
-  "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \
-  >/dev/null 2>&1 || true
+cleanup_click_nav_stack_processes "STOP_NAV" echo
+pkill -9 -f "run_joy_mapping_calibrated.sh" 2>/dev/null || true
+pkill -9 -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
+pkill -9 -f "run_slam_calibrated.sh" 2>/dev/null || true
+timeout 5 ros2 daemon stop >/dev/null 2>&1 || true
 
-cleanup_ros2_fastrtps_shm
-
-echo "[stop_nav] stopped."
+echo "[stop_nav] mapping + Nav2 stacks stopped."

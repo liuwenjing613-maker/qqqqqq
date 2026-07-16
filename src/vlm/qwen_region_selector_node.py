@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import sys
@@ -27,6 +28,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.vlm.qwen_region_api import call_qwen_region_selection  # noqa: E402
 from src.vlm.qwen_region_selector_core import (  # noqa: E402
     QwenRequestManifest,
+    STRATEGY_CANDIDATE_RANKING,
+    STRATEGY_GLOBAL_REGION_PROPOSAL,
+    build_prompt_for_strategy,
     build_region_selection_prompt,
     decision_from_validation,
     decision_to_dict,
@@ -35,9 +39,12 @@ from src.vlm.qwen_region_selector_core import (  # noqa: E402
     labels_from_input,
     load_region_snapshot,
     revalidate_decision,
+    select_exploration_region,
+    unified_decision_dict,
     validate_qwen_decision,
     validate_region_snapshot,
 )
+from src.vlm.qwen_global_region_selector_core import validate_region_selection_config  # noqa: E402
 
 
 def _utc_now_iso() -> str:
@@ -82,6 +89,9 @@ class QwenRegionSelectorNode(Node):
         self.get_logger().info(
             f"[SELECTOR] dry_run=true motion_enabled=false nav2_enabled=false run_dir={run_dir}"
         )
+        cfg_errors = validate_region_selection_config(cfg)
+        if cfg_errors:
+            self.get_logger().error(f"[SELECTOR] config errors: {cfg_errors}")
 
     def _snapshot_cb(self, msg: String) -> None:
         try:
@@ -139,7 +149,7 @@ class QwenRegionSelectorNode(Node):
         tmp_snap.write_text(json.dumps(snap, ensure_ascii=False, indent=2), encoding="utf-8")
 
         try:
-            inp, _ = load_region_snapshot(tmp_snap, self._latest_instruction)
+            inp, raw_snap = load_region_snapshot(tmp_snap, self._latest_instruction)
         except ValueError as exc:
             resp.success = False
             resp.message = str(exc)
@@ -151,8 +161,15 @@ class QwenRegionSelectorNode(Node):
             resp.message = snap_errors[0]
             return resp
 
-        map_path = Path(annotated or inp.annotated_map_file)
-        if not map_path.is_file():
+        strategy = str(
+            self.cfg.get("region_selection", {}).get("strategy", STRATEGY_CANDIDATE_RANKING)
+        )
+        map_render_metadata = raw_snap.get("map_render_metadata") or {}
+        decision_board = str(raw_snap.get("decision_board_file") or inp.decision_board_file or "")
+        image_path = Path(decision_board if strategy == STRATEGY_GLOBAL_REGION_PROPOSAL and decision_board else (annotated or inp.annotated_map_file))
+        if not image_path.is_file():
+            image_path = Path(annotated or inp.annotated_map_file)
+        if not image_path.is_file():
             resp.success = False
             resp.message = "SELECTOR_SNAPSHOT_FILE_MISSING"
             return resp
@@ -160,14 +177,26 @@ class QwenRegionSelectorNode(Node):
         call_id = f"ros_{datetime.now().strftime('%H%M%S')}"
         call_dir = self.run_dir / "calls" / call_id
         call_dir.mkdir(parents=True, exist_ok=True)
-        prompt = build_region_selection_prompt(inp)
-        (call_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+        prompt = build_prompt_for_strategy(
+            strategy,
+            inp,
+            self.cfg,
+            raw_snap,
+            map_render_metadata=map_render_metadata,
+            visual_context_id=inp.visual_context_id,
+        )
+        prompt_name = (
+            "global_region_prompt.txt"
+            if strategy == STRATEGY_GLOBAL_REGION_PROPOSAL
+            else "prompt.txt"
+        )
+        (call_dir / prompt_name).write_text(prompt, encoding="utf-8")
         (call_dir / "target_instruction.txt").write_text(self._latest_instruction, encoding="utf-8")
-        shutil.copy2(map_path, call_dir / "annotated_map.png")
+        shutil.copy2(image_path, call_dir / image_path.name)
 
         t0 = time.perf_counter()
         self._snapshot_at_request = json.loads(json.dumps(snap))
-        api_result = call_qwen_region_selection(prompt, map_path, self.cfg)
+        api_result = call_qwen_region_selection(prompt, image_path, self.cfg)
         if api_result.error_code:
             err = {
                 "error_code": api_result.error_code,
@@ -179,49 +208,129 @@ class QwenRegionSelectorNode(Node):
             return resp
 
         (call_dir / "raw_response.txt").write_text(api_result.raw_response, encoding="utf-8")
-        validation = validate_qwen_decision(
-            api_result.raw_response,
-            inp.snapshot_id,
-            labels_from_input(inp),
-        )
-        decision = decision_from_validation(validation, inp.snapshot_id)
-        fusion = {}
-        if validation.decision_valid and validation.parsed:
-            fusion = fuse_geometric_and_qwen_ranking(inp.regions, validation.parsed, self.cfg)
-            rev_errors = revalidate_decision(
-                self._snapshot_at_request or snap,
-                self._latest_snapshot or snap,
-                fusion.get("algorithm_final_region"),
-                {r.label: {"stable": r.stable, "snapshot_eligible": r.snapshot_eligible} for r in inp.regions},
-                self.cfg,
+        if strategy == STRATEGY_GLOBAL_REGION_PROPOSAL and raw_snap.get("map_data"):
+            from src.planning.frontier_region_debug_core import MapMetadata, analyze_frontier_regions  # noqa: E402
+            import numpy as np
+
+            meta_d = raw_snap.get("map_metadata", {})
+            meta = MapMetadata(
+                width=int(meta_d.get("width", 0)),
+                height=int(meta_d.get("height", 0)),
+                resolution=float(meta_d.get("resolution", 0.05)),
+                origin_x=float(meta_d.get("origin_x", 0.0)),
+                origin_y=float(meta_d.get("origin_y", 0.0)),
+                frame_id=str(meta_d.get("frame_id", "map")),
+                stamp_sec=float(meta_d.get("stamp_sec", 0.0)),
             )
-            if rev_errors:
-                validation.decision_valid = False
-                validation.errors.extend(rev_errors)
-                fusion["algorithm_final_region"] = None
-        decision_dict = decision_to_dict(
-            decision,
-            decision_valid=validation.decision_valid,
-            validation_errors=validation.errors,
-            unsupported_visual_claims=validation.unsupported_visual_claims,
-        )
-        decision_dict.update(fusion)
-        if fusion.get("algorithm_final_region"):
-            decision_dict["selected_region"] = fusion["algorithm_final_region"]
-            decision_dict["fallback_regions"] = [
-                x["label"] for x in fusion.get("fusion_scores", [])[1:3]
-            ]
+            data = np.array(raw_snap["map_data"], dtype=np.int16).reshape(meta.height, meta.width)
+            robot = inp.robot_pose
+            from src.planning.frontier_region_debug_core import RobotPose2D  # noqa: E402
+
+            analysis = analyze_frontier_regions(
+                data,
+                meta,
+                RobotPose2D(float(robot.get("x", 0)), float(robot.get("y", 0)), math.radians(float(robot.get("yaw_deg", 0)))),
+                self.cfg,
+                cycle_id=int(raw_snap.get("cycle_id", 0)),
+            )
+            pipeline = select_exploration_region(
+                strategy,
+                inp=inp,
+                raw_snapshot=raw_snap,
+                raw_response=api_result.raw_response,
+                cfg=self.cfg,
+                map_data=raw_snap["map_data"],
+                analysis_result=analysis,
+                map_meta=meta,
+                map_render_metadata=map_render_metadata,
+            )
+            validation = pipeline.get("json_validation") or pipeline.get("validation")
+            decision_dict = unified_decision_dict(
+                pipeline,
+                snapshot_id=inp.snapshot_id,
+                visual_context_id=inp.visual_context_id,
+            )
+            decision_valid = bool(
+                pipeline.get("proposal_validated")
+                or (
+                    validation.decision_valid
+                    if validation is not None and hasattr(validation, "decision_valid")
+                    else False
+                )
+            )
+            if pipeline.get("fallback_used"):
+                (call_dir / "global_region_fallback.json").write_text(
+                    json.dumps(
+                        {
+                            "configured_strategy": pipeline.get("configured_strategy"),
+                            "effective_strategy": pipeline.get("effective_strategy"),
+                            "fallback_reason": pipeline.get("fallback_reason"),
+                            "global_proposal_failures": pipeline.get("global_proposal_failures", []),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+        else:
+            validation = validate_qwen_decision(
+                api_result.raw_response,
+                inp.snapshot_id,
+                labels_from_input(inp),
+            )
+            decision = decision_from_validation(validation, inp.snapshot_id)
+            fusion = {}
+            if validation.decision_valid and validation.parsed:
+                fusion = fuse_geometric_and_qwen_ranking(inp.regions, validation.parsed, self.cfg)
+                rev_errors = revalidate_decision(
+                    self._snapshot_at_request or snap,
+                    self._latest_snapshot or snap,
+                    fusion.get("algorithm_final_region"),
+                    {r.label: {"stable": r.stable, "snapshot_eligible": r.snapshot_eligible} for r in inp.regions},
+                    self.cfg,
+                )
+                if rev_errors:
+                    validation.decision_valid = False
+                    validation.errors.extend(rev_errors)
+                    fusion["algorithm_final_region"] = None
+            decision_dict = decision_to_dict(
+                decision,
+                decision_valid=validation.decision_valid,
+                validation_errors=validation.errors,
+                unsupported_visual_claims=validation.unsupported_visual_claims,
+            )
+            decision_dict.update(fusion)
+            decision_dict["configured_strategy"] = STRATEGY_CANDIDATE_RANKING
+            decision_dict["effective_strategy"] = STRATEGY_CANDIDATE_RANKING
+            if fusion.get("algorithm_final_region"):
+                decision_dict["selected_region"] = fusion["algorithm_final_region"]
+                decision_dict["fallback_regions"] = [
+                    x["label"] for x in fusion.get("fusion_scores", [])[1:3]
+                ]
+            decision_valid = validation.decision_valid
+
+        parsed_response = None
+        validation_errors: list = []
+        unsupported_claims: list = []
+        if hasattr(validation, "parsed"):
+            parsed_response = validation.parsed
+            validation_errors = list(getattr(validation, "errors", []))
+            unsupported_claims = list(getattr(validation, "unsupported_visual_claims", []))
+        elif validation is not None and hasattr(validation, "parsed"):
+            parsed_response = validation.parsed
+            validation_errors = list(getattr(validation, "errors", []))
 
         debug_payload = {
             "call_id": call_id,
             "snapshot_id": snapshot_id,
             "target_instruction": self._latest_instruction,
+            "configured_strategy": decision_dict.get("configured_strategy", strategy),
+            "effective_strategy": decision_dict.get("effective_strategy", strategy),
             "raw_response": api_result.raw_response,
-            "parsed_response": validation.parsed,
+            "parsed_response": parsed_response,
             "validation": {
-                "decision_valid": validation.decision_valid,
-                "errors": validation.errors,
-                "unsupported_visual_claims": validation.unsupported_visual_claims,
+                "decision_valid": decision_valid,
+                "errors": validation_errors,
+                "unsupported_visual_claims": unsupported_claims,
             },
             "timing": {
                 "request_latency_ms": api_result.request_latency_ms,
@@ -248,29 +357,31 @@ class QwenRegionSelectorNode(Node):
 
         self._publish_status(
             {
-                "status": "SUCCESS" if validation.decision_valid else "INVALID",
+                "status": "SUCCESS" if decision_valid else "INVALID",
                 "snapshot_id": snapshot_id,
-                "selected_region": decision.selected_region,
-                "decision_valid": validation.decision_valid,
+                "selected_region": decision_dict.get("algorithm_final_region"),
+                "decision_valid": decision_valid,
+                "configured_strategy": decision_dict.get("configured_strategy", strategy),
+                "effective_strategy": decision_dict.get("effective_strategy", strategy),
                 "timestamp": _utc_now_iso(),
             }
         )
 
         self.get_logger().info(
-            f"[REGION_SELECTION] snapshot_id={snapshot_id} "
-            f"selected={decision.selected_region} valid={validation.decision_valid} "
+            f"[SELECTOR] snapshot={snapshot_id} strategy={strategy} "
+            f"valid={decision_valid} selected={decision_dict.get('algorithm_final_region')} "
             f"motion_executed=false"
         )
 
-        if not validation.decision_valid:
+        if not decision_valid:
             resp.success = False
             resp.message = "SELECTOR_RESPONSE_INVALID"
             return resp
 
         resp.success = True
         resp.message = (
-            f"snapshot_id={snapshot_id} selected={decision.selected_region} "
-            f"fallback={decision.fallback_regions}"
+            f"snapshot_id={snapshot_id} selected={decision_dict.get('algorithm_final_region')} "
+            f"strategy={decision_dict.get('effective_strategy', strategy)}"
         )
         return resp
 

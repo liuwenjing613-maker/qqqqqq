@@ -12,6 +12,7 @@
         "near": 0.5,
         "far": 5000
       },
+      "fixedFrame": "map",
       "followMode": "follow-none",
       "followTf": "base_link",
       "scene": {
@@ -38,6 +39,20 @@
         },
         "/scan": {
           "visible": false
+        },
+        "/qwen_explore_debug/trajectory_path": {
+          "visible": true,
+          "lineWidth": 0.08,
+          "color": "#0088ff"
+        },
+        "/qwen_explore_debug/trajectory_markers": {
+          "visible": true
+        },
+        "/qwen_session/robot_pose_markers": {
+          "visible": true
+        },
+        "/qwen_session/qwen_goal_markers": {
+          "visible": true
         },
         "/slam_toolbox/scan_visualization": {
           "visible": false

@@ -106,11 +106,15 @@ class QwenVisionClient:
         data_url = "data:image/jpeg;base64," + base64.b64encode(
             encoded.tobytes()
         ).decode("ascii")
-        # Keep the image payload minimal. Server-side smart resize can make
-        # returned relative points disagree with the exact frame we visualize.
+        # Freeze server-side smart_resize to this exact canvas: callers must
+        # already smart_resize via image_prep.resize_for_api so draw == model.
+        # min/max_pixels are siblings of image_url (DashScope OpenAI-compatible).
+        pixel_count = int(width) * int(height)
         image_item: Dict[str, Any] = {
             "type": "image_url",
             "image_url": {"url": data_url},
+            "min_pixels": pixel_count,
+            "max_pixels": pixel_count,
         }
 
         max_tokens = (
@@ -312,16 +316,18 @@ def _looks_like_unit_interval(x: float, y: float) -> bool:
 
 
 def _norm1000_to_pixel(coord: float, size: int) -> int:
+    """Official Qwen3-VL mapping: pixel = round(coord / 1000 * size)."""
     if size <= 0:
         raise ValueError(f"image size must be positive, got {size}")
-    pixel = int(round(coord / _NORM1000_MAX * (size - 1)))
+    pixel = int(round(coord / _NORM1000_MAX * float(size)))
     return min(max(pixel, 0), size - 1)
 
 
 def pixel_to_norm1000(pixel: int, size: int) -> int:
-    if size <= 1:
+    """Inverse of official Qwen3-VL mapping for previous-point feedback."""
+    if size <= 0:
         return 0
-    value = int(round(float(pixel) / float(size - 1) * _NORM1000_MAX))
+    value = int(round(float(pixel) / float(size) * _NORM1000_MAX))
     return min(max(value, 0), int(_NORM1000_MAX))
 
 

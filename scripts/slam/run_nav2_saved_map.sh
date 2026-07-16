@@ -14,6 +14,7 @@ source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
 source "${PROJECT_DIR}/scripts/lib/nav2_stack_reuse.sh"
 source "${PROJECT_DIR}/scripts/lib/nav2_localization_bootstrap.sh"
 export_ros_dds_env
+cleanup_ros2_fastrtps_shm
 # 与 calibrated 建图一致：底盘口 /dev/rosmaster + odom 校准参数
 if [ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]; then
   # shellcheck source=scripts/lib/slam_calibrated_env.sh
@@ -99,12 +100,56 @@ wait_topic_exists() {
       log "topic OK: $topic"
       return 0
     fi
+    # ros2 daemon 在 SLAM→Nav2 切换后 topic list 常滞后；用 hz 确认真实发布。
+    if topic_is_publishing "$topic"; then
+      log "topic OK (publishing): $topic"
+      return 0
+    fi
     if [ $(( $(date +%s) - start )) -ge "$timeout_sec" ]; then
       log "ERROR: topic not found: $topic"
       return 1
     fi
     sleep 1
   done
+}
+
+wait_topic_publishing() {
+  local topic="$1"
+  local timeout_sec="$2"
+  local start now hits=0
+  start="$(date +%s)"
+  log "wait topic publishing: $topic (timeout=${timeout_sec}s) ..."
+  while true; do
+    if topic_is_publishing "$topic"; then
+      hits=$((hits + 1))
+      if (( hits >= 2 )); then
+        log "topic publishing OK: $topic"
+        return 0
+      fi
+    else
+      hits=0
+    fi
+    now="$(date +%s)"
+    if (( now - start >= timeout_sec )); then
+      log "ERROR: topic not publishing: $topic"
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+ensure_bg_process_alive() {
+  local name="$1"
+  local pid="$2"
+  local logfile="$3"
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+    log "ERROR: $name exited during startup (pid=${pid:-none})"
+    if [[ -f "$logfile" ]]; then
+      tail -20 "$logfile" 2>/dev/null || true
+    fi
+    return 1
+  fi
+  return 0
 }
 
 wait_initialpose_subscriber() {
@@ -166,7 +211,9 @@ if [ "$NAV2_STOP_CONFLICTS" = "1" ]; then
   cleanup_lidar_slam_nav_processes
   cleanup_ros2_fastrtps_shm
   timeout 5 ros2 daemon stop >/dev/null 2>&1 || true
-  sleep 2
+  sleep 1
+  ros2 daemon start >/dev/null 2>&1 || true
+  sleep 1
 else
   log "NAV2_STOP_CONFLICTS=0: skip external pkill; reuse sensors when already running"
 fi
@@ -177,6 +224,9 @@ if [ "$NAV2_REUSE_EXISTING" = "1" ] && topic_is_publishing /scan; then
   log "reuse existing /scan publisher (skip lidar start)"
 elif [ -x "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh" ]; then
   start_bg lidar bash "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
+  LIDAR_PID="${PIDS[-1]}"
+  sleep 6
+  ensure_bg_process_alive "lidar" "$LIDAR_PID" "$LOG_DIR/lidar.log" || exit 1
 else
   log "ERROR: lidar script not found or not executable: $PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
   exit 1
@@ -195,7 +245,9 @@ else
     --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
     --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
     --stats-every 50
-  sleep 2
+  SCAN_FILTER_PID="${PIDS[-1]}"
+  sleep 6
+  ensure_bg_process_alive "scan_filter" "$SCAN_FILTER_PID" "$LOG_DIR/scan_filter.log" || exit 1
 fi
 
 # 3. 启动 base_link -> laser 静态 TF
@@ -247,10 +299,10 @@ else
   log "WARN: foxglove_bridge not found, skip foxglove."
 fi
 
-# 6. 等基础 topic
-wait_topic_exists /scan 90 || exit 1
-wait_topic_exists /scan_filtered 90 || exit 1
-wait_topic_exists /odom 90 || exit 1
+# 6. 等基础 topic（必须真实在发数据，不能只信 topic list）
+wait_topic_publishing /scan 120 || exit 1
+wait_topic_publishing /scan_filtered 120 || exit 1
+wait_topic_publishing /odom 90 || exit 1
 wait_topic_exists /tf 40 || exit 1
 
 if ! wait_odom_base_link_tf 60; then
@@ -271,13 +323,39 @@ start_bg nav2 ros2 launch "$NAV2_BRINGUP_LAUNCH" \
   use_composition:=False
 
 sleep 15
-wait_map_topic_data 120 || exit 1
+if ! wait_map_topic_data 120; then
+  log "WARN: /map 未收到，刷新 ros2 daemon 后重试 ..."
+  ros2 daemon stop 2>/dev/null || true
+  sleep 2
+  ros2 daemon start 2>/dev/null || true
+  sleep 2
+  wait_map_topic_data 120 || exit 1
+fi
 wait_lifecycle_active /amcl 90 || exit 1
 sleep 3
 
+if ! wait_topic_publishing /scan_filtered 45; then
+  log "WARN: /scan_filtered 未稳定发布，重启 scan_filter ..."
+  pkill -f "simple_scan_filter.py" 2>/dev/null || true
+  sleep 1
+  start_bg scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
+    --in-topic /scan \
+    --out-topic /scan_filtered \
+    --min-range "${SCAN_FILTER_MIN_RANGE:-0.22}" \
+    --max-range "${SCAN_FILTER_MAX_RANGE:-4.0}" \
+    --isolated-window "${SCAN_FILTER_ISOLATED_WINDOW:-2}" \
+    --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
+    --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
+    --stats-every 50
+  SCAN_FILTER_PID="${PIDS[-1]}"
+  sleep 6
+  ensure_bg_process_alive "scan_filter" "$SCAN_FILTER_PID" "$LOG_DIR/scan_filter.log" || exit 1
+  wait_topic_publishing /scan_filtered 60 || exit 1
+fi
+
 print_pose_state_summary "$POSE_STATE_FILE" || true
 
-if ! bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 90; then
+if ! bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 120; then
   log "WARN: AMCL bootstrap from $POSE_STATE_FILE failed."
   log "Set initial pose in Foxglove: Publish -> 2D Pose estimate -> /initialpose"
   log "Align laser scan with map walls, then click-nav goals."
@@ -295,6 +373,8 @@ if ! wait_amcl_localization_settle 60; then
 fi
 
 if ! wait_nav_actions_ready 180; then
+  cleanup_ros2_fastrtps_shm
+  sleep 2
   retry_navigation_bringup 90 || exit 1
 fi
 log "Nav2 navigation stack active"

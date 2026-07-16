@@ -21,8 +21,8 @@ lidar:
   params_file: "lidar/config/tmini_plus.yaml"
 
 chassis:
-  # MVP/底盘桥实际使用 configs/mvp_tune.yaml 的 chassis_port
-  port: "/dev/ttyUSB1"
+  # MVP/底盘桥实际使用 configs/mvp_tune.yaml 的 chassis_port（改那个即可）
+  port: "/dev/rosmaster"
   use_lateral: false
   max_vx: 0.04
   max_wz: 0.22

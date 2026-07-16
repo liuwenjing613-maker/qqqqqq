@@ -59,6 +59,10 @@ source_ros_environment() {
     YDLIDAR_SETUP_USED=""
   fi
 
+  # shellcheck source=scripts/lib/ros_dds_env.sh
+  source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
+  attach_ros_dds_env
+
   if [[ "$had_nounset" -eq 1 ]]; then
     set -u
   fi

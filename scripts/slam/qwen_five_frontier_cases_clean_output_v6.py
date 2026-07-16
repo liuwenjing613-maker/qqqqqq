@@ -1,0 +1,1292 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+在占据栅格地图上生成 5 个随机机器人位姿，并让 Qwen 从“程序严格验证且距离受限”
+的灰白前沿候选中选择下一步探索目标。
+
+本版保持地图分析、候选筛选、两阶段 Qwen 调用和 Python 回退流程不变，只调整图片输出：
+1. 终端仅显示运行时间、当前进程和最终保存位置；
+2. 每次运行前自动清理输出目录中的旧 PNG；
+3. 每个案例保存一张带全部候选点的 Qwen 输入图：case_01_candidates.png ~ case_05_candidates.png；
+4. 每个案例保存一张最终结果图：case_01_result.png ~ case_05_result.png；
+5. 候选图显示机器人位置、朝向箭头、全部黄色编号候选点和必要信息框；
+6. 最终图只显示机器人位置、朝向箭头和 Qwen 选出的绿色目标路径点；
+7. Prompt、原始响应和 report.json 等文本记录继续保存，便于排查与复现。
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import math
+import os
+import random
+import re
+import sys
+import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+import cv2
+import numpy as np
+import requests
+
+
+DEFAULT_MAP = r"C:\Users\Acer\Desktop\x\joy_calibrated_corridor_map.png"
+DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DEFAULT_MODEL = "qwen3-vl-flash"
+
+FREE_BGR = (255, 255, 255)
+UNKNOWN_BGR = (128, 128, 128)
+BLOCKED_BGR = (0, 0, 0)
+ROBOT_BGR = (235, 99, 37)       # 蓝色（OpenCV BGR）
+HEADING_BGR = (38, 38, 220)     # 红色
+CANDIDATE_BGR = (0, 210, 255)   # 黄色：探索目标候选
+POSE_CANDIDATE_BGR = (200, 80, 200) # 紫色：机器人位置候选
+GOAL_BGR = (74, 163, 22)        # 绿色
+TEXT_BG_BGR = (245, 245, 245)
+
+
+# 两阶段提示词均保持简洁：程序直接生成 5 个随机白区位置，第一阶段由 Qwen 分配随机朝向，第二阶段选择安全前沿。
+
+POSE_PROMPT_TEMPLATE_ZH = """
+你是占据栅格地图的随机朝向生成器。
+
+颜色：白色=已知可通行，灰色=未知，黑色=墙体/障碍；紫色编号圆点是程序已经随机生成的 {case_count} 个机器人位置。
+这些位置均位于安全白色区域，并且都能在规定距离内找到可达灰白前沿。
+
+请为图中每一个位置编号分别生成一个随机 yaw_deg：
+- 必须恰好输出 {case_count} 项；
+- 必须覆盖下面列出的全部位置编号，每个编号使用一次且仅一次；
+- yaw_deg 范围为 -180 到 180；
+- 0° 向右，90° 向上，-90° 向下，±180° 向左；
+- 朝向尽量多样，不要全部朝向同一方向。
+
+随机扰动码：{nonce}
+必须覆盖的位置编号：{position_ids}
+
+只输出合法 JSON，不要 Markdown，不要解释：
+{{"poses":[{{"position_id":1,"yaw_deg":30.0}}]}}
+""".strip()
+
+GOAL_PROMPT_TEMPLATE_ZH = """
+你是二维占据栅格地图的近距离前沿探索目标选择器。
+
+颜色：白色=已知可通行，灰色=未知待探索，黑色=墙体/障碍；蓝点=机器人位置；红箭头=机器人朝向；黄色编号圆点=程序生成的安全候选目标。
+
+程序已逐像素保证每个黄色候选：
+- 目标点自身位于白色自由区；
+- 紧邻连续灰色未知区，确实属于灰白交界；
+- 安全邻域内没有黑色墙体或障碍；
+- 与机器人处于同一安全白色连通区域，不需要穿墙或穿越灰区；
+- 距离已通过程序硬筛选。
+
+本案例距离规则（距离除以地图最长边得到 distance_ratio）：
+- 硬下限：distance_ratio >= {min_distance_ratio:.3f}
+- 硬上限：distance_ratio <= {max_distance_ratio:.3f}
+- 优选距离：{preferred_min_ratio:.3f} <= distance_ratio <= {preferred_max_ratio:.3f}
+- 本图最近候选距离：{nearest_distance_ratio:.3f}
+- 本图展示候选的最远距离：{candidate_distance_limit_ratio:.3f}
+
+选择顺序：
+1. 绝对禁止选择图中不存在的编号；
+2. 优先选择 direct_path=CLEAR；只有不存在任何 CLEAR 候选时，才允许使用 BLOCKED 候选；
+3. 只要存在可直达且距离合格的正前方或前侧方候选，就必须优先从其中选择；
+4. 只有当前方与前侧方均被墙体阻断，或不存在合格候选时，才选择附近左侧或右侧；
+5. 后方候选仅在前方、前侧方和左右侧均无可直达合格点时作为最后的可直达兜底；
+6. BLOCKED 候选只能在所有方向都没有 CLEAR 候选时使用，且不得把它理解为可以穿墙；
+7. 同一方向层级内，优先选择优选距离范围，再选择 distance_ratio 更小者；
+8. 不要为了追求大灰区牺牲方向与距离，不得选择远距离目标。
+
+机器人：u={robot_u:.6f}, v={robot_v:.6f}, yaw_deg={yaw_deg:.2f}
+候选信息：
+{candidate_table}
+
+只输出一个合法 JSON，不要 Markdown，不要分析过程：
+{{"candidate_id": 1, "confidence": 0.90, "reason": "一句简短中文原因，说明距离与朝向"}}
+""".strip()
+
+
+@dataclass(frozen=True)
+class Pose:
+    x: int
+    y: int
+    yaw_deg: float
+
+
+@dataclass(frozen=True)
+class RobotCandidate:
+    position_id: int
+    x: int
+    y: int
+    component_id: int
+
+
+@dataclass(frozen=True)
+class FrontierCandidate:
+    global_id: int
+    x: int
+    y: int
+    component_id: int
+    obstacle_clearance_px: float
+    unknown_distance_px: float
+    unknown_area_px: int
+
+
+@dataclass
+class CaseResult:
+    case_id: int
+    robot_x: int
+    robot_y: int
+    robot_u: float
+    robot_v: float
+    yaw_deg: float
+    candidate_count: int
+    nearest_candidate_distance_ratio: Optional[float] = None
+    candidate_distance_limit_ratio: Optional[float] = None
+    goal_distance_ratio: Optional[float] = None
+    goal_heading_delta_deg: Optional[float] = None
+    selected_local_id: Optional[int] = None
+    selected_global_id: Optional[int] = None
+    goal_x: Optional[int] = None
+    goal_y: Optional[int] = None
+    goal_u: Optional[float] = None
+    goal_v: Optional[float] = None
+    confidence: Optional[float] = None
+    reason: str = ""
+    selected_by: str = ""
+    latency_s: Optional[float] = None
+    raw_response: str = ""
+    error: str = ""
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="随机生成 5 个机器人位姿，让 Qwen 选择严格安全的灰白前沿目标。"
+    )
+    parser.add_argument("--map", default=DEFAULT_MAP, help="地图 PNG/PGM/JPG 路径。")
+    parser.add_argument("--cases", type=int, default=5, help="生成案例数量，默认 5。")
+    parser.add_argument("--output-dir", default="qwen_five_frontier_nearby_v3_results")
+    parser.add_argument("--model", default=os.getenv("QWEN_MODEL", DEFAULT_MODEL))
+    parser.add_argument("--base-url", default=os.getenv("QWEN_BASE_URL", DEFAULT_BASE_URL))
+    parser.add_argument("--api-key", default=None)
+    parser.add_argument("--seed", type=int, default=20260714)
+
+    parser.add_argument("--free-threshold", type=int, default=245)
+    parser.add_argument("--occupied-threshold", type=int, default=70)
+    parser.add_argument("--unknown-value", type=int, default=-1,
+                        help="灰色未知值；-1 表示自动检测。")
+    parser.add_argument("--unknown-tolerance", type=int, default=10)
+    parser.add_argument("--unknown-min-area", type=int, default=80)
+
+    parser.add_argument("--black-clearance-ratio", type=float, default=0.010,
+                        help="候选点周围无黑色半径/地图最长边，默认 1%%。")
+    parser.add_argument("--robot-clearance-ratio", type=float, default=0.012,
+                        help="机器人离黑色的最小距离/地图最长边。")
+    parser.add_argument("--frontier-gap-ratio", type=float, default=0.006,
+                        help="候选白点到最近灰色的最大距离/地图最长边。")
+    parser.add_argument("--candidate-spacing-ratio", type=float, default=0.018,
+                        help="候选点之间最小间距/地图最长边。")
+    parser.add_argument("--min-goal-distance-ratio", type=float, default=0.05,
+                        help="目标距离硬下限/地图最长边，默认 0.05。")
+    parser.add_argument("--max-goal-distance-ratio", type=float, default=0.22,
+                        help="目标距离硬上限/地图最长边，默认 0.22。")
+    parser.add_argument("--preferred-min-distance-ratio", type=float, default=0.07,
+                        help="优选距离下限，默认 0.07。")
+    parser.add_argument("--preferred-max-distance-ratio", type=float, default=0.14,
+                        help="优选距离上限，默认 0.14。")
+    parser.add_argument("--near-candidate-slack-ratio", type=float, default=0.05,
+                        help="候选最远距离最多比最近候选多出的比例，默认 0.05。")
+    parser.add_argument("--front-cone-deg", type=float, default=80.0,
+                        help="正前方/前侧方扇区半角，默认 80 度。")
+    parser.add_argument("--max-candidates", type=int, default=12,
+                        help="每个案例最多给 Qwen 展示多少个目标候选。")
+    parser.add_argument("--pose-candidates", type=int, default=None,
+                        help=argparse.SUPPRESS)
+    parser.add_argument("--pose-temperature", type=float, default=0.85,
+                        help="Qwen 随机选择机器人位姿时的温度。")
+
+    parser.add_argument("--model-image-side", type=int, default=1600)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--max-tokens", type=int, default=220)
+    parser.add_argument("--timeout", type=float, default=90.0)
+    parser.add_argument("--retries", type=int, default=2)
+    parser.add_argument("--dry-run", action="store_true",
+                        help="不调用 Qwen，使用确定性几何评分选点，用于检查地图处理。")
+    parser.add_argument("--hide-prompts", action="store_true", help=argparse.SUPPRESS)
+    return parser.parse_args()
+
+
+def get_api_key(cli_key: Optional[str]) -> Optional[str]:
+    return cli_key or os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+
+
+def detect_unknown_value(gray: np.ndarray, occupied_threshold: int,
+                         free_threshold: int) -> int:
+    middle = gray[(gray > occupied_threshold + 8) & (gray < free_threshold - 8)]
+    if middle.size == 0:
+        return 205
+    hist = np.bincount(middle.ravel(), minlength=256)
+    return int(np.argmax(hist))
+
+
+def keep_large_components(mask: np.ndarray, minimum_area: int) -> Tuple[np.ndarray, np.ndarray, Dict[int, int]]:
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        mask.astype(np.uint8), connectivity=8
+    )
+    kept = np.zeros_like(mask, dtype=bool)
+    relabeled = np.zeros_like(labels, dtype=np.int32)
+    areas: Dict[int, int] = {}
+    new_id = 1
+    for old_id in range(1, count):
+        area = int(stats[old_id, cv2.CC_STAT_AREA])
+        if area >= minimum_area:
+            component = labels == old_id
+            kept |= component
+            relabeled[component] = new_id
+            areas[new_id] = area
+            new_id += 1
+    return kept, relabeled, areas
+
+
+def build_semantic_masks(gray: np.ndarray, args: argparse.Namespace) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[int, int], int]:
+    unknown_value = (
+        detect_unknown_value(gray, args.occupied_threshold, args.free_threshold)
+        if args.unknown_value < 0 else int(args.unknown_value)
+    )
+
+    free = gray >= args.free_threshold
+    unknown_raw = np.abs(gray.astype(np.int16) - unknown_value) <= args.unknown_tolerance
+    unknown_raw &= ~free
+    unknown, unknown_labels, unknown_areas = keep_large_components(
+        unknown_raw, args.unknown_min_area
+    )
+
+    blocked = ~(free | unknown)
+    blocked |= gray <= args.occupied_threshold
+
+    semantic = np.zeros((*gray.shape, 3), dtype=np.uint8)
+    semantic[blocked] = BLOCKED_BGR
+    semantic[unknown] = UNKNOWN_BGR
+    semantic[free] = FREE_BGR
+    return semantic, free, unknown, blocked, unknown_labels, unknown_areas, unknown_value
+
+
+def disk_kernel(radius: int) -> np.ndarray:
+    radius = max(1, int(radius))
+    size = radius * 2 + 1
+    kernel = np.zeros((size, size), dtype=np.uint8)
+    cv2.circle(kernel, (radius, radius), radius, 1, thickness=-1)
+    return kernel
+
+
+def nearest_unknown_component(unknown_labels: np.ndarray, x: int, y: int,
+                              search_radius: int) -> int:
+    h, w = unknown_labels.shape
+    x0, x1 = max(0, x - search_radius), min(w, x + search_radius + 1)
+    y0, y1 = max(0, y - search_radius), min(h, y + search_radius + 1)
+    crop = unknown_labels[y0:y1, x0:x1]
+    values, counts = np.unique(crop[crop > 0], return_counts=True)
+    if len(values) == 0:
+        return 0
+    return int(values[int(np.argmax(counts))])
+
+
+def generate_frontier_candidates(
+    free: np.ndarray,
+    unknown: np.ndarray,
+    blocked: np.ndarray,
+    unknown_labels: np.ndarray,
+    unknown_areas: Dict[int, int],
+    longest: int,
+    args: argparse.Namespace,
+) -> Tuple[List[FrontierCandidate], np.ndarray, np.ndarray, np.ndarray, Dict[str, int]]:
+    black_clearance_px = max(3, int(round(longest * args.black_clearance_ratio)))
+    robot_clearance_px = max(3, int(round(longest * args.robot_clearance_ratio)))
+    frontier_gap_px = max(1, int(round(longest * args.frontier_gap_ratio)))
+    spacing_px = max(5, int(round(longest * args.candidate_spacing_ratio)))
+
+    # distanceTransform 对非零像素计算到最近零像素的距离。
+    obstacle_distance = cv2.distanceTransform((~blocked).astype(np.uint8), cv2.DIST_L2, 5)
+    unknown_distance = cv2.distanceTransform((~unknown).astype(np.uint8), cv2.DIST_L2, 5)
+
+    navigable = free & (obstacle_distance >= robot_clearance_px)
+    frontier_mask = (
+        navigable
+        & (obstacle_distance >= black_clearance_px)
+        & (unknown_distance <= frontier_gap_px)
+    )
+
+    # 4 连通更保守：不会把只在角点接触的白区误判为可达。
+    _, nav_labels = cv2.connectedComponents(navigable.astype(np.uint8), connectivity=4)
+
+    ys, xs = np.where(frontier_mask)
+    if len(xs) == 0:
+        raise RuntimeError(
+            "没有找到满足条件的灰白前沿。可适当降低 --black-clearance-ratio "
+            "或 --robot-clearance-ratio，但不要把它们设为 0。"
+        )
+
+    scored: List[Tuple[float, int, int]] = []
+    for x, y in zip(xs.tolist(), ys.tolist()):
+        # 更远离黑色、更贴近灰色的点优先进入候选池。
+        score = float(obstacle_distance[y, x]) - 1.5 * float(unknown_distance[y, x])
+        scored.append((score, x, y))
+    scored.sort(reverse=True)
+
+    selected_xy: List[Tuple[int, int]] = []
+    candidates: List[FrontierCandidate] = []
+    max_global_candidates = max(80, args.max_candidates * 8)
+
+    for _, x, y in scored:
+        if any((x - sx) ** 2 + (y - sy) ** 2 < spacing_px ** 2 for sx, sy in selected_xy):
+            continue
+        component_id = int(nav_labels[y, x])
+        if component_id <= 0:
+            continue
+        unknown_id = nearest_unknown_component(unknown_labels, x, y, frontier_gap_px + 2)
+        unknown_area = int(unknown_areas.get(unknown_id, 0))
+        if unknown_area < args.unknown_min_area:
+            continue
+
+        selected_xy.append((x, y))
+        candidates.append(
+            FrontierCandidate(
+                global_id=len(candidates) + 1,
+                x=x,
+                y=y,
+                component_id=component_id,
+                obstacle_clearance_px=float(obstacle_distance[y, x]),
+                unknown_distance_px=float(unknown_distance[y, x]),
+                unknown_area_px=unknown_area,
+            )
+        )
+        if len(candidates) >= max_global_candidates:
+            break
+
+    if not candidates:
+        raise RuntimeError("前沿像素存在，但无法形成分散且安全的候选点。")
+
+    parameters = {
+        "black_clearance_px": black_clearance_px,
+        "robot_clearance_px": robot_clearance_px,
+        "frontier_gap_px": frontier_gap_px,
+        "candidate_spacing_px": spacing_px,
+    }
+    return candidates, navigable, nav_labels, frontier_mask, parameters
+
+
+def generate_robot_position_candidates(
+    navigable: np.ndarray,
+    nav_labels: np.ndarray,
+    frontier_mask: np.ndarray,
+    frontier_candidates: Sequence[FrontierCandidate],
+    desired_count: int,
+    longest: int,
+    args: argparse.Namespace,
+    seed: int,
+) -> List[RobotCandidate]:
+    """直接生成实际需要数量的随机机器人位置。
+
+    不再构造 36 个“供 Qwen 再筛选”的大候选池。这里只生成 desired_count 个位置。
+    每个位置位于安全白色区域，并保证存在严格距离范围内的可达灰白前沿，
+    从而后续每个案例都能正常生成目标点。
+    """
+    frontier_components = {c.component_id for c in frontier_candidates}
+    component_mask = navigable & np.isin(nav_labels, list(frontier_components))
+
+    # distanceTransform：非零像素到最近零像素的距离；~frontier_mask 在前沿处为 0。
+    distance_to_frontier = cv2.distanceTransform(
+        (~frontier_mask).astype(np.uint8), cv2.DIST_L2, 5
+    )
+
+    min_px = float(longest * args.min_goal_distance_ratio)
+    max_px = float(longest * args.max_goal_distance_ratio)
+    preferred_min_px = float(longest * args.preferred_min_distance_ratio)
+    preferred_max_px = float(longest * args.preferred_max_distance_ratio)
+
+    hard_mask = (
+        component_mask
+        & (distance_to_frontier >= min_px)
+        & (distance_to_frontier <= max_px)
+    )
+    preferred_mask = (
+        hard_mask
+        & (distance_to_frontier >= preferred_min_px)
+        & (distance_to_frontier <= preferred_max_px)
+    )
+
+    if int(np.count_nonzero(hard_mask)) == 0:
+        raise RuntimeError(
+            "没有机器人位置能在严格距离范围内到达灰白前沿。"
+            "请适当增大 --max-goal-distance-ratio，或降低 --min-goal-distance-ratio。"
+        )
+
+    rng = random.Random(seed)
+    h, w = navigable.shape
+    spacing = max(10.0, 0.050 * math.hypot(w, h))
+    chosen: List[Tuple[int, int]] = []
+
+    def add_from_mask(mask: np.ndarray, current_spacing: float) -> None:
+        ys, xs = np.where(mask)
+        order = list(range(len(xs)))
+        rng.shuffle(order)
+        # 优选更接近优选区中心的位置，但保留随机性。
+        target_px = longest * (
+            args.preferred_min_distance_ratio + args.preferred_max_distance_ratio
+        ) / 2.0
+        order.sort(
+            key=lambda idx: abs(float(distance_to_frontier[int(ys[idx]), int(xs[idx])]) - target_px)
+            + rng.random() * max(1.0, longest * 0.015)
+        )
+        for idx in order:
+            x, y = int(xs[idx]), int(ys[idx])
+            if all(math.hypot(x - sx, y - sy) >= current_spacing for sx, sy in chosen):
+                chosen.append((x, y))
+                if len(chosen) >= desired_count:
+                    return
+
+    # 先从优选距离带抽样，再用严格距离带补足；绝不从 max 之外补点。
+    add_from_mask(preferred_mask, spacing)
+    current_spacing = spacing
+    while len(chosen) < desired_count and current_spacing > 6.0:
+        add_from_mask(hard_mask, current_spacing)
+        current_spacing *= 0.78
+
+    if len(chosen) < desired_count:
+        # 分散间距只是美观偏好，不是硬限制。若仍未补足，就取消间距要求，
+        # 从所有合格白区像素中随机补足互不重复的位置。
+        ys, xs = np.where(hard_mask)
+        remaining = [
+            (int(x), int(y))
+            for x, y in zip(xs.tolist(), ys.tolist())
+            if (int(x), int(y)) not in chosen
+        ]
+        rng.shuffle(remaining)
+        for point in remaining:
+            chosen.append(point)
+            if len(chosen) >= desired_count:
+                break
+
+    if len(chosen) < desired_count:
+        raise RuntimeError(
+            f"整张地图中只有 {len(chosen)} 个互不重复的有效白区像素能够在严格距离范围内找到前沿，"
+            f"无法生成 {desired_count} 个机器人位置。"
+        )
+
+    return [
+        RobotCandidate(i + 1, x, y, int(nav_labels[y, x]))
+        for i, (x, y) in enumerate(chosen[:desired_count])
+    ]
+
+
+def fallback_select_poses(
+    robot_candidates: Sequence[RobotCandidate],
+    case_count: int,
+    seed: int,
+) -> List[Pose]:
+    rng = random.Random(seed ^ 0x5A17)
+    picked = rng.sample(list(robot_candidates), k=case_count)
+    return [Pose(c.x, c.y, rng.uniform(-180.0, 180.0)) for c in picked]
+
+
+def wrap_angle_deg(angle: float) -> float:
+    return (angle + 180.0) % 360.0 - 180.0
+
+
+def candidate_metrics(pose: Pose, candidate: FrontierCandidate, longest: int) -> Dict[str, float]:
+    dx = candidate.x - pose.x
+    dy_image = candidate.y - pose.y
+    distance_ratio = math.hypot(dx, dy_image) / float(longest)
+
+    # 地图图像 y 向下；数学 yaw 的正方向取逆时针，所以使用 -dy_image。
+    bearing_deg = math.degrees(math.atan2(-dy_image, dx))
+    heading_delta = wrap_angle_deg(bearing_deg - pose.yaw_deg)
+    return {
+        "distance_ratio": distance_ratio,
+        "bearing_deg": bearing_deg,
+        "heading_delta_deg": heading_delta,
+        "forward_cos": math.cos(math.radians(heading_delta)),
+    }
+
+
+def direct_path_is_clear(
+    pose: Pose,
+    candidate: FrontierCandidate,
+    nav_labels: np.ndarray,
+) -> bool:
+    """检查机器人到候选点的直线是否始终位于同一安全白色连通区。
+
+    nav_labels 已由经过机器人安全距离腐蚀后的 navigable 区域生成，因此这里不仅能
+    拦截穿过黑墙的直线，也会拦截穿越灰色未知区或贴墙过近的直线。
+    """
+    component_id = int(nav_labels[pose.y, pose.x])
+    if component_id <= 0:
+        return False
+
+    dx = candidate.x - pose.x
+    dy = candidate.y - pose.y
+    steps = max(abs(dx), abs(dy), 1)
+    xs = np.rint(np.linspace(pose.x, candidate.x, steps + 1)).astype(np.int32)
+    ys = np.rint(np.linspace(pose.y, candidate.y, steps + 1)).astype(np.int32)
+    xs = np.clip(xs, 0, nav_labels.shape[1] - 1)
+    ys = np.clip(ys, 0, nav_labels.shape[0] - 1)
+    return bool(np.all(nav_labels[ys, xs] == component_id))
+
+
+def choose_case_candidates(
+    pose: Pose,
+    nav_labels: np.ndarray,
+    candidates: Sequence[FrontierCandidate],
+    longest: int,
+    args: argparse.Namespace,
+) -> Tuple[List[FrontierCandidate], Dict[str, float]]:
+    """返回严格近距离候选与本案例距离元数据。
+
+    关键原则：候选太少时也绝不退回 max 距离之外的远点。
+    """
+    component_id = int(nav_labels[pose.y, pose.x])
+    reachable = [c for c in candidates if c.component_id == component_id]
+
+    strict: List[FrontierCandidate] = []
+    metrics_by_id: Dict[int, Dict[str, float]] = {}
+    path_clear_by_id: Dict[int, bool] = {}
+    for candidate in reachable:
+        metrics = candidate_metrics(pose, candidate, longest)
+        metrics_by_id[candidate.global_id] = metrics
+        path_clear_by_id[candidate.global_id] = direct_path_is_clear(
+            pose, candidate, nav_labels
+        )
+        if args.min_goal_distance_ratio <= metrics["distance_ratio"] <= args.max_goal_distance_ratio:
+            strict.append(candidate)
+
+    if not strict:
+        if reachable:
+            nearest_any = min(
+                candidate_metrics(pose, c, longest)["distance_ratio"] for c in reachable
+            )
+            raise RuntimeError(
+                "该机器人位置没有满足严格距离范围的安全前沿。"
+                f"最近可达前沿 distance_ratio={nearest_any:.3f}，"
+                f"要求为 {args.min_goal_distance_ratio:.3f}~{args.max_goal_distance_ratio:.3f}。"
+            )
+        raise RuntimeError("该机器人位置所在白色连通区没有安全前沿。")
+
+    nearest_distance = min(metrics_by_id[c.global_id]["distance_ratio"] for c in strict)
+
+    front_clear = [
+        c for c in strict
+        if path_clear_by_id[c.global_id]
+        and abs(metrics_by_id[c.global_id]["heading_delta_deg"]) <= args.front_cone_deg
+    ]
+    side_clear = [
+        c for c in strict
+        if path_clear_by_id[c.global_id]
+        and args.front_cone_deg
+        < abs(metrics_by_id[c.global_id]["heading_delta_deg"])
+        <= 135.0
+    ]
+    back_clear = [
+        c for c in strict
+        if path_clear_by_id[c.global_id]
+        and abs(metrics_by_id[c.global_id]["heading_delta_deg"]) > 135.0
+    ]
+
+    # 距离仍然必须落在硬范围内；但候选展示范围以最高可用方向层级为基准，
+    # 避免“最近的后方点”把稍远但仍合格的前方点挤出候选图。
+    priority_pool = front_clear or side_clear or back_clear or strict
+    nearest_priority_distance = min(
+        metrics_by_id[c.global_id]["distance_ratio"] for c in priority_pool
+    )
+    distance_limit = min(
+        args.max_goal_distance_ratio,
+        max(
+            args.preferred_max_distance_ratio,
+            nearest_priority_distance + args.near_candidate_slack_ratio,
+        ),
+    )
+
+    near_band = [
+        c for c in strict
+        if metrics_by_id[c.global_id]["distance_ratio"] <= distance_limit + 1e-9
+    ]
+    if not near_band:
+        # 理论上最近点一定会进入；仅作为数值安全兜底。
+        near_band = [min(strict, key=lambda c: metrics_by_id[c.global_id]["distance_ratio"])]
+
+    def preferred_penalty(distance_ratio: float) -> float:
+        if distance_ratio < args.preferred_min_distance_ratio:
+            return args.preferred_min_distance_ratio - distance_ratio
+        if distance_ratio > args.preferred_max_distance_ratio:
+            return distance_ratio - args.preferred_max_distance_ratio
+        return 0.0
+
+    def rank_key(candidate: FrontierCandidate) -> Tuple[float, float, float, float]:
+        m = metrics_by_id[candidate.global_id]
+        abs_delta = abs(m["heading_delta_deg"])
+        path_clear = path_clear_by_id[candidate.global_id]
+
+        # 分层优先级：可直达前方/前侧方 > 可直达左右侧 > 可直达后方
+        # > 被墙挡住的前方 > 其余。这样当前方有墙时，会自然转向左右两侧，
+        # 同时不会把“隔墙的前方点”排在安全可直达点之前。
+        if path_clear and abs_delta <= args.front_cone_deg:
+            direction_bucket = 0.0
+        elif path_clear and abs_delta <= 135.0:
+            direction_bucket = 1.0
+        elif path_clear:
+            direction_bucket = 2.0
+        elif abs_delta <= args.front_cone_deg:
+            direction_bucket = 3.0
+        else:
+            direction_bucket = 4.0
+
+        return (
+            direction_bucket,
+            preferred_penalty(m["distance_ratio"]),
+            m["distance_ratio"],
+            abs_delta,
+        )
+
+    ranked = sorted(near_band, key=rank_key)
+
+    # 候选数量过多时，先保留方向优先级最高的点，再补充方向不同的点。
+    selected: List[FrontierCandidate] = []
+    for candidate in ranked:
+        if len(selected) >= args.max_candidates:
+            break
+        angle = metrics_by_id[candidate.global_id]["bearing_deg"]
+        if len(selected) < max(4, args.max_candidates // 2):
+            selected.append(candidate)
+            continue
+        if all(
+            abs(wrap_angle_deg(angle - metrics_by_id[s.global_id]["bearing_deg"])) >= 18.0
+            for s in selected
+        ):
+            selected.append(candidate)
+
+    if len(selected) < min(args.max_candidates, len(ranked)):
+        for candidate in ranked:
+            if candidate not in selected:
+                selected.append(candidate)
+                if len(selected) >= args.max_candidates:
+                    break
+
+    # 保持 rank_key 的顺序，不再按距离重新排序；编号越小，方向优先级越高。
+    meta = {
+        "nearest_distance_ratio": nearest_distance,
+        "candidate_distance_limit_ratio": distance_limit,
+        "strict_min_distance_ratio": args.min_goal_distance_ratio,
+        "strict_max_distance_ratio": args.max_goal_distance_ratio,
+        "preferred_min_distance_ratio": args.preferred_min_distance_ratio,
+        "preferred_max_distance_ratio": args.preferred_max_distance_ratio,
+        "front_clear_candidate_count": float(len(front_clear)),
+        "side_clear_candidate_count": float(len(side_clear)),
+        "back_clear_candidate_count": float(len(back_clear)),
+    }
+    return selected, meta
+
+
+def resize_nearest(image: np.ndarray, longest_side: int) -> Tuple[np.ndarray, float]:
+    h, w = image.shape[:2]
+    scale = longest_side / float(max(h, w))
+    new_size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+    return cv2.resize(image, new_size, interpolation=cv2.INTER_NEAREST), scale
+
+
+def draw_pose(image: np.ndarray, pose: Pose, scale: float) -> None:
+    x = int(round(pose.x * scale))
+    y = int(round(pose.y * scale))
+    ref = max(image.shape[:2])
+    radius = max(8, int(round(ref * 0.006)))
+    arrow_len = max(45, int(round(ref * 0.035)))
+    thickness = max(3, int(round(ref * 0.0025)))
+
+    cv2.circle(image, (x, y), radius, ROBOT_BGR, thickness=-1, lineType=cv2.LINE_AA)
+    cv2.circle(image, (x, y), radius, (255, 255, 255), thickness=max(1, thickness // 2), lineType=cv2.LINE_AA)
+    yaw = math.radians(pose.yaw_deg)
+    end = (
+        int(round(x + arrow_len * math.cos(yaw))),
+        int(round(y - arrow_len * math.sin(yaw))),
+    )
+    cv2.arrowedLine(image, (x, y), end, HEADING_BGR, thickness=thickness,
+                    tipLength=0.28, line_type=cv2.LINE_AA)
+
+
+def draw_candidate(image: np.ndarray, candidate: FrontierCandidate, local_id: int,
+                   scale: float, selected: bool = False,
+                   show_label: bool = True) -> None:
+    x = int(round(candidate.x * scale))
+    y = int(round(candidate.y * scale))
+    ref = max(image.shape[:2])
+    radius = max(11, int(round(ref * (0.009 if selected else 0.007))))
+    thickness = max(2, int(round(ref * 0.0018)))
+    color = GOAL_BGR if selected else CANDIDATE_BGR
+
+    cv2.circle(image, (x, y), radius, color, thickness=-1, lineType=cv2.LINE_AA)
+    cv2.circle(image, (x, y), radius, (0, 0, 0), thickness=thickness, lineType=cv2.LINE_AA)
+    if show_label:
+        label = str(local_id)
+        font_scale = max(0.45, ref / 1500.0 * 0.62)
+        text_thickness = max(1, int(round(ref / 900.0)))
+        (tw, th), _ = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness
+        )
+        cv2.putText(
+            image, label, (x - tw // 2, y + th // 2),
+            cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0),
+            text_thickness, cv2.LINE_AA,
+        )
+
+
+def draw_robot_position_candidate(image: np.ndarray, candidate: RobotCandidate, scale: float) -> None:
+    x = int(round(candidate.x * scale))
+    y = int(round(candidate.y * scale))
+    ref = max(image.shape[:2])
+    radius = max(11, int(round(ref * 0.007)))
+    thickness = max(2, int(round(ref * 0.0018)))
+    cv2.circle(image, (x, y), radius, POSE_CANDIDATE_BGR, thickness=-1, lineType=cv2.LINE_AA)
+    cv2.circle(image, (x, y), radius, (0, 0, 0), thickness=thickness, lineType=cv2.LINE_AA)
+    label = str(candidate.position_id)
+    font_scale = max(0.45, ref / 1500.0 * 0.62)
+    text_thickness = max(1, int(round(ref / 900.0)))
+    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
+    cv2.putText(image, label, (x - tw // 2, y + th // 2),
+                cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0),
+                text_thickness, cv2.LINE_AA)
+
+
+def build_pose_selection_image(
+    semantic: np.ndarray,
+    robot_candidates: Sequence[RobotCandidate],
+    model_image_side: int,
+) -> np.ndarray:
+    image, scale = resize_nearest(semantic, model_image_side)
+    for candidate in robot_candidates:
+        draw_robot_position_candidate(image, candidate, scale)
+    put_info_box(image, [
+        "QWEN POSE SELECTION",
+        f"safe_robot_positions={len(robot_candidates)}",
+        "purple IDs = validated white-area positions",
+    ])
+    return image
+
+
+def put_info_box(image: np.ndarray, lines: Sequence[str]) -> None:
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    ref = max(image.shape[:2])
+    font_scale = max(0.42, ref / 1600.0 * 0.55)
+    thickness = max(1, int(round(ref / 1100.0)))
+    line_h = max(20, int(round(30 * ref / 1600.0)))
+    max_w = 0
+    for line in lines:
+        (tw, _), _ = cv2.getTextSize(line, font, font_scale, thickness)
+        max_w = max(max_w, tw)
+    box_h = 18 + line_h * len(lines)
+    overlay = image.copy()
+    cv2.rectangle(overlay, (8, 8), (28 + max_w, 8 + box_h), TEXT_BG_BGR, thickness=-1)
+    cv2.addWeighted(overlay, 0.90, image, 0.10, 0, image)
+    cv2.rectangle(image, (8, 8), (28 + max_w, 8 + box_h), (60, 60, 60), thickness=2)
+    y = 8 + line_h
+    for line in lines:
+        cv2.putText(image, line, (18, y), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+        y += line_h
+
+
+def build_case_image(
+    semantic: np.ndarray,
+    pose: Pose,
+    case_candidates: Sequence[FrontierCandidate],
+    model_image_side: int,
+    selected_local_id: Optional[int] = None,
+    info_lines: Optional[Sequence[str]] = None,
+    show_all_candidates: bool = True,
+    show_candidate_labels: bool = True,
+) -> Tuple[np.ndarray, float]:
+    image, scale = resize_nearest(semantic, model_image_side)
+    for local_id, candidate in enumerate(case_candidates, start=1):
+        if show_all_candidates or local_id == selected_local_id:
+            draw_candidate(
+                image,
+                candidate,
+                local_id,
+                scale,
+                selected=(local_id == selected_local_id),
+                show_label=show_candidate_labels,
+            )
+    draw_pose(image, pose, scale)
+    if info_lines:
+        put_info_box(image, info_lines)
+    return image, scale
+
+
+def candidate_table_text(
+    pose: Pose,
+    case_candidates: Sequence[FrontierCandidate],
+    nav_labels: np.ndarray,
+    width: int,
+    height: int,
+    longest: int,
+    args: argparse.Namespace,
+) -> str:
+    rows = []
+    for local_id, candidate in enumerate(case_candidates, start=1):
+        m = candidate_metrics(pose, candidate, longest)
+        distance = m["distance_ratio"]
+        distance_tag = (
+            "PREFERRED"
+            if args.preferred_min_distance_ratio <= distance <= args.preferred_max_distance_ratio
+            else "ALLOWED"
+        )
+        direction_tag = (
+            "FRONT_OR_SIDE_FRONT"
+            if abs(m["heading_delta_deg"]) <= args.front_cone_deg
+            else ("LEFT_OR_RIGHT_SIDE" if abs(m["heading_delta_deg"]) <= 135.0 else "BACK")
+        )
+        direct_path_tag = "CLEAR" if direct_path_is_clear(pose, candidate, nav_labels) else "BLOCKED"
+        rows.append(
+            f"id={local_id}, u={candidate.x / max(1, width - 1):.6f}, "
+            f"v={candidate.y / max(1, height - 1):.6f}, "
+            f"distance_ratio={distance:.3f}, distance_tag={distance_tag}, "
+            f"heading_delta={m['heading_delta_deg']:.1f}deg, direction_tag={direction_tag}, "
+            f"direct_path={direct_path_tag}, "
+            f"black_clearance_px={candidate.obstacle_clearance_px:.1f}, "
+            f"unknown_area={candidate.unknown_area_px}"
+        )
+    return "\n".join(rows)
+
+
+def image_to_data_url(image_bgr: np.ndarray) -> str:
+    ok, encoded = cv2.imencode(".png", image_bgr)
+    if not ok:
+        raise RuntimeError("无法编码输入图像。")
+    data = base64.b64encode(encoded.tobytes()).decode("ascii")
+    return f"data:image/png;base64,{data}"
+
+
+def call_qwen(image_bgr: np.ndarray, prompt: str, api_key: str,
+              args: argparse.Namespace, *, temperature: Optional[float] = None,
+              max_tokens: Optional[int] = None) -> Tuple[str, float]:
+    endpoint = args.base_url.rstrip("/") + "/chat/completions"
+    payload = {
+        "model": args.model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "你必须只从图中已有候选编号中选择。距离必须满足硬约束；优先 direct_path=CLEAR 的正前方或前侧方，前方受阻时再选左右侧，后方仅作可直达兜底，BLOCKED 仅在没有任何 CLEAR 候选时使用。只输出合法 JSON。",
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": image_to_data_url(image_bgr)}},
+                    {"type": "text", "text": prompt},
+                ],
+            },
+        ],
+        "temperature": args.temperature if temperature is None else temperature,
+        "max_tokens": args.max_tokens if max_tokens is None else max_tokens,
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    started = time.perf_counter()
+    last_error: Optional[Exception] = None
+    for attempt in range(args.retries + 1):
+        try:
+            response = requests.post(endpoint, headers=headers, json=payload, timeout=args.timeout)
+            if response.status_code >= 400:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:800]}")
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            if isinstance(content, list):
+                content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+            return str(content), time.perf_counter() - started
+        except (requests.RequestException, RuntimeError, ValueError, KeyError) as exc:
+            last_error = exc
+            if attempt < args.retries:
+                time.sleep(1.2 * (2 ** attempt))
+    raise RuntimeError(f"Qwen API 调用失败：{last_error}") from last_error
+
+
+def extract_json(text: str) -> Dict[str, Any]:
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
+    start = cleaned.find("{")
+    if start < 0:
+        raise ValueError("响应中没有 JSON 对象。")
+    decoder = json.JSONDecoder()
+    obj, _ = decoder.raw_decode(cleaned[start:])
+    if not isinstance(obj, dict):
+        raise ValueError("响应 JSON 不是对象。")
+    return obj
+
+
+def parse_qwen_poses(
+    raw: str,
+    robot_candidates: Sequence[RobotCandidate],
+    case_count: int,
+) -> List[Pose]:
+    data = extract_json(raw)
+    items = data.get("poses")
+    if not isinstance(items, list) or len(items) != case_count:
+        raise ValueError(f"poses 必须恰好包含 {case_count} 项。")
+    lookup = {c.position_id: c for c in robot_candidates}
+    used: set[int] = set()
+    poses: List[Pose] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("poses 中存在非对象项。")
+        position_id = int(item.get("position_id"))
+        yaw_deg = float(item.get("yaw_deg"))
+        if position_id not in lookup:
+            raise ValueError(f"position_id={position_id} 不存在。")
+        if position_id in used:
+            raise ValueError(f"position_id={position_id} 重复。")
+        if not -180.0 <= yaw_deg <= 180.0:
+            raise ValueError(f"yaw_deg={yaw_deg} 越界。")
+        used.add(position_id)
+        c = lookup[position_id]
+        poses.append(Pose(c.x, c.y, yaw_deg))
+    return poses
+
+
+def deterministic_fallback(
+    pose: Pose,
+    candidates: Sequence[FrontierCandidate],
+    nav_labels: np.ndarray,
+    longest: int,
+    args: argparse.Namespace,
+) -> int:
+    """Qwen 异常时，按“可直达前方 > 左右侧 > 后方”确定性选点。"""
+    best_id = 1
+    best_key: Optional[Tuple[float, float, float, float]] = None
+    for local_id, candidate in enumerate(candidates, start=1):
+        m = candidate_metrics(pose, candidate, longest)
+        distance = m["distance_ratio"]
+        abs_delta = abs(m["heading_delta_deg"])
+        path_clear = direct_path_is_clear(pose, candidate, nav_labels)
+        preferred_penalty = 0.0
+        if distance < args.preferred_min_distance_ratio:
+            preferred_penalty = args.preferred_min_distance_ratio - distance
+        elif distance > args.preferred_max_distance_ratio:
+            preferred_penalty = distance - args.preferred_max_distance_ratio
+
+        if path_clear and abs_delta <= args.front_cone_deg:
+            direction_bucket = 0.0
+        elif path_clear and abs_delta <= 135.0:
+            direction_bucket = 1.0
+        elif path_clear:
+            direction_bucket = 2.0
+        elif abs_delta <= args.front_cone_deg:
+            direction_bucket = 3.0
+        else:
+            direction_bucket = 4.0
+
+        key = (direction_bucket, preferred_penalty, distance, abs_delta)
+        if best_key is None or key < best_key:
+            best_key = key
+            best_id = local_id
+    return best_id
+
+
+def format_elapsed(seconds: float) -> str:
+    return f"{seconds:7.3f}s"
+
+
+def print_progress(
+    run_started: float,
+    current: int,
+    total: int,
+    message: str,
+) -> None:
+    elapsed = time.perf_counter() - run_started
+    print(f"[{format_elapsed(elapsed)}] 进程 {current}/{total}：{message}", flush=True)
+
+
+def main() -> int:
+    run_started = time.perf_counter()
+    args = parse_args()
+    if args.cases <= 0:
+        print("[错误] --cases 必须大于 0。", file=sys.stderr)
+        return 2
+    if args.max_candidates < 1:
+        print("[错误] --max-candidates 至少为 1。", file=sys.stderr)
+        return 2
+    if not (
+        0.0 < args.min_goal_distance_ratio
+        <= args.preferred_min_distance_ratio
+        <= args.preferred_max_distance_ratio
+        <= args.max_goal_distance_ratio
+        <= 1.0
+    ):
+        print(
+            "[错误] 距离参数必须满足：0 < min <= preferred_min <= preferred_max <= max <= 1。",
+            file=sys.stderr,
+        )
+        return 2
+    if args.near_candidate_slack_ratio < 0.0:
+        print("[错误] --near-candidate-slack-ratio 不能小于 0。", file=sys.stderr)
+        return 2
+
+    map_path = Path(args.map).expanduser().resolve()
+    output_dir = Path(args.output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    gray = cv2.imread(str(map_path), cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        print(f"[错误] 无法读取地图：{map_path}", file=sys.stderr)
+        return 2
+
+    h, w = gray.shape
+    longest = max(h, w)
+
+    try:
+        semantic, free, unknown, blocked, unknown_labels, unknown_areas, unknown_value = build_semantic_masks(gray, args)
+        candidates, navigable, nav_labels, frontier_mask, parameters = generate_frontier_candidates(
+            free, unknown, blocked, unknown_labels, unknown_areas, longest, args
+        )
+        robot_candidates = generate_robot_position_candidates(
+            navigable=navigable,
+            nav_labels=nav_labels,
+            frontier_mask=frontier_mask,
+            frontier_candidates=candidates,
+            desired_count=args.cases,
+            longest=longest,
+            args=args,
+            seed=args.seed,
+        )
+    except Exception as exc:
+        print(f"[错误] 地图分析失败：{exc}", file=sys.stderr)
+        return 2
+
+    total_steps = args.cases + 2
+    print_progress(run_started, 1, total_steps, "地图分析与安全前沿生成完成")
+
+    (output_dir / "prompt_templates_zh.txt").write_text(
+        "【阶段一：程序随机生成位置，Qwen 分配随机朝向】\n" + POSE_PROMPT_TEMPLATE_ZH +
+        "\n\n【阶段二：Qwen 选择灰白前沿目标】\n" + GOAL_PROMPT_TEMPLATE_ZH,
+        encoding="utf-8",
+    )
+
+    api_key = get_api_key(args.api_key)
+    if not args.dry_run and not api_key:
+        print(
+            "[错误] 未检测到 API Key。PowerShell 中先执行：\n"
+            '$env:DASHSCOPE_API_KEY="你的 API Key"',
+            file=sys.stderr,
+        )
+        return 2
+
+    # 确保本次运行结束后，目录中只保留本次新生成的候选图和最终结果图。
+    for old_png in output_dir.glob("*.png"):
+        try:
+            old_png.unlink()
+        except OSError as exc:
+            print(f"[错误] 无法清理旧图片 {old_png.name}：{exc}", file=sys.stderr)
+            return 2
+
+    pose_selection_image = build_pose_selection_image(
+        semantic, robot_candidates, args.model_image_side
+    )
+    pose_prompt = POSE_PROMPT_TEMPLATE_ZH.format(
+        case_count=args.cases,
+        nonce=random.Random(args.seed).randrange(100000, 999999),
+        position_ids=", ".join(str(c.position_id) for c in robot_candidates),
+    )
+    (output_dir / "pose_selection_prompt.txt").write_text(pose_prompt, encoding="utf-8")
+
+    pose_selection_source = ""
+    pose_selection_error = ""
+    pose_selection_raw = ""
+    pose_selection_latency_s: Optional[float] = None
+    if args.dry_run:
+        poses = fallback_select_poses(robot_candidates, args.cases, args.seed)
+        pose_selection_source = "python_dry_run"
+    else:
+        try:
+            pose_selection_raw, pose_selection_latency_s = call_qwen(
+                pose_selection_image, pose_prompt, api_key or "", args,
+                temperature=args.pose_temperature, max_tokens=max(280, args.cases * 70),
+            )
+            (output_dir / "pose_selection_raw.txt").write_text(
+                pose_selection_raw, encoding="utf-8"
+            )
+            poses = parse_qwen_poses(pose_selection_raw, robot_candidates, args.cases)
+            pose_selection_source = "qwen"
+        except Exception as exc:
+            pose_selection_error = str(exc)
+            poses = fallback_select_poses(robot_candidates, args.cases, args.seed)
+            pose_selection_source = "python_fallback_after_qwen_error"
+
+    if pose_selection_source == "qwen":
+        pose_message = f"Qwen 生成 5 个机器人朝向完成（API {pose_selection_latency_s:.3f}s）"
+    elif pose_selection_source == "python_dry_run":
+        pose_message = "DRY-RUN：Python 生成 5 个机器人朝向完成"
+    else:
+        pose_message = "Qwen 朝向调用失败，Python 回退生成朝向完成"
+    print_progress(run_started, 2, total_steps, pose_message)
+
+    results: List[CaseResult] = []
+
+    for case_id, pose in enumerate(poses, start=1):
+        prefix = f"case_{case_id:02d}"
+        try:
+            case_candidates, selection_meta = choose_case_candidates(
+                pose, nav_labels, candidates, longest, args
+            )
+        except Exception as exc:
+            print(f"[错误] case {case_id}: {exc}", file=sys.stderr)
+            continue
+
+        input_image, _ = build_case_image(
+            semantic, pose, case_candidates, args.model_image_side,
+            info_lines=[
+                f"Case {case_id:02d} INPUT",
+                f"robot=({pose.x},{pose.y}) yaw={pose.yaw_deg:.1f} deg",
+                f"safe_frontier_candidates={len(case_candidates)}",
+            ],
+        )
+        candidate_image_path = output_dir / f"{prefix}_candidates.png"
+        if not cv2.imwrite(str(candidate_image_path), input_image):
+            print(f"[错误] 无法保存候选图：{candidate_image_path}", file=sys.stderr)
+            continue
+
+        robot_u = pose.x / max(1, w - 1)
+        robot_v = pose.y / max(1, h - 1)
+        prompt = GOAL_PROMPT_TEMPLATE_ZH.format(
+            robot_u=robot_u,
+            robot_v=robot_v,
+            yaw_deg=pose.yaw_deg,
+            min_distance_ratio=args.min_goal_distance_ratio,
+            max_distance_ratio=args.max_goal_distance_ratio,
+            preferred_min_ratio=args.preferred_min_distance_ratio,
+            preferred_max_ratio=args.preferred_max_distance_ratio,
+            nearest_distance_ratio=selection_meta["nearest_distance_ratio"],
+            candidate_distance_limit_ratio=selection_meta["candidate_distance_limit_ratio"],
+            candidate_table=candidate_table_text(
+                pose, case_candidates, nav_labels, w, h, longest, args
+            ),
+        )
+        (output_dir / f"{prefix}_prompt.txt").write_text(prompt, encoding="utf-8")
+
+        result = CaseResult(
+            case_id=case_id,
+            robot_x=pose.x,
+            robot_y=pose.y,
+            robot_u=robot_u,
+            robot_v=robot_v,
+            yaw_deg=pose.yaw_deg,
+            candidate_count=len(case_candidates),
+            nearest_candidate_distance_ratio=selection_meta["nearest_distance_ratio"],
+            candidate_distance_limit_ratio=selection_meta["candidate_distance_limit_ratio"],
+        )
+
+        selected_local_id: int
+        if args.dry_run:
+            selected_local_id = deterministic_fallback(
+                pose, case_candidates, nav_labels, longest, args
+            )
+            result.selected_by = "python_dry_run"
+            result.confidence = 1.0
+            result.reason = "未调用 API；按可直达前方、左右侧、后方的顺序选择。"
+        else:
+            try:
+                raw, latency = call_qwen(input_image, prompt, api_key or "", args)
+                result.raw_response = raw
+                result.latency_s = round(latency, 3)
+                (output_dir / f"{prefix}_raw.txt").write_text(raw, encoding="utf-8")
+                parsed = extract_json(raw)
+                selected_local_id = int(parsed.get("candidate_id"))
+                if not 1 <= selected_local_id <= len(case_candidates):
+                    raise ValueError(
+                        f"candidate_id={selected_local_id} 不在 1~{len(case_candidates)} 范围内。"
+                    )
+                result.selected_by = "qwen"
+                if parsed.get("confidence") is not None:
+                    result.confidence = float(parsed["confidence"])
+                result.reason = str(parsed.get("reason", "")).strip()
+            except Exception as exc:
+                # 只在 Qwen 响应异常时回退；回退点仍来自同一组已严格验证候选。
+                selected_local_id = deterministic_fallback(
+                    pose, case_candidates, nav_labels, longest, args
+                )
+                result.selected_by = "python_fallback_after_qwen_error"
+                result.error = str(exc)
+                result.reason = "Qwen 响应异常，使用同一安全候选集中的确定性最优点。"
+
+        chosen = case_candidates[selected_local_id - 1]
+        result.selected_local_id = selected_local_id
+        result.selected_global_id = chosen.global_id
+        result.goal_x = chosen.x
+        result.goal_y = chosen.y
+        result.goal_u = chosen.x / max(1, w - 1)
+        result.goal_v = chosen.y / max(1, h - 1)
+        chosen_metrics = candidate_metrics(pose, chosen, longest)
+        result.goal_distance_ratio = chosen_metrics["distance_ratio"]
+        result.goal_heading_delta_deg = chosen_metrics["heading_delta_deg"]
+
+        result_image, _ = build_case_image(
+            semantic,
+            pose,
+            case_candidates,
+            args.model_image_side,
+            selected_local_id=selected_local_id,
+            show_all_candidates=False,
+            show_candidate_labels=False,
+            info_lines=None,
+        )
+        result_path = output_dir / f"{prefix}_result.png"
+        if not cv2.imwrite(str(result_path), result_image):
+            print(f"[错误] 无法保存最终结果图：{result_path}", file=sys.stderr)
+            continue
+        results.append(result)
+
+        if result.selected_by == "qwen":
+            case_message = f"Case {case_id:02d} Qwen 选点完成（API {result.latency_s:.3f}s）"
+        elif result.selected_by == "python_dry_run":
+            case_message = f"Case {case_id:02d} DRY-RUN 选点完成"
+        else:
+            case_message = f"Case {case_id:02d} Qwen 调用失败，Python 回退选点完成"
+        print_progress(run_started, case_id + 2, total_steps, case_message)
+
+    (output_dir / "report.json").write_text(
+        json.dumps(
+            {
+                "map": str(map_path),
+                "map_size": [w, h],
+                "unknown_value": unknown_value,
+                "safety_parameters": parameters,
+                "distance_parameters": {
+                    "min_goal_distance_ratio": args.min_goal_distance_ratio,
+                    "max_goal_distance_ratio": args.max_goal_distance_ratio,
+                    "preferred_min_distance_ratio": args.preferred_min_distance_ratio,
+                    "preferred_max_distance_ratio": args.preferred_max_distance_ratio,
+                    "near_candidate_slack_ratio": args.near_candidate_slack_ratio,
+                    "front_cone_deg": args.front_cone_deg,
+                },
+                "global_candidate_count": len(candidates),
+                "generated_robot_position_count": len(robot_candidates),
+                "pose_selection_source": pose_selection_source,
+                "pose_selection_latency_s": pose_selection_latency_s,
+                "pose_selection_error": pose_selection_error,
+                "pose_selection_raw": pose_selection_raw,
+                "results": [asdict(item) for item in results],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    total_elapsed = time.perf_counter() - run_started
+    if len(results) == args.cases:
+        print(f"[{format_elapsed(total_elapsed)}] 最终保存位置：{output_dir}", flush=True)
+    else:
+        print(
+            f"[{format_elapsed(total_elapsed)}] 最终保存位置：{output_dir} "
+            f"（成功生成 {len(results)}/{args.cases} 张）",
+            flush=True,
+        )
+    return 0 if len(results) == args.cases else 3
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

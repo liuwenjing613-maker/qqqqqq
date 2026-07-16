@@ -25,16 +25,15 @@ control:
   # Floor forward speed when POINT servo commands motion (intentional zeros stay 0).
   min_vx: 0.02
   max_wz: 0.06
-  # Cyan fine-steer gain. Must satisfy kp*center_deadband >= cmd_wz_deadband
-  # (0.04*0.20=0.008 > 0.006), otherwise cyan |wz| is zeroed and looks "stuck".
-  # Do NOT floor tiny wz up to cmd_wz_deadband — that overshoots like bang-bang.
-  kp_wz: 0.04
+  # Cyan fine-steer gain (user-tuned). Keep at 0.01; do not raise to "beat"
+  # cmd_wz_deadband — cyan no longer applies that deadband (see below).
+  kp_wz: 0.01
   # Orange rotate-only band (|error|>=turn_only_threshold): fixed wz, not kp*error.
   rotate_only_wz: 0.06
   angular_sign: -1.0
   center_deadband: 0.20
   turn_only_threshold: 0.7
-  # Zero out |wz| below this (chassis ignore band). Not a minimum floor.
+  # Drops near-zero rotate-only cmds only. Cyan uses center_deadband for zeroing.
   cmd_wz_deadband: 0.006
 
   # c is parsed and published but deliberately unused in V3.

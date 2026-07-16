@@ -31,6 +31,10 @@ if [ -f "${HOME}/ydlidar_ws/install/setup.bash" ]; then
 fi
 set -u
 
+# shellcheck source=scripts/lib/ros_dds_env.sh
+source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
+prepare_ros_dds_env
+
 log() {
   echo "[$(date +%H:%M:%S)] $*"
 }

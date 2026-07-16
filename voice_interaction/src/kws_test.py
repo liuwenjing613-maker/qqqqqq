@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import sherpa_onnx
 
+from qwen_translate_client import translate_instruction
 from wake_actions import handle_wake
 
 
@@ -153,7 +154,26 @@ def main() -> int:
             listen_until_wake(keyword_spotter, args.device)
             text = handle_wake()
             if text:
-                print(f"[CONTROL PANEL] 用户语音：{text}", flush=True)
+                print(f"[CONTROL PANEL] 用户语音（原文）：{text}", flush=True)
+                print(
+                    "[TRANSLATE] 正在转换为英文 instruction...",
+                    flush=True,
+                )
+                try:
+                    instruction = translate_instruction(text)
+                except Exception as exc:
+                    print(f"[TRANSLATE][ERROR] {exc}", flush=True)
+                    instruction = None
+                if instruction is None:
+                    print(
+                        "[TRANSLATE] 未得到有效英文结果",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"[INSTRUCTION] 英文：{instruction}",
+                        flush=True,
+                    )
             else:
                 print(
                     "[CONTROL PANEL] 本轮没有得到有效文字。",

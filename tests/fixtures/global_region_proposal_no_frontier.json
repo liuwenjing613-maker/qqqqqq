@@ -1,0 +1,23 @@
+{
+  "snapshot_id": "RS_TEST_GLOBAL_0001",
+  "visual_context_id": "VC_TEST_0001",
+  "selection_strategy": "GLOBAL_REGION_PROPOSAL",
+  "task_interpretation": "地图中心无前沿",
+  "ranked_region_proposals": [
+    {
+      "proposal_id": "GP_1",
+      "rank": 1,
+      "region_type": "FRONTIER_EXPLORATION_REGION",
+      "map_image_center": {"u": 0.50, "v": 0.50},
+      "map_image_bbox": {"u_min": 0.42, "v_min": 0.42, "u_max": 0.58, "v_max": 0.58},
+      "direction_hint": "FRONT",
+      "supporting_view_ids": ["VIEW_000"],
+      "confidence": 0.40,
+      "reason_code": "NO_FRONTIER",
+      "map_evidence": [],
+      "visual_evidence": [],
+      "risk_flags": []
+    }
+  ],
+  "fallback_recommendation": "USE_CANDIDATE_RANKING"
+}

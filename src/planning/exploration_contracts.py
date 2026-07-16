@@ -238,6 +238,31 @@ def build_region_geometry_fingerprint_from_entry(
     )
 
 
+def build_map_render_metadata_fingerprint(
+    metadata: Mapping[str, Any],
+    *,
+    cfg: Optional[Mapping[str, Any]] = None,
+) -> str:
+    panel = metadata.get("map_panel", {})
+    grid = metadata.get("map_grid", {})
+    rt = metadata.get("render_transform", {})
+    payload = "|".join(
+        [
+            str(metadata.get("snapshot_id", "")),
+            str(metadata.get("coordinate_space", "")),
+            str(panel.get("content_x_min_px", "")),
+            str(panel.get("content_y_min_px", "")),
+            str(panel.get("content_x_max_px", "")),
+            str(panel.get("content_y_max_px", "")),
+            str(grid.get("width", "")),
+            str(grid.get("height", "")),
+            str(grid.get("resolution", "")),
+            str(rt.get("grid_y_flipped", "")),
+        ]
+    )
+    return _sha256_hex(payload)
+
+
 def contract_fields(
     *,
     contract_version: str = EXPLORATION_CONTRACT_VERSION,

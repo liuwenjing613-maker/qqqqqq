@@ -946,3 +946,311 @@ def input_to_dict(inp: RegionSelectionInput) -> Dict[str, Any]:
 
 def labels_from_input(inp: RegionSelectionInput) -> Set[str]:
     return {r.label for r in inp.regions}
+
+
+# ---------------------------------------------------------------------------
+# Strategy dispatcher: CANDIDATE_RANKING vs GLOBAL_REGION_PROPOSAL
+# ---------------------------------------------------------------------------
+
+from src.vlm.qwen_global_region_selector_core import (  # noqa: E402
+    STRATEGY_CANDIDATE_RANKING,
+    STRATEGY_GLOBAL_REGION_PROPOSAL,
+    build_global_prompt_context_from_snapshot,
+    build_global_region_proposal_prompt,
+    global_response_to_dict,
+    validate_global_region_proposal_response,
+    validate_region_selection_config,
+)
+from src.planning.global_region_proposal_validator import (  # noqa: E402
+    REGION_SOURCE_ALGORITHM,
+    REGION_SOURCE_QWEN_GLOBAL,
+    build_region_from_global_proposal,
+    build_selected_region_geometry_from_global,
+    validate_global_region_proposal,
+)
+
+
+def select_from_algorithm_candidates(
+    inp: RegionSelectionInput,
+    raw_response: str,
+    cfg: Dict[str, Any],
+    *,
+    visual_mode: bool = False,
+) -> Dict[str, Any]:
+    """Existing candidate ranking path — unchanged fusion semantics."""
+    valid_labels = labels_from_input(inp)
+    geo_scores = {r.label: r.geo_score for r in inp.regions}
+    region_metrics = {
+        r.label: {
+            "trajectory_novelty_score": r.trajectory_novelty_score,
+            "trajectory_density_score": r.trajectory_revisit_penalty,
+        }
+        for r in inp.regions
+    }
+    validation = validate_qwen_decision(
+        raw_response,
+        inp.snapshot_id,
+        valid_labels,
+        geo_scores,
+        region_metrics,
+        expected_visual_context_id=inp.visual_context_id,
+        visual_context_manifest=inp.visual_context_manifest,
+        region_view_mapping=inp.region_view_mapping,
+        visual_mode=visual_mode,
+    )
+    fusion: Dict[str, Any] = {}
+    decision = decision_from_validation(validation, inp.snapshot_id)
+    if validation.decision_valid and validation.parsed:
+        fusion = fuse_geometric_and_qwen_ranking(
+            inp.regions,
+            validation.parsed,
+            cfg,
+            has_visual_evidence=visual_mode,
+        )
+        if fusion.get("algorithm_final_region"):
+            decision.selected_region = str(fusion["algorithm_final_region"])
+    return {
+        "configured_strategy": STRATEGY_CANDIDATE_RANKING,
+        "effective_strategy": STRATEGY_CANDIDATE_RANKING,
+        "fallback_used": False,
+        "validation": validation,
+        "decision": decision,
+        "fusion": fusion,
+        "region_source": REGION_SOURCE_ALGORITHM,
+        "proposal_validated": False,
+        "path_checked": False,
+        "reachable": None,
+        "global_proposal_failures": [],
+    }
+
+
+def propose_and_validate_global_region(
+    raw_snapshot: Dict[str, Any],
+    raw_response: str,
+    cfg: Dict[str, Any],
+    *,
+    target_instruction: str,
+    map_data: Any,
+    analysis_result: Any,
+    map_meta: Any,
+    map_render_metadata: Dict[str, Any],
+    visual_context_id: str = "",
+    valid_view_ids: Optional[Set[str]] = None,
+    history_blacklist: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Global proposal path: validate Qwen JSON then map/frontier validation."""
+    import numpy as np
+
+    gcfg = cfg.get("global_region_proposal", {})
+    view_ids = valid_view_ids or set()
+    ctx = build_global_prompt_context_from_snapshot(
+        raw_snapshot,
+        target_instruction=target_instruction,
+        visual_context_id=visual_context_id,
+        map_render_metadata=map_render_metadata,
+    )
+    json_validation = validate_global_region_proposal_response(
+        raw_response,
+        expected_snapshot_id=str(raw_snapshot.get("snapshot_id", "")),
+        expected_visual_context_id=visual_context_id,
+        valid_view_ids=view_ids,
+        cfg=cfg,
+    )
+
+    failures: List[Dict[str, Any]] = []
+    selected_entry: Optional[Dict[str, Any]] = None
+    selected_geometry: Optional[Dict[str, Any]] = None
+    effective = STRATEGY_GLOBAL_REGION_PROPOSAL
+    fallback_used = False
+    fallback_reason = ""
+
+    data = np.array(map_data, dtype=np.int16).reshape(map_meta.height, map_meta.width)
+
+    if json_validation.valid and json_validation.response:
+        try_next = bool(gcfg.get("try_next_proposal_on_validation_failure", True))
+        for proposal in json_validation.response.ranked_region_proposals:
+            outcome = validate_global_region_proposal(
+                proposal,
+                data=data,
+                meta=map_meta,
+                metadata=map_render_metadata,
+                result=analysis_result,
+                cfg=cfg,
+                history_blacklist=history_blacklist,
+            )
+            record = {
+                "proposal_id": proposal.proposal_id,
+                "rank": proposal.rank,
+                "center_u": proposal.map_image_center_u,
+                "center_v": proposal.map_image_center_v,
+                "validation_passed": outcome.validation_passed,
+                "rejection_reasons": list(outcome.rejection_reasons),
+                "nearest_frontier_distance_m": outcome.nearest_frontier_distance_m,
+                "frontier_cell_count": outcome.statistics.frontier_cell_count if outcome.statistics else 0,
+            }
+            if outcome.validation_passed:
+                proposal.proposal_validated = True
+                selected_entry = build_region_from_global_proposal(proposal, outcome, map_meta)
+                selected_geometry = build_selected_region_geometry_from_global(
+                    selected_entry,
+                    str(raw_snapshot.get("snapshot_id", "")),
+                    contract_cfg=cfg.get("data_contract"),
+                )
+                break
+            failures.append(record)
+            if not try_next:
+                break
+
+    if selected_entry is None:
+        if bool(gcfg.get("fallback_to_candidate_ranking", True)):
+            effective = STRATEGY_CANDIDATE_RANKING
+            fallback_used = True
+            fallback_reason = "GLOBAL_PROPOSAL_ALL_REJECTED"
+        else:
+            fallback_reason = "GLOBAL_PROPOSAL_ALL_REJECTED"
+
+    return {
+        "configured_strategy": STRATEGY_GLOBAL_REGION_PROPOSAL,
+        "effective_strategy": effective,
+        "fallback_used": fallback_used,
+        "fallback_reason": fallback_reason,
+        "json_validation": json_validation,
+        "selected_region_entry": selected_entry,
+        "selected_region_geometry": selected_geometry,
+        "region_source": REGION_SOURCE_QWEN_GLOBAL if selected_entry else "",
+        "proposal_validated": bool(selected_entry),
+        "path_checked": False,
+        "reachable": None,
+        "global_proposal_failures": failures,
+        "prompt_context": ctx,
+    }
+
+
+def select_exploration_region(
+    strategy: str,
+    *,
+    inp: RegionSelectionInput,
+    raw_snapshot: Dict[str, Any],
+    raw_response: str,
+    cfg: Dict[str, Any],
+    visual_mode: bool = False,
+    map_data: Any = None,
+    analysis_result: Any = None,
+    map_meta: Any = None,
+    map_render_metadata: Optional[Dict[str, Any]] = None,
+    valid_view_ids: Optional[Set[str]] = None,
+    history_blacklist: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Unified dispatcher for region selection strategies."""
+    config_errors = validate_region_selection_config(cfg)
+    if config_errors and bool(cfg.get("region_selection", {}).get("strict_strategy_validation", True)):
+        raise ValueError("; ".join(config_errors))
+
+    if strategy == STRATEGY_CANDIDATE_RANKING:
+        return select_from_algorithm_candidates(inp, raw_response, cfg, visual_mode=visual_mode)
+
+    if strategy == STRATEGY_GLOBAL_REGION_PROPOSAL:
+        if map_data is None or analysis_result is None or map_meta is None:
+            raise ValueError("GLOBAL_REGION_PROPOSAL requires map_data, analysis_result, map_meta")
+        result = propose_and_validate_global_region(
+            raw_snapshot,
+            raw_response,
+            cfg,
+            target_instruction=inp.target_instruction,
+            map_data=map_data,
+            analysis_result=analysis_result,
+            map_meta=map_meta,
+            map_render_metadata=map_render_metadata or raw_snapshot.get("map_render_metadata", {}),
+            visual_context_id=inp.visual_context_id,
+            valid_view_ids=valid_view_ids,
+            history_blacklist=history_blacklist,
+        )
+        if result["fallback_used"] and result["effective_strategy"] == STRATEGY_CANDIDATE_RANKING:
+            candidate = select_from_algorithm_candidates(inp, raw_response, cfg, visual_mode=visual_mode)
+            candidate["configured_strategy"] = STRATEGY_GLOBAL_REGION_PROPOSAL
+            candidate["effective_strategy"] = STRATEGY_CANDIDATE_RANKING
+            candidate["fallback_used"] = True
+            candidate["fallback_reason"] = result.get("fallback_reason", "GLOBAL_PROPOSAL_ALL_REJECTED")
+            candidate["global_proposal_failures"] = result.get("global_proposal_failures", [])
+            return candidate
+        return result
+
+    raise ValueError(f"unsupported region_selection.strategy: {strategy}")
+
+
+def build_prompt_for_strategy(
+    strategy: str,
+    inp: RegionSelectionInput,
+    cfg: Dict[str, Any],
+    raw_snapshot: Optional[Dict[str, Any]] = None,
+    *,
+    map_render_metadata: Optional[Dict[str, Any]] = None,
+    visual_context_id: str = "",
+    view_ids: Optional[Sequence[str]] = None,
+) -> str:
+    if strategy == STRATEGY_GLOBAL_REGION_PROPOSAL:
+        ctx = build_global_prompt_context_from_snapshot(
+            raw_snapshot or {},
+            target_instruction=inp.target_instruction,
+            visual_context_id=visual_context_id or inp.visual_context_id,
+            map_render_metadata=map_render_metadata,
+            decision_board_file=inp.decision_board_file,
+            view_ids=list(view_ids or []),
+        )
+        return build_global_region_proposal_prompt(ctx, cfg)
+    return build_region_selection_prompt(inp)
+
+
+def unified_decision_dict(
+    pipeline_result: Dict[str, Any],
+    *,
+    snapshot_id: str,
+    visual_context_id: str = "",
+) -> Dict[str, Any]:
+    """Serialize unified decision output for logging/ROS."""
+    if pipeline_result.get("effective_strategy") == STRATEGY_CANDIDATE_RANKING:
+        decision = pipeline_result.get("decision")
+        fusion = pipeline_result.get("fusion") or {}
+        validation = pipeline_result.get("validation")
+        return {
+            "configured_strategy": pipeline_result.get("configured_strategy", STRATEGY_CANDIDATE_RANKING),
+            "effective_strategy": STRATEGY_CANDIDATE_RANKING,
+            "fallback_used": bool(pipeline_result.get("fallback_used")),
+            "fallback_reason": pipeline_result.get("fallback_reason", ""),
+            "snapshot_id": snapshot_id,
+            "visual_context_id": visual_context_id,
+            "algorithm_final_region": fusion.get("algorithm_final_region"),
+            "internal_region_id": fusion.get("algorithm_final_region"),
+            "region_source": REGION_SOURCE_ALGORITHM,
+            "proposal_validated": False,
+            "decision_revalidation_passed": True,
+            "path_checked": False,
+            "reachable": None,
+            "global_proposal_failures": pipeline_result.get("global_proposal_failures", []),
+            "decision_valid": validation.decision_valid if validation else False,
+            "validation_errors": validation.errors if validation else [],
+            "fusion": fusion,
+        }
+
+    entry = pipeline_result.get("selected_region_entry") or {}
+    return {
+        "configured_strategy": STRATEGY_GLOBAL_REGION_PROPOSAL,
+        "effective_strategy": STRATEGY_GLOBAL_REGION_PROPOSAL,
+        "fallback_used": False,
+        "snapshot_id": snapshot_id,
+        "visual_context_id": visual_context_id,
+        "algorithm_final_region": entry.get("label"),
+        "internal_region_id": entry.get("internal_region_id"),
+        "track_id": entry.get("track_id", ""),
+        "region_source": REGION_SOURCE_QWEN_GLOBAL,
+        "qwen_global_proposal_id": entry.get("qwen_proposal_id", ""),
+        "qwen_global_proposal_rank": entry.get("qwen_proposal_rank", 0),
+        "proposal_validated": True,
+        "proposal_validation_passed": True,
+        "proposal_validation_errors": [],
+        "decision_revalidation_passed": True,
+        "path_checked": False,
+        "reachable": None,
+        "global_proposal_failures": pipeline_result.get("global_proposal_failures", []),
+    }
+

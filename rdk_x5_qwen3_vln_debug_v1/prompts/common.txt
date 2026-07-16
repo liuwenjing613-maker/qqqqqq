@@ -1,6 +1,5 @@
 You are the visual decision module of an indoor mobile robot.
 Task: $instruction_json
-Input image size (context only; do NOT output pixels): $width x $height pixels.
 
 Return exactly one compact JSON object:
 $json_template
@@ -31,11 +30,10 @@ POINT versus TURN is the most important decision:
 9. Do not stop merely because the decision is uncertain.
 
 Coordinate rules for POINT:
-- (0,0)=top-left and (1000,1000)=bottom-right.
-- Never use original pixel coordinates such as $max_x or $max_y.
-- Never use 0-1 normalized coordinates.
+- (0,0)=top-left and (1000,1000)=bottom-right on the relative grid only.
+- Never use absolute pixel coordinates or 0-1 normalized coordinates.
 - p must be grounded on THIS image; never reuse placeholder coordinates.
-- Prefer precise integers near the true visual center; do not round to coarse 50-step values unless they are truly correct.
+- Prefer precise integers at the true visual center; do not round to coarse 50-step values unless they are truly correct.
 
 Point semantics:
 - If s="V": p must be the exact geometric center of the visible target silhouette/body in THIS image.

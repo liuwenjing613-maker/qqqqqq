@@ -14,3 +14,8 @@ prepare_ros_dds_env() {
   export_ros_dds_env
   cleanup_ros2_fastrtps_shm
 }
+
+# 附着到已运行 ROS 栈时只设 DDS 变量，禁止清理 /dev/shm（会破坏 joy/teleop/bridge 通信）
+attach_ros_dds_env() {
+  export_ros_dds_env
+}
