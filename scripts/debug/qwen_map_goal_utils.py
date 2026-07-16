@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -17,7 +18,30 @@ import yaml
 # PGM 单通道编码：已扫过走廊（仅写在原 free 格；Nav2 用干净 PGM 不含此值）
 VISITED_PGM_VALUE = 180
 VISITED_BGR: Tuple[int, int, int] = (120, 180, 200)
+# 实时 /map 叠层编码（Foxglove 用；仅 free 格）
+VISITED_OCCUPANCY_VALUE = 50
+OCCUPIED_VIZ_VALUE = 99
 FREE_THRESHOLD = 245
+DEFAULT_QWEN_REGION_CONFIG = (
+    Path(__file__).resolve().parents[1] / "configs" / "qwen_region_explore_debug.yaml"
+)
+
+
+def load_visited_corridor_radius_m(
+    config_path: Optional[Path] = None,
+    *,
+    default: float = 0.35,
+) -> float:
+    """走廊半径：环境变量 VISITED_CORRIDOR_RADIUS_M 优先，否则读 debug yaml。"""
+    env = os.environ.get("VISITED_CORRIDOR_RADIUS_M", "").strip()
+    if env:
+        return float(env)
+    path = config_path or DEFAULT_QWEN_REGION_CONFIG
+    if not path.is_file():
+        return float(default)
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    traj = data.get("trajectory") or {}
+    return float(traj.get("visited_corridor_radius_m", default))
 
 
 @dataclass(frozen=True)
@@ -223,6 +247,40 @@ def distance_to_visited_px(
 def paint_visited_on_bgr(bgr: np.ndarray, visited_mask: np.ndarray) -> None:
     """在 BGR 语义图上绘制浅绿已扫区域（原地修改）。"""
     bgr[visited_mask] = VISITED_BGR
+
+
+def write_foxglove_candidates_json(
+    path: Path,
+    meta: MapYamlMeta,
+    candidates: Sequence[Any],
+    *,
+    selected_local_id: Optional[int] = None,
+) -> None:
+    """写入 Foxglove 候选点标记（Qwen 前展示全部，选定后仅保留 selected）。"""
+    items: List[Dict[str, Any]] = []
+    for local_id, candidate in enumerate(candidates, start=1):
+        px = int(getattr(candidate, "x"))
+        py = int(getattr(candidate, "y"))
+        mx, my = pixel_to_map_xy(px, py, meta)
+        items.append(
+            {
+                "local_id": local_id,
+                "global_id": int(getattr(candidate, "global_id", local_id)),
+                "map_x": mx,
+                "map_y": my,
+                "pixel_x": px,
+                "pixel_y": py,
+            }
+        )
+    payload: Dict[str, Any] = {
+        "schema_version": "qwen_session_candidates_v1",
+        "phase": "selected" if selected_local_id is not None else "pending",
+        "selected_local_id": selected_local_id,
+        "candidates": items,
+    }
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def resolve_qwen_map_yaml(nav_map_yaml: Path) -> Path:

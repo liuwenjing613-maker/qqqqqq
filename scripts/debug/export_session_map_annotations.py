@@ -31,6 +31,7 @@ from qwen_map_goal_utils import (  # noqa: E402
     MapYamlMeta,
     build_free_mask_from_gray,
     load_map_yaml_meta,
+    load_visited_corridor_radius_m,
     paint_visited_on_bgr,
     world_to_pixel,
 )
@@ -139,7 +140,18 @@ def main() -> int:
     parser.add_argument("--output-png", required=True)
     parser.add_argument("--output-pose-json", required=True)
     parser.add_argument("--copy-live-annotated", default="")
+    parser.add_argument(
+        "--corridor-radius-m",
+        type=float,
+        default=None,
+        help="已扫走廊半径（米）；默认读 configs/qwen_region_explore_debug.yaml",
+    )
     live = parser.parse_args()
+    corridor_radius_m = (
+        float(live.corridor_radius_m)
+        if live.corridor_radius_m is not None
+        else load_visited_corridor_radius_m()
+    )
 
     map_yaml = Path(live.map_yaml).expanduser().resolve()
     pose_json = Path(live.pose_json).expanduser().resolve()
@@ -169,7 +181,7 @@ def main() -> int:
 
     bgr = gray_to_bgr(gray)
     vertices = load_trajectory_vertices(traj_json)
-    draw_visited_corridor(bgr, gray, meta, vertices)
+    draw_visited_corridor(bgr, gray, meta, vertices, corridor_radius_m=corridor_radius_m)
     if len(vertices) >= 2:
         pts = []
         for vx, vy in vertices:
@@ -198,6 +210,7 @@ def main() -> int:
         "pose_json": str(pose_json),
         "trajectory_json": str(traj_json) if traj_json.is_file() else None,
         "trajectory_vertex_count": len(vertices),
+        "corridor_radius_m": corridor_radius_m,
         "robot_map_pose": {"x": rx, "y": ry, "yaw_rad": yaw_rad},
         "robot_image_pose": {"u": u, "v": v, "yaw_deg": yaw_deg},
         "annotated_map_png": str(out_png),

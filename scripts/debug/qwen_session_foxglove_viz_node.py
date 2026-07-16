@@ -54,6 +54,7 @@ class QwenSessionFoxgloveVizNode(Node):
         self.declare_parameter("map_frame", "map")
         self.declare_parameter("robot_frame", "base_link")
         self.declare_parameter("goal_json_path", "")
+        self.declare_parameter("candidates_json_path", "")
         self.declare_parameter("publish_rate_hz", 2.0)
         self.declare_parameter("robot_arrow_length_m", 0.55)
         self.declare_parameter("robot_arrow_shaft_diameter_m", 0.10)
@@ -62,25 +63,36 @@ class QwenSessionFoxgloveVizNode(Node):
         self._map_frame = str(self.get_parameter("map_frame").value)
         self._robot_frame = str(self.get_parameter("robot_frame").value)
         self._goal_json_path = Path(str(self.get_parameter("goal_json_path").value)).expanduser()
+        candidates_path = str(self.get_parameter("candidates_json_path").value).strip()
+        if candidates_path:
+            self._candidates_json_path = Path(candidates_path).expanduser()
+        else:
+            self._candidates_json_path = self._goal_json_path.parent / "live_candidates_foxglove.json"
         self._robot_arrow_len = float(self.get_parameter("robot_arrow_length_m").value)
         self._robot_arrow_shaft = float(self.get_parameter("robot_arrow_shaft_diameter_m").value)
         self._goal_sphere = float(self.get_parameter("goal_sphere_diameter_m").value)
 
         self._goal_payload: Optional[Dict[str, Any]] = None
         self._goal_mtime: float = 0.0
+        self._candidates_payload: Optional[Dict[str, Any]] = None
+        self._candidates_mtime: float = 0.0
 
         self._tf_buffer = Buffer(cache_time=Duration(seconds=10.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
         self._pub_robot = self.create_publisher(MarkerArray, "/qwen_session/robot_pose_markers", 10)
         self._pub_goal = self.create_publisher(MarkerArray, "/qwen_session/qwen_goal_markers", 10)
+        self._pub_candidates = self.create_publisher(
+            MarkerArray, "/qwen_session/candidate_markers", 10
+        )
         self._pub_goal_pose = self.create_publisher(PoseStamped, "/qwen_session/qwen_goal_pose", 10)
 
         rate_hz = max(0.5, float(self.get_parameter("publish_rate_hz").value))
         self.create_timer(1.0 / rate_hz, self._on_timer)
         self.get_logger().info(
             f"qwen_session_foxglove_viz started map={self._map_frame} "
-            f"robot={self._robot_frame} goal_json={self._goal_json_path}"
+            f"robot={self._robot_frame} goal_json={self._goal_json_path} "
+            f"candidates_json={self._candidates_json_path}"
         )
 
     def _stamp(self):
@@ -195,6 +207,88 @@ class QwenSessionFoxgloveVizNode(Node):
 
         self._pub_robot.publish(arr)
 
+    def _maybe_reload_candidates(self) -> None:
+        path = self._candidates_json_path
+        if not path.is_file():
+            return
+        mtime = path.stat().st_mtime
+        if mtime <= self._candidates_mtime and self._candidates_payload is not None:
+            return
+        payload = load_goal_payload(path)
+        if payload is None:
+            return
+        self._candidates_payload = payload
+        self._candidates_mtime = mtime
+        phase = payload.get("phase", "pending")
+        selected = payload.get("selected_local_id")
+        count = len(payload.get("candidates") or [])
+        self.get_logger().info(
+            f"loaded candidates json phase={phase} selected={selected} count={count}"
+        )
+
+    def _publish_candidate_markers(self) -> None:
+        payload = self._candidates_payload
+        stamp = self._stamp()
+        arr = MarkerArray()
+        arr.markers.append(self._delete_all("qwen_candidates", 0))
+
+        if not payload:
+            self._pub_candidates.publish(arr)
+            return
+
+        candidates = payload.get("candidates") or []
+        if not candidates:
+            self._pub_candidates.publish(arr)
+            return
+
+        selected_local_id = payload.get("selected_local_id")
+        phase = str(payload.get("phase", "pending"))
+        show_only_selected = phase == "selected" and selected_local_id is not None
+
+        for item in candidates:
+            local_id = int(item.get("local_id", 0))
+            if show_only_selected and local_id != int(selected_local_id):
+                continue
+            gx = float(item.get("map_x", 0.0))
+            gy = float(item.get("map_y", 0.0))
+            is_selected = show_only_selected and local_id == int(selected_local_id)
+
+            sphere = Marker()
+            sphere.header.frame_id = self._map_frame
+            sphere.header.stamp = stamp
+            sphere.ns = "qwen_candidates"
+            sphere.id = local_id
+            sphere.type = Marker.SPHERE
+            sphere.action = Marker.ADD
+            sphere.pose.position.x = gx
+            sphere.pose.position.y = gy
+            sphere.pose.position.z = 0.16
+            diameter = self._goal_sphere * (1.15 if is_selected else 0.72)
+            sphere.scale.x = sphere.scale.y = sphere.scale.z = diameter
+            if is_selected:
+                sphere.color = ColorRGBA(r=1.0, g=0.15, b=0.15, a=0.98)
+            else:
+                sphere.color = ColorRGBA(r=0.15, g=0.85, b=0.25, a=0.88)
+            arr.markers.append(sphere)
+
+            if not is_selected:
+                label = Marker()
+                label.header.frame_id = self._map_frame
+                label.header.stamp = stamp
+                label.ns = "qwen_candidates"
+                label.id = 1000 + local_id
+                label.type = Marker.TEXT_VIEW_FACING
+                label.action = Marker.ADD
+                label.pose.position.x = gx
+                label.pose.position.y = gy
+                label.pose.position.z = 0.42
+                label.scale.z = 0.16
+                label.color = ColorRGBA(r=0.85, g=1.0, b=0.85, a=1.0)
+                label.text = f"C{local_id}"
+                arr.markers.append(label)
+
+        self._pub_candidates.publish(arr)
+
     def _publish_goal_markers(self) -> None:
         payload = self._goal_payload
         stamp = self._stamp()
@@ -293,9 +387,11 @@ class QwenSessionFoxgloveVizNode(Node):
 
     def _on_timer(self) -> None:
         self._maybe_reload_goal()
+        self._maybe_reload_candidates()
         robot = self._lookup_robot_xy_yaw()
         if robot is not None:
             self._publish_robot_markers(*robot)
+        self._publish_candidate_markers()
         self._publish_goal_markers()
 
 

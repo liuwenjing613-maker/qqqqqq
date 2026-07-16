@@ -1,0 +1,75 @@
+# V1 first-person + live-map Qwen/A* online fusion.
+# This is intentionally a separate overlay.  It does not overwrite the proven
+# qwen3_vln_servo.yaml and can be switched off without changing the V1 path.
+online_map_plan_fusion:
+  enabled: true
+
+  integration:
+    # Phase 1 intentionally does not use trajectory/semantic memory yet.
+    use_memory: false
+    default_task: "优先选择最有利于继续寻找目标、几何可达且未明显重复的候选方向。"
+
+    # false is compatible with the teammate's current basic planner.  Set true
+    # after its completion status includes final_orientation_done=true or uses
+    # status=ARRIVED_ALIGNED.
+    require_final_orientation: false
+
+    # ACK immediately after this bridge validates and forwards the request.
+    # The intervention manager switches to MAP, while the bridge keeps sending
+    # zero /cmd_vel_map until the backend reports an active state and publishes
+    # a fresh command.
+    auto_ack_to_intervention: true
+
+  topics:
+    map: /map
+    odom: /odom
+    scan: /scan_filtered
+
+    # Existing tested intervention manager contract.
+    intervention_request: /third_view/intervention/request
+    intervention_cancel: /third_view/intervention/cancel
+    intervention_status: /third_view/intervention/status
+    intervention_navigation_status: /third_view/navigation_status
+    intervention_candidate_summary: /third_view/candidate_summary
+    map_cmd_output: /cmd_vel_map
+
+    # Teammate online map -> candidates -> Qwen -> planner contract.
+    # Change only these names if the teammate module already uses other topics.
+    backend_request: /map_qwen_plan/request
+    backend_cancel: /map_qwen_plan/cancel
+    backend_status: /map_qwen_plan/status
+    backend_candidate_summary: /map_qwen_plan/candidate_summary
+    backend_cmd: /map_qwen_plan/cmd_vel
+    backend_candidate_probe: /map_qwen_plan/candidate_probe
+    bridge_status: /map_qwen_plan/bridge_status
+
+  candidate_probe:
+    # Cheap geometric candidate extraction runs while EGO owns motion.  It must
+    # not call Qwen and must not start navigation.  This supplies the candidate
+    # summary needed for BRANCH_AMBIGUOUS before a transfer is requested.
+    enabled: true
+    interval_sec: 1.0
+
+  timing:
+    output_rate_hz: 20.0
+    # Time for the backend to produce the first matching status after a request.
+    backend_request_timeout_sec: 8.0
+    # Active navigation commands also count as heartbeat.
+    backend_heartbeat_timeout_sec: 8.0
+    # Matches the existing intervention mux map_timeout_sec=0.45.
+    backend_cmd_timeout_sec: 0.40
+    cancel_hold_sec: 0.40
+
+  safety:
+    # First integration uses the same conservative speed scale as current V1.
+    max_linear_x: 0.06
+    max_angular_z: 0.06
+
+  startup:
+    # Recommended default: attach to already running live mapping and teammate
+    # backend.  Commands are optional and disabled unless explicitly requested.
+    start_map_stack: false
+    map_stack_command: ""
+    start_backend: false
+    backend_command: ""
+    startup_wait_sec: 1.0

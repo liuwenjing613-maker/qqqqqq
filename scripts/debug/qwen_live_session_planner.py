@@ -38,6 +38,7 @@ from qwen_map_goal_utils import (  # noqa: E402
     resolve_qwen_map_yaml,
     visited_mask_from_gray,
     world_to_pixel,
+    write_foxglove_candidates_json,
     write_navigation_goal_proposal,
 )
 
@@ -383,6 +384,14 @@ def main() -> int:
         blocked=blocked,
     )
 
+    foxglove_candidates_json = nav_goal_json.parent / "live_candidates_foxglove.json"
+    write_foxglove_candidates_json(
+        foxglove_candidates_json,
+        meta,
+        case_candidates,
+        selected_local_id=None,
+    )
+
     input_image, _ = v6.build_case_image(
         semantic,
         pose,
@@ -458,6 +467,12 @@ def main() -> int:
             selected_by = "python_fallback_after_qwen_error"
 
     chosen = case_candidates[selected_local_id - 1]
+    write_foxglove_candidates_json(
+        foxglove_candidates_json,
+        meta,
+        case_candidates,
+        selected_local_id=selected_local_id,
+    )
     result_image, _ = v6.build_case_image(
         semantic,
         pose,

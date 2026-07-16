@@ -234,6 +234,42 @@ def classify_map_cells(
     return cats.reshape(data.shape), counts
 
 
+VISITED_OCCUPANCY_VALUE = 40
+OCCUPIED_VIZ_VALUE = 99
+
+
+def merge_map_with_visited_corridor(
+    map_data: np.ndarray,
+    visited_flat: Sequence[int],
+    *,
+    unknown_value: int = -1,
+    free_max: int = 20,
+    occupied_min: int = 65,
+    visited_occ_value: int = VISITED_OCCUPANCY_VALUE,
+    occupied_viz_value: int = OCCUPIED_VIZ_VALUE,
+) -> List[int]:
+    """Write visited corridor into map grid cells (free cells only)."""
+    cats, _ = classify_map_cells(map_data, unknown_value, free_max, occupied_min)
+    flat = map_data.reshape(-1)
+    cat_flat = cats.reshape(-1)
+    visited = list(visited_flat)
+    if len(visited) != flat.size:
+        raise ValueError(f"visited_flat length {len(visited)} != map cells {flat.size}")
+    out: List[int] = []
+    for i, _raw in enumerate(flat):
+        if visited[i] >= 100 and cat_flat[i] == 0:
+            out.append(int(visited_occ_value))
+        elif cat_flat[i] == 0:
+            out.append(0)
+        elif cat_flat[i] == 1:
+            out.append(int(occupied_viz_value))
+        elif cat_flat[i] == 2:
+            out.append(int(unknown_value))
+        else:
+            out.append(int(flat[i]))
+    return out
+
+
 def world_to_grid(
     x: float,
     y: float,
@@ -1218,10 +1254,13 @@ def render_annotated_map(
     visited_data = overlay.get("visited_area_data")
     if visited_data is not None and len(visited_data) == h * w:
         for idx, val in enumerate(visited_data):
-            if val >= 100:
-                r = idx // w
-                c = idx % w
-                img[r, c] = (200, 180, 120)
+            if val < 100:
+                continue
+            r = idx // w
+            c = idx % w
+            if cats[r, c] != 0:
+                continue
+            img[r, c] = (120, 180, 200)
 
     vertices = overlay.get("vertices") or []
     if len(vertices) >= 2:
@@ -1371,10 +1410,13 @@ def render_global_exploration_map(
     visited_data = overlay.get("visited_area_data")
     if visited_data is not None and len(visited_data) == h * w:
         for idx, val in enumerate(visited_data):
-            if val >= 100:
-                r = idx // w
-                c = idx % w
-                img[r, c] = (200, 180, 120)
+            if val < 100:
+                continue
+            r = idx // w
+            c = idx % w
+            if cats[r, c] != 0:
+                continue
+            img[r, c] = (120, 180, 200)
 
     vertices = overlay.get("vertices") or []
     if len(vertices) >= 2:

@@ -27,10 +27,26 @@
       },
       "topics": {
         "/map": {
+          "visible": false
+        },
+        "/qwen_explore_debug/map_with_visited": {
           "visible": true,
+          "colorMode": "custom",
+          "minColor": "#f4f8f0ff",
+          "maxColor": "#1a1a1aff",
+          "unknownColor": "#8a8a8aff",
+          "invalidColor": "#ff00ffff",
+          "frameLocked": true
+        },
+        "/qwen_explore_debug/visited_map_cells": {
+          "visible": true
+        },
+        "/qwen_explore_debug/visited_area_grid": {
+          "visible": false,
           "colorMode": "costmap",
-          "minColor": "#000000",
-          "maxColor": "#ffffff"
+          "minColor": "#00000000",
+          "maxColor": "#96dc78ff",
+          "unknownColor": "#00000000"
         },
         "/scan_filtered": {
           "visible": true,
@@ -41,18 +57,24 @@
           "visible": false
         },
         "/qwen_explore_debug/trajectory_path": {
-          "visible": true,
-          "lineWidth": 0.08,
-          "color": "#0088ff"
+          "visible": false
         },
         "/qwen_explore_debug/trajectory_markers": {
-          "visible": true
+          "visible": false
         },
         "/qwen_session/robot_pose_markers": {
           "visible": true
         },
         "/qwen_session/qwen_goal_markers": {
           "visible": true
+        },
+        "/qwen_session/candidate_markers": {
+          "visible": true
+        },
+        "/qwen_session/planned_path": {
+          "visible": true,
+          "lineWidth": 0.08,
+          "color": "#00ff44"
         },
         "/slam_toolbox/scan_visualization": {
           "visible": false

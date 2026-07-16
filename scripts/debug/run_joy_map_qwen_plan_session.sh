@@ -29,8 +29,12 @@ QWEN_EXTRA_ARGS=()
 
 # shellcheck source=scripts/lib/ros_dds_env.sh
 source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
+# shellcheck source=scripts/lib/nav2_stack_reuse.sh
+source "${PROJECT_DIR}/scripts/lib/nav2_stack_reuse.sh"
 # shellcheck source=scripts/lib/ros_stack_health.sh
 source "${PROJECT_DIR}/scripts/lib/ros_stack_health.sh"
+
+NAV2_REUSE_SCAN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -452,8 +456,14 @@ log_phase() {
 }
 
 stop_slam_stack_for_nav() {
-  log "  [1/4] 停止 SLAM/手柄栈（Nav2 切换；不再触发 joy 内置存图）..."
+  NAV2_REUSE_SCAN=0
   source_ros_environment
+  if topic_is_publishing /scan 2>/dev/null; then
+    NAV2_REUSE_SCAN=1
+    log "  [0/4] /scan 仍在发布 → Nav2 将复用雷达（不杀 ydlidar/scan_filter）"
+  fi
+
+  log "  [1/4] 停止 SLAM/手柄栈（Nav2 切换；不再触发 joy 内置存图）..."
   timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
     "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 5 \
     >/dev/null 2>&1 || true
@@ -477,9 +487,14 @@ stop_slam_stack_for_nav() {
   pkill -9 -f "run_slam_calibrated.sh" 2>/dev/null || true
   pkill -9 -f "joy_node|teleop_twist_joy" 2>/dev/null || true
   pkill -9 -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
-  pkill -9 -f "m1_pwm_cmd_vel_bridge.py|simple_scan_filter.py" 2>/dev/null || true
-  pkill -9 -f "ydlidar_ros2_driver_node|start_lidar_only.sh" 2>/dev/null || true
-  pkill -9 -f "foxglove_bridge" 2>/dev/null || true
+  pkill -9 -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
+  if [[ "$NAV2_REUSE_SCAN" -ne 1 ]]; then
+    pkill -9 -f "simple_scan_filter.py" 2>/dev/null || true
+    pkill -9 -f "ydlidar_ros2_driver_node|start_lidar_only.sh" 2>/dev/null || true
+  fi
+  if ! pgrep -f "foxglove_bridge" >/dev/null 2>&1; then
+    pkill -9 -f "foxglove_bridge" 2>/dev/null || true
+  fi
   sleep 2
 
   log "  [4/4] 刷新 DDS 环境，准备 Nav2 冷启动 ..."
@@ -512,7 +527,12 @@ run_qwen_nav2_phase() {
   fi
   export LOG_DIR="$SESSION_DIR/nav2_logs"
   export NAV2_STOP_CONFLICTS=1
-  export NAV2_REUSE_EXISTING=0
+  export NAV2_REUSE_EXISTING="${NAV2_REUSE_SCAN:-0}"
+  if [[ "$NAV2_REUSE_EXISTING" -eq 1 ]]; then
+    log "Nav2 复用建图阶段 /scan（NAV2_REUSE_EXISTING=1）"
+  else
+    log "Nav2 冷启动雷达（NAV2_REUSE_EXISTING=0）"
+  fi
   mkdir -p "$LOG_DIR"
 
   log "启动 run_qwen_session_nav2_goal.sh ..."
@@ -779,6 +799,12 @@ done
 # Phase 4: 保存 + 导出标注 + Qwen
 # ---------------------------------------------------------------------------
 log "[4/4] 收到 OK，开始保存 ..."
+log "停车 3s，等待位姿/TF 稳定 ..."
+source_ros_environment
+timeout 2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 8 \
+  >/dev/null 2>&1 || true
+sleep 3
 
 copy_live_debug_artifacts
 
@@ -806,14 +832,19 @@ if [[ ! -f "$TRAJ_FOR_QWEN" ]] && [[ -f "$TRAJ_FILE" ]]; then
   TRAJ_FOR_QWEN="$TRAJ_FILE"
 fi
 
+VISITED_CORRIDOR_RADIUS_M="${VISITED_CORRIDOR_RADIUS_M:-$(
+  python3 -c "import sys; sys.path.insert(0,'$PROJECT_DIR/scripts/debug'); from qwen_map_goal_utils import load_visited_corridor_radius_m; print(load_visited_corridor_radius_m())"
+)}"
+
 QWEN_MAP_YAML="$SESSION_DIR/map/${MAP_NAME}_qwen.yaml"
 if [[ -f "$TRAJ_FOR_QWEN" ]]; then
   python3 "$PROJECT_DIR/scripts/debug/export_qwen_visited_map.py" \
     --map-yaml "$MAP_YAML" \
     --trajectory-json "$TRAJ_FOR_QWEN" \
     --output-dir "$SESSION_DIR/map" \
+    --corridor-radius-m "$VISITED_CORRIDOR_RADIUS_M" \
     | tee "$SESSION_DIR/export_qwen_map.stdout.json"
-  log "Qwen 地图: $QWEN_MAP_YAML"
+  log "Qwen 地图: $QWEN_MAP_YAML (corridor_radius_m=$VISITED_CORRIDOR_RADIUS_M)"
 else
   log "WARN: 无 trajectory，跳过 Qwen 专用 PGM 导出"
 fi
@@ -824,6 +855,7 @@ python3 "$PROJECT_DIR/scripts/debug/export_session_map_annotations.py" \
   --trajectory-json "$TRAJ_FOR_QWEN" \
   --output-png "$ANNOTATED_PNG" \
   --output-pose-json "$POSE_UV_JSON" \
+  --corridor-radius-m "$VISITED_CORRIDOR_RADIUS_M" \
   ${LIVE_REF:+--copy-live-annotated "$LIVE_REF"} \
   | tee "$SESSION_DIR/robot_pose_uv.stdout.json"
 

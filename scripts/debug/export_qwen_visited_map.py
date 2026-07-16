@@ -27,6 +27,7 @@ from qwen_map_goal_utils import (  # noqa: E402
     apply_visited_to_pgm,
     build_free_mask_from_gray,
     load_map_yaml_meta,
+    load_visited_corridor_radius_m,
 )
 from src.planning.robot_trajectory_store import rasterize_visited_corridor  # noqa: E402
 
@@ -131,14 +132,24 @@ def main() -> int:
     parser.add_argument("--map-yaml", required=True)
     parser.add_argument("--trajectory-json", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--corridor-radius-m", type=float, default=0.35)
+    parser.add_argument(
+        "--corridor-radius-m",
+        type=float,
+        default=None,
+        help="已扫走廊半径（米）；默认读 configs/qwen_region_explore_debug.yaml",
+    )
     args = parser.parse_args()
+    corridor_radius_m = (
+        float(args.corridor_radius_m)
+        if args.corridor_radius_m is not None
+        else load_visited_corridor_radius_m()
+    )
 
     meta = export_qwen_map(
         map_yaml=Path(args.map_yaml),
         trajectory_json=Path(args.trajectory_json),
         output_dir=Path(args.output_dir),
-        corridor_radius_m=float(args.corridor_radius_m),
+        corridor_radius_m=corridor_radius_m,
     )
     print(json.dumps(meta, ensure_ascii=False, indent=2))
     return 0

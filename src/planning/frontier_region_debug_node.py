@@ -44,6 +44,7 @@ from src.planning.frontier_region_debug_core import (  # noqa: E402
     generate_snapshot_id,
     grid_row_to_image_y,
     grid_to_world,
+    merge_map_with_visited_corridor,
     occupancy_grid_to_array,
     render_annotated_map,
     result_to_dict,
@@ -187,6 +188,22 @@ class FrontierRegionDebugNode(Node):
         self.pub_visited_area_grid = self.create_publisher(
             OccupancyGrid,
             traj_topics.get("visited_area_grid", "/qwen_explore_debug/visited_area_grid"),
+            10,
+        )
+        map_viz_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.pub_map_with_visited = self.create_publisher(
+            OccupancyGrid,
+            traj_topics.get("map_with_visited", "/qwen_explore_debug/map_with_visited"),
+            map_viz_qos,
+        )
+        self.pub_visited_map_cells = self.create_publisher(
+            MarkerArray,
+            traj_topics.get("visited_map_cells", "/qwen_explore_debug/visited_map_cells"),
             10,
         )
         self.pub_trajectory_json = self.create_publisher(
@@ -899,7 +916,6 @@ class FrontierRegionDebugNode(Node):
 
         if bool(tcfg.get("publish_markers", True)):
             arr = MarkerArray()
-            arr.markers.append(self._delete_all_marker("trajectory", 0))
             line = Marker()
             line.header = stamp
             line.ns = "trajectory"
@@ -946,6 +962,59 @@ class FrontierRegionDebugNode(Node):
             arr.markers.append(text)
             self.pub_trajectory_markers.publish(arr)
 
+        if bool(tcfg.get("publish_map_with_visited", True)) and self._latest_grid is not None:
+            map_arr, _ = occupancy_grid_to_array(self._latest_grid)
+            unknown_value, free_max, occupied_min = _map_values_cfg(self.cfg)
+            visited_raw = self._trajectory.build_visited_area_data(
+                width=meta.width,
+                height=meta.height,
+                resolution=meta.resolution,
+                origin_x=meta.origin_x,
+                origin_y=meta.origin_y,
+                free_mask=self._build_trajectory_free_mask(),
+            )
+            merged = OccupancyGrid()
+            merged.header = stamp
+            merged.info = self._latest_grid.info
+            merged.data = merge_map_with_visited_corridor(
+                map_arr,
+                visited_raw,
+                unknown_value=unknown_value,
+                free_max=free_max,
+                occupied_min=occupied_min,
+            )
+            self.pub_map_with_visited.publish(merged)
+
+        if bool(tcfg.get("publish_visited_map_cells", True)):
+            visited_raw = self._trajectory.build_visited_area_data(
+                width=meta.width,
+                height=meta.height,
+                resolution=meta.resolution,
+                origin_x=meta.origin_x,
+                origin_y=meta.origin_y,
+                free_mask=self._build_trajectory_free_mask(),
+            )
+            cell_arr = MarkerArray()
+            cells = Marker()
+            cells.header = stamp
+            cells.ns = "visited_map_cells"
+            cells.id = 1
+            cells.type = Marker.SPHERE_LIST
+            cells.action = Marker.ADD
+            cell_size = max(0.05, float(meta.resolution) * 1.05)
+            cells.scale.x = cell_size
+            cells.scale.y = cell_size
+            cells.scale.z = cell_size
+            cells.color = ColorRGBA(r=0.35, g=0.88, b=0.40, a=0.92)
+            for idx, val in enumerate(visited_raw):
+                if val < 100:
+                    continue
+                row, col = divmod(idx, meta.width)
+                wx, wy = grid_to_world(row, col, meta)
+                cells.points.append(Point(x=wx, y=wy, z=0.03))
+            cell_arr.markers.append(cells)
+            self.pub_visited_map_cells.publish(cell_arr)
+
         if bool(tcfg.get("publish_visited_area_grid", True)):
             sig = (
                 meta.width,
@@ -962,14 +1031,17 @@ class FrontierRegionDebugNode(Node):
             grid.info.origin.position.x = meta.origin_x
             grid.info.origin.position.y = meta.origin_y
             grid.info.origin.orientation.w = 1.0
-            grid.data = self._trajectory.build_visited_area_data(
-                width=meta.width,
-                height=meta.height,
-                resolution=meta.resolution,
-                origin_x=meta.origin_x,
-                origin_y=meta.origin_y,
-                free_mask=self._build_trajectory_free_mask(),
-            )
+            grid.data = [
+                (v if v > 0 else -1)
+                for v in self._trajectory.build_visited_area_data(
+                    width=meta.width,
+                    height=meta.height,
+                    resolution=meta.resolution,
+                    origin_x=meta.origin_x,
+                    origin_y=meta.origin_y,
+                    free_mask=self._build_trajectory_free_mask(),
+                )
+            ]
             self._last_visited_grid_sig = sig
             self.pub_visited_area_grid.publish(grid)
 

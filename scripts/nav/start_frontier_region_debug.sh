@@ -75,6 +75,9 @@ fi
 
 source_ros_environment
 
+# shellcheck source=scripts/lib/nav2_localization_bootstrap.sh
+source "${PROJECT_DIR}/scripts/lib/nav2_localization_bootstrap.sh"
+
 echo "[ENV]"
 echo "ros_setup=${ROS_SETUP_USED:-unset}"
 echo "ydlidar_setup=${YDLIDAR_SETUP_USED:-unset}"
@@ -88,7 +91,9 @@ if ros2 node list 2>/dev/null | grep -qx '/frontier_region_debug'; then
   exit 2
 fi
 
-if ! ros2 topic list 2>/dev/null | grep -qx '/map'; then
+MAP_WAIT_SEC="${FRONTIER_DEBUG_MAP_WAIT_SEC:-90}"
+echo "[CHECK] wait /map publishing (rclpy, timeout=${MAP_WAIT_SEC}s) ..."
+if ! wait_map_topic_data "$MAP_WAIT_SEC"; then
   echo "[FATAL]"
   echo "code=MAP_TOPIC_MISSING"
   echo "topic=/map"
@@ -99,8 +104,9 @@ if ! ros2 topic list 2>/dev/null | grep -qx '/map'; then
 fi
 
 RUN_ID="$(date +%Y%m%d_%H%M%S)"
-RUN_DIR="$(readlink -f "$LOG_ROOT/$RUN_ID")"
-mkdir -p "$RUN_DIR" "$RUN_DIR/snapshots" "$RUNTIME_DIR"
+mkdir -p "$LOG_ROOT" "$RUNTIME_DIR"
+RUN_DIR="$(cd "$LOG_ROOT" && mkdir -p "$RUN_ID" && cd "$RUN_ID" && pwd)"
+mkdir -p "$RUN_DIR/snapshots"
 
 ros2 node list > "$RUN_DIR/ros_nodes_before.txt" 2>&1 || true
 ros2 topic list -t > "$RUN_DIR/ros_topics_before.txt" 2>&1 || true
