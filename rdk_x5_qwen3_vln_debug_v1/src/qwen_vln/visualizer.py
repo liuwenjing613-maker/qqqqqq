@@ -81,6 +81,7 @@ class ServoZoneOverlay:
     """
 
     max_vx: float = 0.07
+    min_vx: float = 0.02
     max_wz: float = 0.05
     kp_wz: float = 0.05
     angular_sign: float = -1.0
@@ -90,6 +91,8 @@ class ServoZoneOverlay:
     enabled: bool = True
 
     def validate(self) -> None:
+        if self.min_vx < 0.0 or self.min_vx > self.max_vx:
+            raise ValueError("require 0 <= min_vx <= max_vx")
         if not 0.0 <= self.center_deadband < self.turn_only_threshold <= 1.0:
             raise ValueError(
                 "require 0 <= center_deadband < turn_only_threshold <= 1"
@@ -384,7 +387,8 @@ class ResultVisualizer:
         canvas = cv2.addWeighted(legend, 0.62, canvas, 0.38, 0)
         sign = "L" if zones.angular_sign < 0 else "R"
         line1 = (
-            f"servo: max_vx={zones.max_vx:.3f}  max_wz={zones.max_wz:.3f}  "
+            f"servo: max_vx={zones.max_vx:.3f}  min_vx={zones.min_vx:.3f}  "
+            f"max_wz={zones.max_wz:.3f}  "
             f"kp_wz={zones.kp_wz:.3f}  sign={zones.angular_sign:+.1f}({sign} if point right)"
         )
         line2 = (

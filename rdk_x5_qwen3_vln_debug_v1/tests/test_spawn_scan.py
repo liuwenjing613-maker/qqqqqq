@@ -94,6 +94,23 @@ class SpawnScanFsmTests(unittest.TestCase):
         self.assertEqual(fsm.prompt_mode(), PromptMode.SPAWN_SCAN)
         self.assertFalse(fsm.should_request())
 
+    def test_manual_spawn_scan_forces_request_despite_large_interval(self) -> None:
+        # Regression: last_request_time=0.0 + interval=9999 failed whenever
+        # time.monotonic() < 9999, so sector captures never fired.
+        fsm = NavigationStateMachine(
+            StateMachineConfig(spawn_scan_interval_sec=9999.0)
+        )
+        fsm.has_image = True
+        fsm.set_instruction("find bottle")
+        self.assertFalse(fsm.should_request())
+        fsm.command("spawn_scan")
+        self.assertEqual(fsm.state, VlnState.SPAWN_SCAN)
+        self.assertTrue(fsm.should_request())
+        fsm.mark_request_started()
+        self.assertFalse(fsm.should_request())
+        fsm.command("spawn_scan")
+        self.assertTrue(fsm.should_request())
+
     def test_visible_aborts_to_track(self) -> None:
         fsm = NavigationStateMachine(StateMachineConfig())
         fsm.has_image = True

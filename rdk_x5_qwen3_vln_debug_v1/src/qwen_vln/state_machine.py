@@ -206,11 +206,12 @@ class NavigationStateMachine:
         # SPAWN_SCAN captures are gated by the servo (settle then spawn_scan).
         # Entering the state alone must not fire an API call; block until the
         # servo explicitly re-issues manual_spawn_scan / manual_spawn.
+        now = time.monotonic()
         if state == VlnState.SPAWN_SCAN and reason not in {
             "manual_spawn_scan",
             "manual_spawn",
         }:
-            self.last_request_time = time.monotonic()
+            self.last_request_time = now
         elif force_immediate and state in {
             VlnState.SPAWN_SCAN,
             VlnState.OBSERVE,
@@ -219,4 +220,7 @@ class NavigationStateMachine:
             VlnState.TARGET_LOCKED,
             VlnState.VERIFY,
         }:
-            self.last_request_time = 0.0
+            # Make should_request() true immediately. Do NOT use 0.0: with a
+            # large interval (spawn_scan defaults to 9999s) that fails until
+            # monotonic uptime exceeds the interval, silently skipping captures.
+            self.last_request_time = now - self.request_interval()

@@ -53,6 +53,7 @@ def _load_servo_zone_overlay(
         control = payload.get("control", {}) or {}
         return ServoZoneOverlay(
             max_vx=float(control.get("max_vx", 0.07)),
+            min_vx=float(control.get("min_vx", 0.02)),
             max_wz=float(control.get("max_wz", 0.05)),
             kp_wz=float(control.get("kp_wz", 0.05)),
             angular_sign=float(control.get("angular_sign", -1.0)),

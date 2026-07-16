@@ -16,19 +16,25 @@ topics:
   qwen_command: /qwen_vln/command
 
 control:
-  motion_enabled: false
+  motion_enabled: true
   rate_hz: 20.0
 
   # Existing POINT visual-servo parameters are intentionally preserved.
   # These are also drawn on /qwen_vln/annotated_image via visualization.servo_overlay_config.
   max_vx: 0.07
+  # Floor forward speed when POINT servo commands motion (intentional zeros stay 0).
+  min_vx: 0.02
   max_wz: 0.06
-  kp_wz: 0.01
+  # Cyan fine-steer gain. Must satisfy kp*center_deadband >= cmd_wz_deadband
+  # (0.04*0.20=0.008 > 0.006), otherwise cyan |wz| is zeroed and looks "stuck".
+  # Do NOT floor tiny wz up to cmd_wz_deadband — that overshoots like bang-bang.
+  kp_wz: 0.04
   # Orange rotate-only band (|error|>=turn_only_threshold): fixed wz, not kp*error.
   rotate_only_wz: 0.06
   angular_sign: -1.0
   center_deadband: 0.20
   turn_only_threshold: 0.7
+  # Zero out |wz| below this (chassis ignore band). Not a minimum floor.
   cmd_wz_deadband: 0.006
 
   # c is parsed and published but deliberately unused in V3.
@@ -112,3 +118,130 @@ spawn_scan:
   yaw_tolerance_deg: 3.0
   odom_stale_sec: 0.5
   finish_command: search
+
+# Optional first-version transfer supervisor.
+# false: the original 85739b0 startup/control path is preserved exactly.
+# true: start_live_servo.sh delegates through the intervention wrapper, which
+#       remaps the ego controller to /cmd_vel_ego and inserts a safe EGO/MAP/HOLD mux.
+third_view_intervention:
+  enabled: false
+  evaluation_hz: 10.0
+  history_sec: 40.0
+
+  # Behaviour-failure triggers are still allowed to request a map analysis when
+  # the teammate's candidate summary is temporarily absent. The map module must
+  # then run candidate extraction before replying.
+  allow_unknown_candidates_for_failure: true
+
+  topics:
+    servo_status: /qwen_vln/servo/status
+    odom: /odom
+    candidate_summary: /third_view/candidate_summary
+    navigation_status: /third_view/navigation_status
+    request: /third_view/intervention/request
+    decision: /third_view/intervention/decision
+    status: /third_view/intervention/status
+    control_mode: /third_view/intervention/control_mode
+    cancel: /third_view/intervention/cancel
+    qwen_command: /qwen_vln/command
+    ego_cmd: /cmd_vel_ego
+    map_cmd: /cmd_vel_map
+    mux_output: /cmd_vel_autonomy
+
+  freshness:
+    # Servo status is produced at 20 Hz and odom normally at about 30 Hz.
+    servo_max_age_sec: 0.60
+    odom_max_age_sec: 0.60
+    # Candidate extraction is expected at roughly 0.5-1 Hz.
+    candidates_max_age_sec: 2.50
+
+  guard:
+    # Dry-run/debug launches with MOTION_ENABLED=0 must never start A*.
+    require_motion_enabled: true
+    startup_grace_sec: 5.0
+    cooldown_sec: 12.0
+    blocked_states:
+      - WAIT_IMAGE
+      - SPAWN_SCAN
+      - PAUSED
+      - SUCCESS
+      - ERROR
+    active_spawn_phases:
+      - TURNING
+      - SETTLING
+      - DWELLING
+      - WAIT_RESULT
+      - WAITING_RESULT
+      - RETURNING
+    active_view_phases:
+      - PRE_STOP
+      - TURNING
+      - SETTLING
+
+  branch:
+    min_candidates: 2
+    # Prevent far-away frontier sets from interrupting a healthy corridor.
+    require_decision_distance: true
+    # The birth scan itself uses 60-degree sectors. 50 degrees therefore
+    # rejects near-duplicate frontier points but still catches a real T/fork.
+    min_heading_separation_deg: 50.0
+    decision_radius_m: 1.30
+    # Only ask map-Qwen when geometry cannot clearly separate top candidates.
+    max_top_score_gap: 0.12
+    max_top_score_ratio: 1.25
+    persistence_updates: 2
+    returned_junction_persistence_updates: 2
+
+  progress:
+    # max_vx is 0.07 m/s. Over 6 s, a genuinely commanded robot should make
+    # clearly more than odometry noise, while API pauses do not satisfy the
+    # active-ratio/integrated-command gates.
+    window_sec: 6.0
+    min_cmd_vx: 0.025
+    min_cmd_active_ratio: 0.55
+    min_integrated_cmd_distance_m: 0.14
+    max_actual_displacement_m: 0.08
+    # First failure is deliberately left to the existing turn/reverse logic.
+    # Only a second complete no-progress window escalates to third view.
+    recovery_grace_sec: 4.0
+    recovery_success_distance_m: 0.18
+
+  oscillation:
+    # Current Qwen interval is around 0.85-0.90 s, so eight fresh results span
+    # about 6-8 s instead of reacting to a single imperfect frame.
+    result_window: 8
+    min_turn_direction_flips: 3
+    min_horizontal_sign_flips: 4
+    horizontal_deadband: 0.15
+    max_displacement_m: 0.22
+    min_span_sec: 4.0
+
+  emergency_reverse:
+    window_sec: 15.0
+    trigger_count: 2
+
+  handshake:
+    stop_hold_sec: 0.30
+    request_ack_timeout_sec: 6.0
+    navigation_timeout_sec: 120.0
+    # On return, hold until a fresh first-person result arrives. This prevents
+    # the old pre-map POINT from moving the chassis for one frame.
+    resume_min_hold_sec: 0.30
+    resume_fresh_result_timeout_sec: 3.0
+    resume_qwen_command: search
+    # Qwen keeps observing while MAP owns velocity. A fresh target result can
+    # therefore cancel A* and immediately return control to visual servo.
+    target_takeover_enabled: true
+
+  cmd_mux:
+    rate_hz: 20.0
+    ego_timeout_sec: 0.45
+    map_timeout_sec: 0.45
+    mode_timeout_sec: 2.0
+    default_mode: EGO
+    # The existing servo node continues reading lidar in MAP mode. Its
+    # emergency reverse command has priority over /cmd_vel_map. If that safety
+    # status becomes stale, MAP output fails closed to HOLD.
+    safety_override_enabled: true
+    safety_status_timeout_sec: 0.80
+    require_fresh_safety_status_in_map: true

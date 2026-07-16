@@ -18,6 +18,9 @@ def clamp(value: float, low: float, high: float) -> float:
 @dataclass(frozen=True)
 class ServoConfig:
     max_vx: float = 0.07
+    # Floor for commanded forward speed when heading allows motion.
+    # Intentional zeros (deadband wait, rotate-only, stop) stay 0.
+    min_vx: float = 0.02
     max_wz: float = 0.05
     kp_wz: float = 0.05
     # Fixed |wz| when |error| >= turn_only_threshold (orange rotate-only band).
@@ -25,6 +28,9 @@ class ServoConfig:
     angular_sign: float = -1.0
     center_deadband: float = 0.06
     turn_only_threshold: float = 0.40
+    # Chassis ignores |wz| below this; such commands are zeroed (not floored).
+    # Keep kp_wz high enough that cyan-band |kp*error| clears this at the
+    # deadband edge: kp_wz >= cmd_wz_deadband / center_deadband.
     cmd_wz_deadband: float = 0.006
     min_confidence: float = 0.0
     point_results_before_forward: int = 1
@@ -47,8 +53,14 @@ class ServoConfig:
     def validate(self) -> None:
         if self.max_vx < 0.0 or self.max_wz < 0.0:
             raise ValueError("max_vx/max_wz must be non-negative")
+        if self.min_vx < 0.0:
+            raise ValueError("min_vx must be non-negative")
+        if self.min_vx > self.max_vx:
+            raise ValueError("min_vx must be <= max_vx")
         if self.rotate_only_wz < 0.0:
             raise ValueError("rotate_only_wz must be non-negative")
+        if self.cmd_wz_deadband < 0.0:
+            raise ValueError("cmd_wz_deadband must be non-negative")
         if not 0.0 <= self.center_deadband < self.turn_only_threshold <= 1.0:
             raise ValueError(
                 "require 0 <= center_deadband < turn_only_threshold <= 1"
@@ -166,6 +178,8 @@ class QwenVisualServo:
             if abs(wz) < cfg.cmd_wz_deadband:
                 wz = 0.0
         else:
+            # Cyan steer+drive: proportional fine turn. Do NOT floor tiny |wz|
+            # up to cmd_wz_deadband — that becomes bang-bang and overshoots.
             wz = cfg.angular_sign * cfg.kp_wz * error * freshness
             wz = clamp(wz, -cfg.max_wz, cfg.max_wz)
             if abs(wz) < cfg.cmd_wz_deadband:
@@ -195,6 +209,8 @@ class QwenVisualServo:
                 wz = 0.0
         else:
             vx = cfg.max_vx * heading_scale * freshness * obstacle_scale
+            if vx > 0.0 and cfg.min_vx > 0.0:
+                vx = max(vx, min(cfg.min_vx, cfg.max_vx))
             reason = (
                 "search_visual_servo"
                 if searchish

@@ -63,6 +63,7 @@ class QwenVisualServoNode(Node):
 
         servo_cfg = ServoConfig(
             max_vx=float(control.get("max_vx", 0.07)),
+            min_vx=float(control.get("min_vx", 0.02)),
             max_wz=float(control.get("max_wz", 0.05)),
             kp_wz=float(control.get("kp_wz", 0.05)),
             rotate_only_wz=float(control.get("rotate_only_wz", 0.06)),

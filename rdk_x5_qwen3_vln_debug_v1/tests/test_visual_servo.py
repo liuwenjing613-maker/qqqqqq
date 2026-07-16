@@ -156,11 +156,12 @@ class ServoTests(unittest.TestCase):
     def test_steer_drive_band_still_uses_kp(self) -> None:
         servo = QwenVisualServo(
             ServoConfig(
-                kp_wz=0.01,
+                kp_wz=0.04,
                 rotate_only_wz=0.06,
                 max_wz=0.06,
                 center_deadband=0.2,
                 turn_only_threshold=0.7,
+                cmd_wz_deadband=0.006,
                 angular_sign=-1.0,
             )
         )
@@ -170,7 +171,97 @@ class ServoTests(unittest.TestCase):
             self.input(point_x=point_x, image_width=960)
         )
         self.assertIn("visual_servo", decision.reason)
-        self.assertAlmostEqual(decision.wz, -0.0065, places=4)
+        self.assertAlmostEqual(decision.wz, -0.026, places=4)
+
+    def test_steer_drive_proportional_at_screenshot_error(self) -> None:
+        # Live case |e|=0.36: with kp=0.04 -> |wz|=0.0144 (fine), not floored 0.006.
+        servo = QwenVisualServo(
+            ServoConfig(
+                kp_wz=0.04,
+                rotate_only_wz=0.06,
+                max_wz=0.06,
+                center_deadband=0.2,
+                turn_only_threshold=0.7,
+                cmd_wz_deadband=0.006,
+                angular_sign=-1.0,
+            )
+        )
+        half = 0.5 * 959.0
+        point_x = half - 0.36 * half
+        decision = servo.compute(
+            self.input(
+                state="TARGET_INFERRED",
+                result="TARGET_INFERRED",
+                point_role="search",
+                point_x=point_x,
+                image_width=960,
+            )
+        )
+        self.assertIn("visual_servo", decision.reason)
+        self.assertAlmostEqual(decision.horizontal_error, -0.36, places=2)
+        self.assertAlmostEqual(decision.wz, 0.0144, places=4)
+        self.assertGreater(decision.vx, 0.0)
+
+    def test_too_small_kp_still_zeros_below_cmd_deadband(self) -> None:
+        # Regression guard: do not floor tiny |wz|; zeroing is correct.
+        servo = QwenVisualServo(
+            ServoConfig(
+                kp_wz=0.01,
+                rotate_only_wz=0.06,
+                max_wz=0.06,
+                center_deadband=0.2,
+                turn_only_threshold=0.7,
+                cmd_wz_deadband=0.006,
+                angular_sign=-1.0,
+            )
+        )
+        half = 0.5 * 959.0
+        point_x = half - 0.36 * half
+        decision = servo.compute(
+            self.input(point_x=point_x, image_width=960)
+        )
+        self.assertEqual(decision.wz, 0.0)
+
+    def test_min_vx_floor_when_commanding_forward(self) -> None:
+        servo = QwenVisualServo(
+            ServoConfig(
+                max_vx=0.07,
+                min_vx=0.02,
+                kp_wz=0.01,
+                center_deadband=0.2,
+                turn_only_threshold=0.7,
+                angular_sign=-1.0,
+            )
+        )
+        half = 0.5 * 959.0
+        # Near orange edge: heading_scale is small so raw vx would be << 0.02.
+        point_x = half + 0.65 * half
+        decision = servo.compute(
+            self.input(point_x=point_x, image_width=960)
+        )
+        self.assertIn("visual_servo", decision.reason)
+        self.assertGreaterEqual(decision.vx, 0.02 - 1e-9)
+        self.assertLessEqual(decision.vx, 0.07 + 1e-9)
+
+    def test_min_vx_does_not_force_motion_in_rotate_only(self) -> None:
+        servo = QwenVisualServo(
+            ServoConfig(
+                max_vx=0.07,
+                min_vx=0.02,
+                kp_wz=0.01,
+                rotate_only_wz=0.06,
+                center_deadband=0.2,
+                turn_only_threshold=0.7,
+                angular_sign=-1.0,
+            )
+        )
+        half = 0.5 * 959.0
+        point_x = half + 0.8 * half
+        decision = servo.compute(
+            self.input(point_x=point_x, image_width=960)
+        )
+        self.assertEqual(decision.reason, "rotate_only_large_error")
+        self.assertEqual(decision.vx, 0.0)
 
     def test_turn_pending_requires_consecutive_near_lidar(self) -> None:
         gate = TurnPendingGate(
