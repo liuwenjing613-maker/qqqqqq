@@ -9,9 +9,10 @@ build/
 *.egg
 
 # Logs and runtime artifacts
-#logs/
-#*.log
-
+logs/
+**/logs/
+*.log
+*.jsonl
 
 # Editor swap files
 *.swp
@@ -21,7 +22,6 @@ build/
 # IDE / OS
 .vscode/
 .idea/
-*.swp
 .DS_Store
 
 # Environment
@@ -31,12 +31,31 @@ build/
 *.pem
 *.key
 
-# Large binary assets (download separately)
+# Virtual environments
+.venv*/
+venv/
+
+# Models and large binaries (download separately)
+models/
+*.onnx
 *.bin
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+voice_interaction/models/
+yolo_world/config/yolo_world.bin
+yolo_world/config/offline_vocabulary_embeddings.json
+
+# Archives / git bundles
+*.bundle
+*.tar.gz
+*.zip
+
+# Video
 *.mp4
 *.avi
 *.mkv
-yolo_world/config/offline_vocabulary_embeddings.json
 
 # Debug / runtime media (regenerated locally)
 data/images/
@@ -47,3 +66,6 @@ yolo_world/render_feedback_0_0.jpeg
 test_yoloworld/
 *.jpg
 *.png
+
+# SLAM maps (generated locally)
+maps/*.pgm
