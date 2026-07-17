@@ -868,6 +868,9 @@ stop_slam_stack_for_nav() {
 
 run_qwen_nav2_phase() {
   local bundle_json="$SESSION_DIR/qwen_live/candidate_bundle.json"
+  local session_goal="$SESSION_DIR/navigation_goal_proposal.json"
+  local nav_args=()
+
   if [[ "$NAV2_START_ONLY" -ne 1 ]]; then
     if [[ ! -f "$NAV_GOAL_JSON" ]]; then
       log "FAIL: 缺少 navigation_goal_proposal.json"
@@ -877,33 +880,15 @@ run_qwen_nav2_phase() {
       log "FAIL: 目标未通过 Nav2 验证门禁（geometry/bundle/allow-fallback）"
       exit 1
     fi
+    cp -f "$NAV_GOAL_JSON" "$session_goal"
   fi
 
-  log_phase "[5/5] 自动 Nav2 导航到 Qwen 目标"
+  log_phase "[5/5] 自动 Nav2 导航到 Qwen 目标（reuse pipeline）"
   if [[ "$NAV2_START_ONLY" -eq 1 ]]; then
     log "NAV2_START_ONLY：仅启动 Nav2，不发送目标"
-  else
-    print_nav_goal_summary "$NAV_GOAL_JSON"
-  fi
-  log "完整日志目录: $SESSION_DIR/nav2_logs/"
-
-  local nav_t0 nav_boot_t0
-  nav_t0="$(date +%s)"
-  stop_slam_stack_for_nav
-
-  SESSION_POSE="$SESSION_DIR/last_pose_map.json"
-  if [[ -f "$SESSION_POSE" ]]; then
-    export POSE_STATE_FILE="$SESSION_POSE"
-  fi
-  export LOG_DIR="$SESSION_DIR/nav2_logs"
-  export NAV2_START_ONLY="$NAV2_START_ONLY"
-  mkdir -p "$LOG_DIR"
-
-  # Placeholder goal for start-only mode
-  local goal_arg="$NAV_GOAL_JSON"
-  if [[ "$NAV2_START_ONLY" -eq 1 ]]; then
-    goal_arg="$SESSION_DIR/nav2_start_only_placeholder.json"
-    python3 - "$goal_arg" "$SESSION_ID" "$MAP_YAML" <<'PY'
+    nav_args+=(--start-only)
+    if [[ ! -f "$session_goal" ]]; then
+      python3 - "$session_goal" "$SESSION_ID" "$MAP_YAML" <<'PY'
 import json, sys
 from pathlib import Path
 path, sid, my = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
@@ -911,44 +896,59 @@ path.write_text(json.dumps({
     "schema_version": "qwen_live_session_nav_goal_v1",
     "session_id": sid,
     "map_yaml": my,
-    "selection_status": "PENDING",
-    "note": "nav2-start-only placeholder; no NavigateToPose",
+    "selection_status": "REGION_PROPOSED",
+    "goal_pose_map": {"x": 0.0, "y": 0.0, "yaw_rad": 0.0, "yaw_deg": 0.0},
+    "selected_candidate_id": 1,
+    "bundle_fingerprint": "",
+    "safety": {"candidate_geometry_validated": True},
 }, indent=2) + "\n", encoding="utf-8")
 PY
-  fi
-
-  nav_boot_t0="$(date +%s)"
-  if bash "$PROJECT_DIR/scripts/nav/run_qwen_session_nav2_goal.sh" \
-    "$MAP_YAML" "$goal_arg" \
-    2>&1 | tee "$SESSION_DIR/nav2_run.log"; then
-    log "✓ Nav2 阶段完成"
+    fi
   else
-    log "✗ Nav2 阶段失败，详见 $SESSION_DIR/nav2_run.log"
+    print_nav_goal_summary "$NAV_GOAL_JSON"
+  fi
+  log "Nav2 runtime 目录: $SESSION_DIR/nav2_runtime/"
+
+  local nav_t0 nav_boot_t0
+  nav_t0="$(date +%s)"
+  nav_boot_t0="$(date +%s)"
+
+  if bash "$PROJECT_DIR/scripts/nav/run_qwen_target_nav2_reuse.sh" \
+    --session-id "$SESSION_ID" \
+    --session-dir "$SESSION_DIR" \
+    --map-yaml "$MAP_YAML" \
+    --pose-json "$SESSION_DIR/last_pose_map.json" \
+    --goal-json "$session_goal" \
+    --candidate-bundle "$bundle_json" \
+    --mapping-pid "${JOY_PID:-}" \
+    "${nav_args[@]}" \
+    2>&1 | tee "$SESSION_DIR/nav2_run.log"; then
+    log "✓ Nav2 reuse 阶段完成"
+  else
+    log "✗ Nav2 reuse 阶段失败，详见 $SESSION_DIR/nav2_run.log"
+    if [[ -f "$SESSION_DIR/nav2_runtime/nav2_state.json" ]]; then
+      log "nav2_state.json:"
+      cat "$SESSION_DIR/nav2_runtime/nav2_state.json" || true
+    fi
+    timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+      "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \
+      >/dev/null 2>&1 || true
     TIMING_NAV2_BOOT_S=$(( $(date +%s) - nav_boot_t0 ))
     TIMING_TOTAL_AFTER_OK_S=$(( $(date +%s) - OK_EPOCH ))
     export_timing_env
-    write_pipeline_timing_json "${JQS_NAV_MODE:-fast_nav}"
+    write_pipeline_timing_json "qwen_nav2_reuse"
     exit 1
   fi
-  # Prefer child stage timing for boot/compute_path/navigation splits
-  if [[ -f "$LOG_DIR/nav2_stage_timing.json" ]]; then
-    eval "$(python3 - "$LOG_DIR/nav2_stage_timing.json" <<'PY'
+
+  if [[ -f "$SESSION_DIR/nav2_runtime/nav2_timing.json" ]]; then
+    eval "$(python3 - "$SESSION_DIR/nav2_runtime/nav2_timing.json" <<'PY'
 import json, sys
 from pathlib import Path
 d = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-def dur(a, b):
-    if a in d and b in d and d[a] and d[b]:
-        return max(0.0, float(d[b]) - float(d[a]))
-    return None
-boot = dur("nav2_launch_start", "nav2_ready")
-comp = dur("compute_path_start", "compute_path_end")
-nav = dur("goal_sent", "navigation_finished")
-if boot is not None:
-    print(f'TIMING_NAV2_BOOT_S={boot}')
-if comp is not None:
-    print(f'TIMING_COMPUTE_PATH_S={comp}')
-if nav is not None:
-    print(f'TIMING_NAVIGATION_S={nav}')
+if "nav2_boot_s" in d:
+    print(f'TIMING_NAV2_BOOT_S={d["nav2_boot_s"]}')
+if "total_s" in d:
+    print(f'TIMING_NAVIGATION_S={d["total_s"]}')
 PY
 )"
   else
@@ -957,8 +957,8 @@ PY
   fi
   TIMING_TOTAL_AFTER_OK_S=$(( $(date +%s) - OK_EPOCH ))
   export_timing_env
-  write_pipeline_timing_json "${JQS_NAV_MODE:-fast_nav}"
-  timing_log "nav2_boot=${TIMING_NAV2_BOOT_S}s compute_path=${TIMING_COMPUTE_PATH_S}s navigation=${TIMING_NAVIGATION_S}s total_after_ok=${TIMING_TOTAL_AFTER_OK_S}s"
+  write_pipeline_timing_json "qwen_nav2_reuse"
+  timing_log "nav2_boot=${TIMING_NAV2_BOOT_S}s navigation=${TIMING_NAVIGATION_S}s total_after_ok=${TIMING_TOTAL_AFTER_OK_S}s"
 }
 
 stop_started_processes() {

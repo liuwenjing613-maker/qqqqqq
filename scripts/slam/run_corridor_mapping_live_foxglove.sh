@@ -91,6 +91,53 @@ print(out)
 PY
 }
 
+write_nav_handoff_ack_json() {
+  # Session-scoped ack for Qwen Nav2 reuse pipeline.
+  local session_id="${QWEN_NAV_HANDOFF_SESSION_ID:-}"
+  if [[ -z "$session_id" && -f "${PROJECT_DIR}/runtime/nav_handoff_active_session" ]]; then
+    session_id="$(tr -d '[:space:]' < "${PROJECT_DIR}/runtime/nav_handoff_active_session" || true)"
+  fi
+  if [[ -z "$session_id" && -f "${PROJECT_DIR}/runtime/request_nav_handoff" ]]; then
+    session_id="$(tr -d '[:space:]' < "${PROJECT_DIR}/runtime/request_nav_handoff" || true)"
+  fi
+  if [[ -z "$session_id" ]]; then
+    log "[handoff] WARN: no session_id for ack.json"
+    return 0
+  fi
+  local ack_dir="${PROJECT_DIR}/runtime/nav_handoff/${session_id}"
+  mkdir -p "$ack_dir"
+  local chassis_pid=""
+  chassis_pid="$(pgrep -f 'm1_pwm_cmd_vel_bridge.py' 2>/dev/null | head -1 || true)"
+  python3 - "${ack_dir}/ack.json" "$session_id" \
+    "${NAMED_PIDS[lidar]:-}" \
+    "${NAMED_PIDS[scan_filter]:-}" \
+    "${chassis_pid:-}" \
+    "${NAMED_PIDS[static_tf]:-}" \
+    "${NAMED_PIDS[foxglove_bridge]:-}" <<'PY'
+import json, os, sys, time
+from pathlib import Path
+out, sid = Path(sys.argv[1]), sys.argv[2]
+def maybe_int(s):
+    return int(s) if s else None
+payload = {
+    "session_id": sid,
+    "state": "SENSOR_BASE_HELD",
+    "completed_epoch": time.time(),
+    "lidar_pid": maybe_int(sys.argv[3]),
+    "scan_filter_pid": maybe_int(sys.argv[4]),
+    "chassis_pid": maybe_int(sys.argv[5]),
+    "static_tf_pid": maybe_int(sys.argv[6]),
+    "foxglove_pid": maybe_int(sys.argv[7]),
+    "stopped": {"joy": True, "teleop": True, "slam": True, "frontier": True},
+    "source": "run_corridor_mapping_live_foxglove",
+}
+tmp = out.with_suffix(".tmp")
+tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+os.replace(tmp, out)
+print(out)
+PY
+}
+
 perform_nav_handoff() {
   if [[ "$HANDOFF_DONE" -eq 1 ]]; then
     return 0
@@ -125,9 +172,11 @@ perform_nav_handoff() {
   unset 'NAMED_PIDS[slam_toolbox]'
 
   write_sensor_base_stack_json || true
+  write_nav_handoff_ack_json || true
   rm -f "$HANDOFF_REQUEST_FILE"
   HANDOFF_DONE=1
   log "[handoff] sensor_base_stack written: $SENSOR_BASE_STACK_JSON"
+  log "[handoff] ack written for session=${QWEN_NAV_HANDOFF_SESSION_ID:-unknown}"
   log "[handoff] exiting wrapper without stopping lidar/chassis/scan_filter"
   # Disarm full cleanup; exit 0 and leave sensors running for Nav2 ownership.
   trap - EXIT TERM

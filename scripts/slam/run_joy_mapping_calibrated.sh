@@ -263,6 +263,12 @@ handle_nav_handoff() {
   sleep 1
   pkill -KILL -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
   pkill -TERM -f "frontier_region_debug_node.py" 2>/dev/null || true
+  # Propagate session id to corridor wrapper for ack.json
+  if [[ -f "${PWD}/runtime/nav_handoff_active_session" ]]; then
+    export QWEN_NAV_HANDOFF_SESSION_ID="$(tr -d '[:space:]' < "${PWD}/runtime/nav_handoff_active_session" || true)"
+  elif [[ -f "${PWD}/runtime/request_nav_handoff" ]]; then
+    export QWEN_NAV_HANDOFF_SESSION_ID="$(tr -d '[:space:]' < "${PWD}/runtime/request_nav_handoff" || true)"
+  fi
 
   local corridor_pid
   corridor_pid="$(pgrep -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null | head -1 || true)"

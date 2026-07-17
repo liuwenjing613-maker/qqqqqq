@@ -1,0 +1,100 @@
+{
+  "configById": {
+    "3D!foxglove_qwen_nav2": {
+      "cameraState": {
+        "perspective": false,
+        "distance": 12,
+        "phi": 0.6,
+        "thetaOffset": 0,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-none",
+      "followTf": "map",
+      "scene": {
+        "enableStats": false,
+        "backgroundColor": "#e8e8e8"
+      },
+      "transforms": {
+        "enable": false,
+        "showLabel": false,
+        "lineWidth": 0.1,
+        "labelSize": 0.03
+      },
+      "topics": {
+        "/map": {
+          "visible": true,
+          "colorMode": "custom",
+          "minColor": "#d0e4ff",
+          "maxColor": "#1a1a1a",
+          "unknownColor": "#9a9a9a",
+          "frameLocked": true,
+          "drawBehind": true,
+          "alpha": 0.92
+        },
+        "/scan_filtered": {
+          "visible": true,
+          "pointSize": 4,
+          "decayTime": 0,
+          "colorField": "intensity",
+          "gradient": ["#ff4444", "#ff4444"]
+        },
+        "/amcl_pose": {
+          "visible": true
+        },
+        "/qwen_session/planned_path": {
+          "visible": true,
+          "lineWidth": 0.08,
+          "gradient": ["#22ff88", "#22ff88"]
+        },
+        "/qwen_session/start_marker": {
+          "visible": true
+        },
+        "/qwen_session/goal_marker": {
+          "visible": true
+        },
+        "/qwen_session/trajectory": {
+          "visible": true
+        },
+        "/cmd_vel": {
+          "visible": true
+        },
+        "/cmd_vel_sent": {
+          "visible": true
+        },
+        "/qwen_session/nav_status": {
+          "visible": true
+        }
+      },
+      "layers": {},
+      "publish": {
+        "type": "point",
+        "poseTopic": "/initialpose",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.25,
+        "poseEstimateYDeviation": 0.25,
+        "poseEstimateThetaDeviation": 0.26179939
+      }
+    },
+    "Text!qwen_nav2_help": {
+      "fontSize": 14,
+      "text": "Qwen → Nav2 reuse 可视化\n\nFixed frame = map\n话题:\n  /map /scan_filtered /amcl_pose\n  /qwen_session/planned_path\n  /qwen_session/start_marker\n  /qwen_session/goal_marker\n  /qwen_session/trajectory\n  /qwen_session/nav_status\n  /cmd_vel /cmd_vel_sent\n\n布局加载失败不影响导航。"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "3D!foxglove_qwen_nav2",
+    "second": "Text!qwen_nav2_help",
+    "splitPercentage": 72
+  }
+}
