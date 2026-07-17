@@ -264,6 +264,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--nav-goal-json", required=True)
     p.add_argument("--session-id", default="")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument(
+        "--candidates-only",
+        action="store_true",
+        help="仅计算 v6 候选并写 Foxglove JSON/候选图，不调用 Qwen API",
+    )
     # 透传 v6 常用参数
     p.add_argument("--model", default=os.getenv("QWEN_MODEL", "qwen3-vl-flash"))
     p.add_argument("--base-url", default=os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
@@ -406,6 +411,12 @@ def main() -> int:
     )
     candidates_path = output_dir / "live_candidates.png"
     cv2.imwrite(str(candidates_path), input_image)
+
+    if args.candidates_only:
+        print(f"[OK] 候选 Foxglove JSON：{foxglove_candidates_json}")
+        print(f"[OK] 候选图：{candidates_path}")
+        print(f"[OK] candidates_only=1 count={len(case_candidates)}")
+        return 0
 
     prompt = v6.GOAL_PROMPT_TEMPLATE_ZH.format(
         robot_u=pose.x / max(1, w - 1),

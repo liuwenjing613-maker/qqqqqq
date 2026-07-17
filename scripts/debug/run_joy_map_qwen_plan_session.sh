@@ -6,7 +6,7 @@
 #   2) 调用 start_frontier_region_debug.sh 实时标注已走路径（若尚未运行）
 #   3) 终端输入 OK → 保存地图与标注 → 调用 export_session_map_annotations.py（大号朝向箭头）
 #   4) 调用 qwen_live_session_planner.py（v6 候选 + Qwen 第二阶段）
-#   5) Qwen 选点完成后自动 Nav2 导航（默认开启，可用 --no-auto-nav 关闭）
+#   5) Qwen 选点完成后自动 Nav2 导航（默认开启，方案A 冷启动，对齐 Foxglove 点击导航）
 #
 # 启动：默认不预清理、不重复 ros2 健康检查（建图脚本内部已验证）；冲突时加 --preflight-cleanup
 #
@@ -29,6 +29,8 @@ QWEN_EXTRA_ARGS=()
 
 # shellcheck source=scripts/lib/ros_dds_env.sh
 source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
+# shellcheck source=scripts/lib/cleanup_lidar_slam_nav.sh
+source "${PROJECT_DIR}/scripts/lib/cleanup_lidar_slam_nav.sh"
 # shellcheck source=scripts/lib/nav2_stack_reuse.sh
 source "${PROJECT_DIR}/scripts/lib/nav2_stack_reuse.sh"
 # shellcheck source=scripts/lib/ros_stack_health.sh
@@ -268,6 +270,35 @@ wait_map_topic_ready() {
   return 1
 }
 
+start_frontier_region_debug_session() {
+  if ros2 node list 2>/dev/null | grep -qx '/frontier_region_debug'; then
+    log "[2/4] frontier_region_debug 已在运行，复用现有节点"
+    return 0
+  fi
+
+  local attempt
+  for attempt in 1 2; do
+    if [[ "$attempt" -gt 1 ]]; then
+      log "[2/4] frontier_region_debug 重试 ($attempt/2)：等待 /map 后再启动 ..."
+      wait_map_topic_ready 45 "frontier debug 重试前 /map" || true
+      sleep 2
+    else
+      log "[2/4] 启动 start_frontier_region_debug.sh ..."
+    fi
+    if bash "$PROJECT_DIR/scripts/nav/start_frontier_region_debug.sh" \
+      >> "$SESSION_DIR/frontier_debug_start.log" 2>&1; then
+      STARTED_DEBUG=1
+      log "frontier_region_debug 已启动"
+      return 0
+    fi
+    tail -20 "$SESSION_DIR/frontier_debug_start.log" || true
+  done
+
+  log "WARN: frontier_region_debug 启动失败（见 $SESSION_DIR/frontier_debug_start.log）"
+  log "      将继续会话，但实时路径标注可能不可用"
+  return 1
+}
+
 preflight_cleanup_conflicting_stacks() {
   source_ros_environment
   log "[0/4] 预清理旧 Nav2 / 冲突建图栈（避免 /map 双发布与 ros2 CLI 不可见）..."
@@ -455,18 +486,90 @@ log_phase() {
   echo "════════════════════════════════════════════════════════════"
 }
 
-stop_slam_stack_for_nav() {
-  NAV2_REUSE_SCAN=0
+refresh_session_pose_before_nav() {
+  local out="$SESSION_DIR/last_pose_map.json"
   source_ros_environment
-  if topic_is_publishing /scan 2>/dev/null; then
-    NAV2_REUSE_SCAN=1
-    log "  [0/4] /scan 仍在发布 → Nav2 将复用雷达（不杀 ydlidar/scan_filter）"
+  log "  刷新位姿快照 → $out (map->base_link TF) ..."
+  if ! wait_tf_frames_python map base_link 8; then
+    log "        WARN: 切换前无 map->base_link TF，沿用 OK 保存时的位姿"
+    return 1
   fi
+  if python3 - "$out" <<'PY'
+import json
+import math
+import sys
+import time
 
-  log "  [1/4] 停止 SLAM/手柄栈（Nav2 切换；不再触发 joy 内置存图）..."
+import rclpy
+from rclpy.duration import Duration
+from rclpy.node import Node
+from tf2_ros import Buffer, TransformListener
+
+out = sys.argv[1]
+rclpy.init()
+node = Node("qwen_session_pose_snap")
+buf = Buffer(cache_time=Duration(seconds=10.0))
+TransformListener(buf, node, spin_thread=False)
+for _ in range(80):
+    rclpy.spin_once(node, timeout_sec=0.05)
+    try:
+        tf = buf.lookup_transform(
+            "map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.3)
+        )
+        t = tf.transform.translation
+        q = tf.transform.rotation
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny, cosy)
+        payload = {
+            "frame_id": "map",
+            "child_frame_id": "base_link",
+            "x": float(t.x),
+            "y": float(t.y),
+            "z": float(t.z),
+            "qx": float(q.x),
+            "qy": float(q.y),
+            "qz": float(q.z),
+            "qw": float(q.w),
+            "yaw": float(yaw),
+            "stamp": time.time(),
+            "source": "tf_pre_nav",
+        }
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+            f.write("\n")
+        print(f"pose snap OK x={t.x:.3f} y={t.y:.3f} yaw_deg={math.degrees(yaw):.1f}")
+        node.destroy_node()
+        rclpy.shutdown()
+        raise SystemExit(0)
+    except Exception:
+        pass
+node.destroy_node()
+rclpy.shutdown()
+raise SystemExit(1)
+PY
+  then
+    return 0
+  fi
+  log "        WARN: rclpy 位姿快照失败，沿用 OK 保存时的位姿"
+  return 1
+}
+
+stop_slam_stack_for_nav() {
+  log "  [方案A] Nav2 冷启动交接（对齐 run_nav2_foxglove_click_goal.sh）..."
+
+  log "  [1/6] 刷新 Nav2 初始位姿（切换前最后一次 map->base_link）..."
+  refresh_session_pose_before_nav || true
+
+  log "  [2/6] 停车并结束本会话建图/标注进程 ..."
+  source_ros_environment
   timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
     "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 5 \
     >/dev/null 2>&1 || true
+
+  if [[ "$STARTED_DEBUG" -eq 1 ]]; then
+    bash "$PROJECT_DIR/scripts/nav/stop_frontier_region_debug.sh" >> "$SESSION_DIR/session.log" 2>&1 || true
+  fi
 
   if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]]; then
     log "        → 结束 joy_mapping pid=$JOY_PID（SIGKILL，避免 INT 二次 save_map）"
@@ -475,31 +578,25 @@ stop_slam_stack_for_nav() {
       kill -9 "-$JOY_PGID" 2>/dev/null || true
     fi
   fi
-
-  log "  [2/4] 停止 frontier_region_debug（若由本会话启动）..."
-  if [[ "$STARTED_DEBUG" -eq 1 ]]; then
-    bash "$PROJECT_DIR/scripts/nav/stop_frontier_region_debug.sh" >> "$SESSION_DIR/session.log" 2>&1 || true
-  fi
-
-  log "  [3/4] 清理 SLAM / 手柄 / 底盘桥残留 ..."
-  pkill -9 -f "run_joy_mapping_calibrated.sh" 2>/dev/null || true
-  pkill -9 -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
-  pkill -9 -f "run_slam_calibrated.sh" 2>/dev/null || true
-  pkill -9 -f "joy_node|teleop_twist_joy" 2>/dev/null || true
-  pkill -9 -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
-  pkill -9 -f "m1_pwm_cmd_vel_bridge.py" 2>/dev/null || true
-  if [[ "$NAV2_REUSE_SCAN" -ne 1 ]]; then
-    pkill -9 -f "simple_scan_filter.py" 2>/dev/null || true
-    pkill -9 -f "ydlidar_ros2_driver_node|start_lidar_only.sh" 2>/dev/null || true
-  fi
-  if ! pgrep -f "foxglove_bridge" >/dev/null 2>&1; then
-    pkill -9 -f "foxglove_bridge" 2>/dev/null || true
-  fi
+  pkill -9 -f "run_joy_mapping_calibrated.sh|run_corridor_mapping_live_foxglove.sh|run_slam_calibrated.sh" 2>/dev/null || true
+  pkill -9 -f "joy_node|teleop_twist_joy|async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
   sleep 2
 
-  log "  [4/4] 刷新 DDS 环境，准备 Nav2 冷启动 ..."
+  log "  [3/6] 全量清理 Nav2/雷达/底盘栈（cleanup_click_nav_stack_processes）..."
+  cleanup_click_nav_stack_processes "QWEN_NAV2" log
+
+  log "  [4/6] 刷新 ros2 daemon ..."
+  timeout 5 ros2 daemon stop >> "$SESSION_DIR/session.log" 2>&1 || true
+  sleep 2
+  timeout 10 ros2 daemon start >> "$SESSION_DIR/session.log" 2>&1 || true
+  sleep 2
+
+  log "  [5/6] 准备 DDS 环境 + 等待串口释放 (ydlidar/rosmaster) ..."
   prepare_ros_dds_env
-  sleep 2
+  sleep 4
+
+  log "  [6/6] Nav2 将冷启动传感器栈（NAV2_REUSE_EXISTING=0）"
+  NAV2_REUSE_SCAN=0
 }
 
 run_qwen_nav2_phase() {
@@ -527,12 +624,13 @@ run_qwen_nav2_phase() {
   fi
   export LOG_DIR="$SESSION_DIR/nav2_logs"
   export NAV2_STOP_CONFLICTS=1
-  export NAV2_REUSE_EXISTING="${NAV2_REUSE_SCAN:-0}"
-  if [[ "$NAV2_REUSE_EXISTING" -eq 1 ]]; then
-    log "Nav2 复用建图阶段 /scan（NAV2_REUSE_EXISTING=1）"
-  else
-    log "Nav2 冷启动雷达（NAV2_REUSE_EXISTING=0）"
+  export NAV2_REUSE_EXISTING=0
+  unset NAV2_SKIP_DAEMON_REFRESH
+  if [[ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]]; then
+    # shellcheck source=scripts/lib/slam_calibrated_env.sh
+    source "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh"
   fi
+  log "Nav2 冷启动（方案A，NAV2_REUSE_EXISTING=0，与 Foxglove 点击导航一致）"
   mkdir -p "$LOG_DIR"
 
   log "启动 run_qwen_session_nav2_goal.sh ..."
@@ -720,19 +818,7 @@ source_ros_environment
 # ---------------------------------------------------------------------------
 # Phase 2: 路径标注 debug 节点
 # ---------------------------------------------------------------------------
-if ros2 node list 2>/dev/null | grep -qx '/frontier_region_debug'; then
-  log "[2/4] frontier_region_debug 已在运行，复用现有节点"
-else
-  log "[2/4] 启动 start_frontier_region_debug.sh ..."
-  if bash "$PROJECT_DIR/scripts/nav/start_frontier_region_debug.sh" >> "$SESSION_DIR/frontier_debug_start.log" 2>&1; then
-    STARTED_DEBUG=1
-    log "frontier_region_debug 已启动"
-  else
-    log "WARN: frontier_region_debug 启动失败（见 $SESSION_DIR/frontier_debug_start.log）"
-    log "      将继续会话，但实时路径标注可能不可用"
-    tail -20 "$SESSION_DIR/frontier_debug_start.log" || true
-  fi
-fi
+start_frontier_region_debug_session || true
 
 # ---------------------------------------------------------------------------
 # Phase 2b: Foxglove 机器人/目标点可视化
@@ -748,7 +834,8 @@ if bash "$PROJECT_DIR/scripts/debug/start_qwen_session_foxglove_viz.sh" "$NAV_GO
   STARTED_FOXGLOVE_VIZ=1
   log "Foxglove 可视化节点已启动（机器人箭头；Qwen 目标点需 OK 后才会出现）"
   log "  布局: configs/foxglove_slam_mapping.layout.json"
-  log "  ws://<RDK-IP>:8765  3D 面板可见 /map /scan_filtered /qwen_session/*"
+  log "  ws://<RDK-IP>:8765  浅绿走廊: /qwen_explore_debug/map_with_visited"
+  log "  勿启用 visited_area_grid（灰度层）；候选: /qwen_session/candidate_markers"
 else
   log "WARN: Foxglove 可视化节点启动失败，见 $SESSION_DIR/foxglove_viz_start.log"
 fi
@@ -903,6 +990,14 @@ if [[ ${#QWEN_EXTRA_ARGS[@]} -gt 0 ]]; then
   QWEN_CMD+=("${QWEN_EXTRA_ARGS[@]}")
 fi
 
+log "预计算 v6 候选并写入 Foxglove JSON（candidates-only，不调用 Qwen API）..."
+QWEN_PREVIEW=( "${QWEN_CMD[@]}" --candidates-only )
+if ! "${QWEN_PREVIEW[@]}" 2>&1 | tee "$SESSION_DIR/qwen_candidates_preview.log"; then
+  log "WARN: candidates-only 失败，将继续完整 Qwen 流程（见 qwen_candidates_preview.log）"
+else
+  log "Foxglove 候选点: runtime/qwen_session/live_candidates_foxglove.json"
+fi
+
 log "调用 qwen_live_session_planner.py（v6 程序候选 + Qwen 第二阶段）..."
 if ! "${QWEN_CMD[@]}" 2>&1 | tee "$SESSION_DIR/qwen_run.log"; then
   log "FAIL: Qwen live session 规划失败"
@@ -952,8 +1047,9 @@ cat > "$SESSION_DIR/README.txt" <<EOF
 
 Foxglove（ws://<RDK-IP>:8765）:
   导入布局 configs/foxglove_slam_mapping.layout.json
-  /map, /scan_filtered, /qwen_explore_debug/trajectory_path
-  /qwen_session/robot_pose_markers, /qwen_session/qwen_goal_markers
+  浅绿走廊: /qwen_explore_debug/map_with_visited（勿开 visited_area_grid）
+  /scan_filtered, /qwen_session/robot_pose_markers, /qwen_session/candidate_markers
+  /qwen_session/qwen_goal_markers, /qwen_session/planned_path（Nav2 发目标后）
 
 Nav2:
   默认 Qwen 选点后自动导航；跳过请加 --no-auto-nav

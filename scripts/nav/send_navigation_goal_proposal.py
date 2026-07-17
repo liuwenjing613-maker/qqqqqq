@@ -8,11 +8,12 @@ import argparse
 import json
 import math
 import time
-from pathlib import Path
+from pathlib import Path as FilePath
 
 import rclpy
 from geometry_msgs.msg import PoseStamped, Quaternion
-from nav2_msgs.action import NavigateToPose
+from nav2_msgs.action import ComputePathToPose, NavigateToPose
+from nav_msgs.msg import Path as NavPath
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -29,17 +30,23 @@ def yaw_to_quaternion(yaw_rad: float) -> Quaternion:
 class NavGoalSender(Node):
     def __init__(
         self,
-        goal_json: Path,
+        goal_json: FilePath,
         map_frame: str,
         timeout_s: float,
         wait_tf_s: float,
+        publish_planned_path: bool = True,
+        compute_path_timeout_s: float = 45.0,
     ) -> None:
         super().__init__("qwen_nav_goal_sender")
         self._client = ActionClient(self, NavigateToPose, "/navigate_to_pose")
+        self._path_client = ActionClient(self, ComputePathToPose, "/compute_path_to_pose")
+        self._path_pub = self.create_publisher(NavPath, "/qwen_session/planned_path", 10)
         self._goal_json = goal_json
         self._map_frame = map_frame
         self._timeout_s = timeout_s
         self._wait_tf_s = wait_tf_s
+        self._publish_planned_path = publish_planned_path
+        self._compute_path_timeout_s = compute_path_timeout_s
         self._tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
@@ -62,6 +69,58 @@ class NavGoalSender(Node):
             f"等待 TF {self._map_frame} -> base_link 超时 ({self._wait_tf_s:.0f}s)"
         )
         return False
+
+    def _publish_planned_path_preview(self, pose: PoseStamped) -> None:
+        if not self._publish_planned_path:
+            return
+        if not self._path_client.wait_for_server(timeout_sec=self._compute_path_timeout_s):
+            self.get_logger().warn(
+                "/compute_path_to_pose 不可用，跳过 /qwen_session/planned_path 预览（导航仍可继续）"
+            )
+            return
+
+        path_goal = ComputePathToPose.Goal()
+        path_goal.goal = pose
+        if hasattr(path_goal, "planner_id"):
+            path_goal.planner_id = ""
+        if hasattr(path_goal, "use_start"):
+            path_goal.use_start = False
+
+        send_future = self._path_client.send_goal_async(path_goal)
+        rclpy.spin_until_future_complete(
+            self, send_future, timeout_sec=self._compute_path_timeout_s
+        )
+        if not send_future.done():
+            self.get_logger().warn("ComputePathToPose 发送超时，跳过路径预览")
+            return
+
+        goal_handle = send_future.result()
+        if goal_handle is None or not goal_handle.accepted:
+            self.get_logger().warn("ComputePathToPose 被拒绝，跳过路径预览")
+            return
+
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(
+            self, result_future, timeout_sec=self._compute_path_timeout_s
+        )
+        if not result_future.done():
+            self.get_logger().warn("ComputePathToPose 结果超时，跳过路径预览")
+            return
+
+        try:
+            path = result_future.result().result.path
+        except Exception as exc:
+            self.get_logger().warn(f"ComputePathToPose 结果异常: {exc}")
+            return
+
+        if len(path.poses) == 0:
+            self.get_logger().warn("规划器返回空路径，Foxglove 不显示 planned_path")
+            return
+
+        self._path_pub.publish(path)
+        self.get_logger().info(
+            f"已发布 /qwen_session/planned_path ({len(path.poses)} poses)"
+        )
 
     def run(self) -> int:
         payload = json.loads(self._goal_json.read_text(encoding="utf-8"))
@@ -87,6 +146,8 @@ class NavGoalSender(Node):
         msg.pose.pose.position.x = gx
         msg.pose.pose.position.y = gy
         msg.pose.pose.orientation = yaw_to_quaternion(gyaw)
+
+        self._publish_planned_path_preview(msg.pose)
 
         self.get_logger().info(
             f"发送 Nav2 目标 {self._map_frame} ({gx:.3f}, {gy:.3f}) yaw={math.degrees(gyaw):.1f}°"
@@ -144,14 +205,22 @@ def main() -> int:
     parser.add_argument("--map-frame", default="map")
     parser.add_argument("--timeout-s", type=float, default=180.0)
     parser.add_argument("--wait-tf-s", type=float, default=30.0)
+    parser.add_argument("--compute-path-timeout-s", type=float, default=45.0)
+    parser.add_argument(
+        "--no-planned-path",
+        action="store_true",
+        help="不调用 compute_path_to_pose，不发布 /qwen_session/planned_path",
+    )
     args = parser.parse_args()
 
     rclpy.init()
     node = NavGoalSender(
-        Path(args.goal_json).expanduser().resolve(),
+        FilePath(args.goal_json).expanduser().resolve(),
         args.map_frame,
         args.timeout_s,
         args.wait_tf_s,
+        publish_planned_path=not args.no_planned_path,
+        compute_path_timeout_s=args.compute_path_timeout_s,
     )
     try:
         return node.run()

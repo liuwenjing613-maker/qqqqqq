@@ -243,15 +243,13 @@ class QwenSessionFoxgloveVizNode(Node):
 
         selected_local_id = payload.get("selected_local_id")
         phase = str(payload.get("phase", "pending"))
-        show_only_selected = phase == "selected" and selected_local_id is not None
+        has_selection = phase == "selected" and selected_local_id is not None
 
         for item in candidates:
             local_id = int(item.get("local_id", 0))
-            if show_only_selected and local_id != int(selected_local_id):
-                continue
             gx = float(item.get("map_x", 0.0))
             gy = float(item.get("map_y", 0.0))
-            is_selected = show_only_selected and local_id == int(selected_local_id)
+            is_selected = has_selection and local_id == int(selected_local_id)
 
             sphere = Marker()
             sphere.header.frame_id = self._map_frame
@@ -271,21 +269,24 @@ class QwenSessionFoxgloveVizNode(Node):
                 sphere.color = ColorRGBA(r=0.15, g=0.85, b=0.25, a=0.88)
             arr.markers.append(sphere)
 
-            if not is_selected:
-                label = Marker()
-                label.header.frame_id = self._map_frame
-                label.header.stamp = stamp
-                label.ns = "qwen_candidates"
-                label.id = 1000 + local_id
-                label.type = Marker.TEXT_VIEW_FACING
-                label.action = Marker.ADD
-                label.pose.position.x = gx
-                label.pose.position.y = gy
-                label.pose.position.z = 0.42
-                label.scale.z = 0.16
+            label = Marker()
+            label.header.frame_id = self._map_frame
+            label.header.stamp = stamp
+            label.ns = "qwen_candidates"
+            label.id = 1000 + local_id
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position.x = gx
+            label.pose.position.y = gy
+            label.pose.position.z = 0.42 if is_selected else 0.36
+            label.scale.z = 0.18 if is_selected else 0.16
+            if is_selected:
+                label.color = ColorRGBA(r=1.0, g=0.85, b=0.85, a=1.0)
+                label.text = f"QWEN C{local_id}"
+            else:
                 label.color = ColorRGBA(r=0.85, g=1.0, b=0.85, a=1.0)
                 label.text = f"C{local_id}"
-                arr.markers.append(label)
+            arr.markers.append(label)
 
         self._pub_candidates.publish(arr)
 

@@ -1,0 +1,79 @@
+# One-command full-flow V2 overlay.
+# Added as a new file. It does not replace the proven V1 or the V1 fusion config.
+online_map_plan_fullflow_v2:
+  enabled: true
+  default_task: "find the bottle"
+  debug_dir: "logs/fullflow_v2"
+
+  startup:
+    start_live_slam: true
+    reuse_existing_slam: true
+    map_wait_sec: 60.0
+    nav2_wait_sec: 45.0
+    backend_wait_sec: 5.0
+    shutdown_grace_sec: 3.0
+
+  topics:
+    map: /map
+    odom: /odom
+    scan: /scan_filtered
+    map_frame: map
+    base_frame: base_link
+    navigate_action: /navigate_to_pose
+
+    backend_request: /map_qwen_plan/request
+    backend_cancel: /map_qwen_plan/cancel
+    backend_status: /map_qwen_plan/status
+    backend_candidate_summary: /map_qwen_plan/candidate_summary
+    backend_candidate_probe: /map_qwen_plan/candidate_probe
+    backend_cmd: /map_qwen_plan/cmd_vel
+    nav2_cmd_raw: /map_qwen_plan/cmd_vel_raw
+    backend_debug: /map_qwen_plan/backend_debug
+
+  # Phase 1 deliberately uses geometry only. Long-term trajectory/visual memory
+  # remains disabled until the online handoff is proven on the real robot.
+  candidate:
+    free_max_value: 20
+    occupied_min_value: 65
+    obstacle_inflation_m: 0.30
+    min_frontier_cells: 8
+    information_radius_m: 0.85
+    min_goal_distance_m: 0.50
+    max_goal_distance_m: 2.60
+    preferred_min_distance_m: 0.75
+    preferred_max_distance_m: 1.80
+    max_abs_relative_heading_deg: 150.0
+    min_heading_separation_deg: 32.0
+    max_candidates: 8
+    stable_id_quantization_m: 0.15
+    map_max_age_sec: 2.0
+    tf_max_age_sec: 1.0
+    cache_sec: 1.2
+
+  qwen:
+    enabled: true
+    model: qwen3-vl-flash
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    timeout_sec: 15.0
+    retries: 1
+    image_side: 1280
+    fallback_to_geometry: true
+    dry_run: false
+
+  navigation:
+    server_wait_sec: 5.0
+    navigation_timeout_sec: 150.0
+    raw_cmd_timeout_sec: 0.35
+    # Nav2 reaches x/y first. The backend then performs a low-speed map-frame
+    # yaw alignment, so the first-person camera faces the selected frontier.
+    final_alignment_enabled: true
+    final_alignment_tolerance_deg: 8.0
+    final_alignment_hold_sec: 0.40
+    final_alignment_timeout_sec: 12.0
+    final_alignment_kp: 0.65
+    final_alignment_min_wz: 0.025
+    final_alignment_max_wz: 0.050
+
+  safety:
+    max_linear_x: 0.055
+    max_angular_z: 0.060

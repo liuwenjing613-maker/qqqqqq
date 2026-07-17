@@ -256,7 +256,7 @@ def write_foxglove_candidates_json(
     *,
     selected_local_id: Optional[int] = None,
 ) -> None:
-    """写入 Foxglove 候选点标记（Qwen 前展示全部，选定后仅保留 selected）。"""
+    """写入 Foxglove 候选点标记（始终保留全部候选；selected 仅用于高亮）。"""
     items: List[Dict[str, Any]] = []
     for local_id, candidate in enumerate(candidates, start=1):
         px = int(getattr(candidate, "x"))

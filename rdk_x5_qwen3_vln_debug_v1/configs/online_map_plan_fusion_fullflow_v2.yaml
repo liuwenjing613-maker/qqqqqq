@@ -1,0 +1,50 @@
+# Existing bridge overlay used by the V2 one-command launcher.
+# It keeps live SLAM alive and requires the real backend to finish final yaw.
+online_map_plan_fusion:
+  enabled: true
+  integration:
+    use_memory: false
+    default_task: "优先选择最有利于继续寻找目标、几何可达的候选方向。"
+    require_final_orientation: true
+    auto_ack_to_intervention: true
+
+  topics:
+    map: /map
+    odom: /odom
+    scan: /scan_filtered
+    intervention_request: /third_view/intervention/request
+    intervention_cancel: /third_view/intervention/cancel
+    intervention_status: /third_view/intervention/status
+    intervention_navigation_status: /third_view/navigation_status
+    intervention_candidate_summary: /third_view/candidate_summary
+    map_cmd_output: /cmd_vel_map
+    backend_request: /map_qwen_plan/request
+    backend_cancel: /map_qwen_plan/cancel
+    backend_status: /map_qwen_plan/status
+    backend_candidate_summary: /map_qwen_plan/candidate_summary
+    backend_cmd: /map_qwen_plan/cmd_vel
+    backend_candidate_probe: /map_qwen_plan/candidate_probe
+    bridge_status: /map_qwen_plan/bridge_status
+
+  candidate_probe:
+    enabled: true
+    interval_sec: 1.0
+
+  timing:
+    output_rate_hz: 20.0
+    backend_request_timeout_sec: 8.0
+    backend_heartbeat_timeout_sec: 8.0
+    backend_cmd_timeout_sec: 0.40
+    cancel_hold_sec: 0.40
+
+  safety:
+    max_linear_x: 0.055
+    max_angular_z: 0.060
+
+  startup:
+    # The outer V2 launcher owns process order and health checks.
+    start_map_stack: false
+    map_stack_command: ""
+    start_backend: false
+    backend_command: ""
+    startup_wait_sec: 1.0

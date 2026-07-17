@@ -445,3 +445,165 @@ rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called 
 [INFO] [1784205201.716844128] [qwen_session_foxglove_viz]: qwen_session_foxglove_viz started map=map robot=base_link goal_json=/root/rdk_x5_vln_robot/runtime/qwen_session/navigation_goal_proposal.json candidates_json=/root/rdk_x5_vln_robot/runtime/qwen_session/live_candidates_foxglove.json
 [INFO] [1784205202.073613682] [qwen_session_foxglove_viz]: loaded Qwen goal json status=PENDING (no goal)
 [INFO] [1784205202.077984680] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=11
+[INFO] [1784205396.074816728] [qwen_session_foxglove_viz]: loaded candidates json phase=pending selected=None count=7
+[INFO] [1784205398.575033979] [qwen_session_foxglove_viz]: loaded Qwen goal json status=REGION_PROPOSED x=1.5099999999999998 y=-0.2899999999999996 yaw_deg=-127.37679953083016
+[INFO] [1784205398.578528935] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=7
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 402, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 411, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 407, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[INFO] [1784206003.957939202] [qwen_session_foxglove_viz]: qwen_session_foxglove_viz started map=map robot=base_link goal_json=/root/rdk_x5_vln_robot/runtime/qwen_session/navigation_goal_proposal.json candidates_json=/root/rdk_x5_vln_robot/runtime/qwen_session/live_candidates_foxglove.json
+[INFO] [1784206004.309152151] [qwen_session_foxglove_viz]: loaded Qwen goal json status=PENDING (no goal)
+[INFO] [1784206004.312177398] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=7
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 411, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 407, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[ERROR] [1784206365.895314145] [rclpy.signals]: rcl_trigger_guard_condition() failed: guard condition implementation is invalid, at ./src/rcl/guard_condition.c:172
+[INFO] [1784206523.674182090] [qwen_session_foxglove_viz]: qwen_session_foxglove_viz started map=map robot=base_link goal_json=/root/rdk_x5_vln_robot/runtime/qwen_session/navigation_goal_proposal.json candidates_json=/root/rdk_x5_vln_robot/runtime/qwen_session/live_candidates_foxglove.json
+[INFO] [1784206524.031595245] [qwen_session_foxglove_viz]: loaded Qwen goal json status=PENDING (no goal)
+[INFO] [1784206524.035141909] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=7
+[INFO] [1784206844.031416860] [qwen_session_foxglove_viz]: loaded candidates json phase=pending selected=None count=5
+[INFO] [1784206846.032461814] [qwen_session_foxglove_viz]: loaded Qwen goal json status=REGION_PROPOSED x=-2.29 y=0.16999999999999993 yaw_deg=-128.703572086532
+[INFO] [1784206846.036305811] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=5
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 402, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 624, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 411, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 407, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[INFO] [1784207717.160186984] [qwen_session_foxglove_viz]: qwen_session_foxglove_viz started map=map robot=base_link goal_json=/root/rdk_x5_vln_robot/runtime/qwen_session/navigation_goal_proposal.json candidates_json=/root/rdk_x5_vln_robot/runtime/qwen_session/live_candidates_foxglove.json
+[INFO] [1784207717.515415307] [qwen_session_foxglove_viz]: loaded Qwen goal json status=PENDING (no goal)
+[INFO] [1784207717.520087847] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=5
+[INFO] [1784207917.515585105] [qwen_session_foxglove_viz]: loaded candidates json phase=pending selected=None count=11
+[INFO] [1784207919.515893853] [qwen_session_foxglove_viz]: loaded Qwen goal json status=REGION_PROPOSED x=-1.8599999999999994 y=0.9500000000000002 yaw_deg=93.81834612324155
+[INFO] [1784207919.519527143] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=11
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 402, in main
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 596, in _wait_for_ready_callbacks
+    wait_set = _rclpy.WaitSet(
+rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 411, in <module>
+    main()
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 407, in main
+    rclpy.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[INFO] [1784264939.985139446] [qwen_session_foxglove_viz]: qwen_session_foxglove_viz started map=map robot=base_link goal_json=/root/rdk_x5_vln_robot/runtime/qwen_session/navigation_goal_proposal.json candidates_json=/root/rdk_x5_vln_robot/runtime/qwen_session/live_candidates_foxglove.json
+[INFO] [1784264940.344199915] [qwen_session_foxglove_viz]: loaded Qwen goal json status=PENDING (no goal)
+[INFO] [1784264940.353303545] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=11
+[INFO] [1784265099.345296485] [qwen_session_foxglove_viz]: loaded candidates json phase=pending selected=None count=5
+[INFO] [1784265101.345501213] [qwen_session_foxglove_viz]: loaded candidates json phase=pending selected=None count=5
+[INFO] [1784265105.345033377] [qwen_session_foxglove_viz]: loaded Qwen goal json status=REGION_PROPOSED x=0.25000000000000044 y=2.23 yaw_deg=-175.29710627266994
+[INFO] [1784265105.348234208] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=5
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 403, in main
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 748, in _spin_once_impl
+    raise handler.exception()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 254, in __call__
+    self._handler.send(None)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 447, in handler
+    await call_coroutine(entity, arg)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 361, in _execute_timer
+    await await_or_execute(tmr.callback)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 107, in await_or_execute
+    return callback(*args)
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 395, in _on_timer
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 291, in _publish_candidate_markers
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/publisher.py", line 70, in publish
+    self.__publisher.publish(msg)
+rclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 412, in <module>
+  File "/root/rdk_x5_vln_robot/scripts/debug/qwen_session_foxglove_viz_node.py", line 408, in main
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+    _shutdown(context=context)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+    return context.shutdown()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+    self.__context.shutdown()
+rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+[INFO] [1784266126.808389090] [qwen_session_foxglove_viz]: qwen_session_foxglove_viz started map=map robot=base_link goal_json=/root/rdk_x5_vln_robot/runtime/qwen_session/navigation_goal_proposal.json candidates_json=/root/rdk_x5_vln_robot/runtime/qwen_session/live_candidates_foxglove.json
+[INFO] [1784266127.167004730] [qwen_session_foxglove_viz]: loaded Qwen goal json status=PENDING (no goal)
+[INFO] [1784266127.170556838] [qwen_session_foxglove_viz]: loaded candidates json phase=selected selected=1 count=5

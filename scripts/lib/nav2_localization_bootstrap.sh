@@ -149,6 +149,99 @@ raise SystemExit(1)
 PY
 }
 
+wait_map_base_link_tf_rclpy() {
+  local timeout_sec="${1:-120}"
+  local log_tag="${2:-NAV2_BOOT}"
+  python3 - "$timeout_sec" "$log_tag" <<'PY'
+import sys
+import time
+
+import rclpy
+from rclpy.duration import Duration
+from rclpy.node import Node
+from tf2_ros import Buffer, TransformListener
+
+timeout = float(sys.argv[1])
+log_tag = sys.argv[2]
+rclpy.init()
+node = Node("nav2_wait_map_base_link")
+buf = Buffer(cache_time=Duration(seconds=30.0))
+TransformListener(buf, node, spin_thread=False)
+start = time.time()
+last_report = start
+while time.time() - start < timeout:
+    rclpy.spin_once(node, timeout_sec=0.1)
+    now = time.time()
+    if now - last_report >= 10.0:
+        print(f"[{log_tag}] ... waiting TF map -> base_link ({int(now - start)}s)", flush=True)
+        last_report = now
+    try:
+        tf = buf.lookup_transform(
+            "map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.3)
+        )
+        t = tf.transform.translation
+        print(
+            f"[{log_tag}] TF map -> base_link OK  x={t.x:.3f} y={t.y:.3f}",
+            flush=True,
+        )
+        node.destroy_node()
+        rclpy.shutdown()
+        raise SystemExit(0)
+    except Exception:
+        pass
+node.destroy_node()
+rclpy.shutdown()
+print(f"[{log_tag}] ERROR: map -> base_link TF not available after {timeout:.0f}s")
+raise SystemExit(1)
+PY
+}
+
+wait_amcl_scan_subscription() {
+  local timeout_sec="${1:-90}"
+  local start
+  start="$(date +%s)"
+  echo "[NAV2] wait AMCL /scan_filtered subscription (timeout=${timeout_sec}s) ..."
+  while true; do
+    local sub_count
+    sub_count="$(ros2 topic info /scan_filtered -v 2>/dev/null | awk '/Subscription count:/{print $3; exit}')"
+    if [ "${sub_count:-0}" -ge 1 ]; then
+      if ros2 topic info /scan_filtered -v 2>/dev/null | grep -qi amcl; then
+        echo "[NAV2] AMCL laser subscription ready (scan_filtered subs=${sub_count})"
+        return 0
+      fi
+      if [ "${sub_count:-0}" -ge 1 ]; then
+        echo "[NAV2] /scan_filtered has subscriber(s=${sub_count}); proceed with AMCL bootstrap"
+        return 0
+      fi
+    fi
+    if [ $(( $(date +%s) - start )) -ge "$timeout_sec" ]; then
+      echo "[NAV2] WARN: AMCL /scan_filtered subscription not confirmed after ${timeout_sec}s"
+      return 1
+    fi
+    sleep 1
+  done
+}
+
+wait_initialpose_subscriber_ready() {
+  local timeout_sec="${1:-60}"
+  local start
+  start="$(date +%s)"
+  echo "[NAV2] wait /initialpose subscriber (timeout=${timeout_sec}s) ..."
+  while true; do
+    local sub_count
+    sub_count="$(ros2 topic info /initialpose -v 2>/dev/null | awk '/Subscription count:/{print $3; exit}')"
+    if [ "${sub_count:-0}" -ge 1 ]; then
+      echo "[NAV2] /initialpose subscriber OK (count=${sub_count})"
+      return 0
+    fi
+    if [ $(( $(date +%s) - start )) -ge "$timeout_sec" ]; then
+      echo "[NAV2] WARN: no /initialpose subscriber yet; AMCL bootstrap may need retry"
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 bootstrap_amcl_from_pose() {
   local x="$1"
   local y="$2"
