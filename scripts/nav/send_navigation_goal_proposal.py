@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import time
 from pathlib import Path as FilePath
 from typing import Any, Dict, Optional, Tuple
@@ -36,6 +37,13 @@ def _path_length_m(path: NavPath) -> float:
         p1 = poses[i].pose.position
         total += math.hypot(p1.x - p0.x, p1.y - p0.y)
     return total
+
+
+def _atomic_write_json(path: FilePath, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 class NavGoalSender(Node):
@@ -184,9 +192,7 @@ class NavGoalSender(Node):
         safety["path_pose_count"] = len(path.poses)
         safety["path_length_m"] = round(_path_length_m(path), 3)
         safety["note"] = "ComputePathToPose 成功，已允许 NavigateToPose。"
-        self._goal_json.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
+        _atomic_write_json(self._goal_json, payload)
 
     def _mark_goal_json_path_failed(self, reason: str) -> None:
         payload = json.loads(self._goal_json.read_text(encoding="utf-8"))
@@ -195,9 +201,7 @@ class NavGoalSender(Node):
         safety["reachability_validated"] = False
         safety["ready_for_nav2"] = False
         safety["note"] = reason
-        self._goal_json.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
+        _atomic_write_json(self._goal_json, payload)
 
     def run(self) -> int:
         payload = json.loads(self._goal_json.read_text(encoding="utf-8"))

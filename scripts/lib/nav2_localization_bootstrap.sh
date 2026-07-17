@@ -2,6 +2,7 @@
 # Localization bootstrap helpers for saved-map Nav2 (ported from nav2_oneclick_goal.sh).
 
 _LIFECYCLE_PROBE="${PROJECT_DIR:-/root/rdk_x5_vln_robot}/scripts/lib/lifecycle_probe.py"
+_ROS_TOPIC_PROBE="${PROJECT_DIR:-/root/rdk_x5_vln_robot}/scripts/lib/ros_topic_probe.py"
 
 export_ros_dds_env() {
   local project_dir="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
@@ -402,87 +403,320 @@ print("[NAV2_BOOT] If scan and map walls do not overlap in Foxglove, set initial
 PY
 }
 
-wait_amcl_localization_settle() {
-  local timeout_sec="${1:-25}"
-  python3 - "$timeout_sec" <<'PY'
-import math
+get_map_publisher_count() {
+  ros2 topic info /map -v 2>/dev/null | awk '/Publisher count:/{print $3; exit}' || echo 0
+}
+
+wait_map_publisher_count() {
+  local expected="$1"
+  local timeout_sec="${2:-60}"
+  local start now count
+  start="$(date +%s)"
+  echo "[NAV2_BOOT] wait /map publisher count == ${expected} (timeout=${timeout_sec}s)"
+  while true; do
+    count="$(get_map_publisher_count)"
+    if [ "${count:-0}" -eq "$expected" ]; then
+      echo "[NAV2_BOOT] /map publisher count OK: ${count}"
+      return 0
+    fi
+    now="$(date +%s)"
+    if [ $((now - start)) -ge "$timeout_sec" ]; then
+      echo "[NAV2_BOOT] ERROR: /map publisher count=${count:-0}, expected ${expected} after ${timeout_sec}s"
+      return 1
+    fi
+    sleep 1
+  done
+}
+
+update_nav2_stage_timing_json() {
+  local timing_file="$1"
+  shift
+  python3 - "$timing_file" "$@" <<'PY'
+import json
+import os
 import sys
 import time
+from pathlib import Path
+
+path = Path(sys.argv[1])
+updates: dict[str, float] = {}
+idx = 2
+while idx + 1 < len(sys.argv):
+    updates[sys.argv[idx]] = float(sys.argv[idx + 1])
+    idx += 2
+
+data: dict = {}
+if path.is_file():
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+data.update(updates)
+path.parent.mkdir(parents=True, exist_ok=True)
+tmp = path.with_suffix(path.suffix + ".tmp")
+tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+os.replace(tmp, path)
+PY
+}
+
+wait_amcl_localization_settle() {
+  local timeout_sec="${1:-${AMCL_SETTLE_TIMEOUT_S:-60}}"
+  export AMCL_SETTLE_TIMEOUT_S="$timeout_sec"
+  python3 - "$timeout_sec" "$_LIFECYCLE_PROBE" <<'PY'
+import json
+import math
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
 
 import rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+from sensor_msgs.msg import LaserScan
+from tf2_ros import Buffer, TransformListener
 
 timeout = float(sys.argv[1])
+lifecycle_probe = sys.argv[2]
+
+min_samples = int(os.environ.get("AMCL_SETTLE_MIN_SAMPLES", "5"))
+max_x_spread = float(os.environ.get("AMCL_SETTLE_MAX_X_SPREAD_M", "0.08"))
+max_y_spread = float(os.environ.get("AMCL_SETTLE_MAX_Y_SPREAD_M", "0.08"))
+max_yaw_spread_deg = float(os.environ.get("AMCL_SETTLE_MAX_YAW_SPREAD_DEG", "7.0"))
+max_x_cov = float(os.environ.get("AMCL_SETTLE_MAX_X_COV", "0.25"))
+max_y_cov = float(os.environ.get("AMCL_SETTLE_MAX_Y_COV", "0.25"))
+max_yaw_cov = float(os.environ.get("AMCL_SETTLE_MAX_YAW_COV", "0.15"))
+metrics_out = os.environ.get("AMCL_SETTLE_METRICS_FILE", "")
+
+def yaw_from_quat(q) -> float:
+    siny = 2.0 * (q.w * q.z + q.x * q.y)
+    cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    return math.atan2(siny, cosy)
+
+def yaw_spread_deg(yaws: list[float]) -> float:
+    if len(yaws) < 2:
+        return 0.0
+    yaws = sorted(yaws)
+    max_gap = max(yaws[i + 1] - yaws[i] for i in range(len(yaws) - 1))
+    wrap_gap = (yaws[0] + 2.0 * math.pi) - yaws[-1]
+    return math.degrees(max(max_gap, wrap_gap))
+
+def probe_amcl_active() -> bool | None:
+    probe = Path(lifecycle_probe)
+    if not probe.is_file():
+        return None
+    try:
+        out = subprocess.check_output(
+            ["python3", str(probe), "wait", "/amcl", "5"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+        )
+        return "active [3]" in out
+    except Exception:
+        return None
+
+def build_metrics(samples, scan_fresh: bool, map_tf_fresh: bool, amcl_active) -> dict:
+    xs = [s["x"] for s in samples]
+    ys = [s["y"] for s in samples]
+    yaws = [s["yaw"] for s in samples]
+    last = samples[-1] if samples else {"x_cov": 0.0, "y_cov": 0.0, "yaw_cov": 0.0}
+    x_spread = (max(xs) - min(xs)) if xs else 0.0
+    y_spread = (max(ys) - min(ys)) if ys else 0.0
+    yaw_spread = yaw_spread_deg(yaws) if yaws else 0.0
+    return {
+        "sample_count": len(samples),
+        "x_spread_m": x_spread,
+        "y_spread_m": y_spread,
+        "yaw_spread_deg": yaw_spread,
+        "x_cov": float(last.get("x_cov", 0.0)),
+        "y_cov": float(last.get("y_cov", 0.0)),
+        "yaw_cov": float(last.get("yaw_cov", 0.0)),
+        "scan_filtered_fresh": scan_fresh,
+        "map_to_base_link_fresh": map_tf_fresh,
+        "amcl_active": amcl_active,
+    }
+
+def checks_pass(metrics: dict) -> tuple[bool, list[str]]:
+    failures: list[str] = []
+    if metrics["sample_count"] < min_samples:
+        failures.append(f"samples={metrics['sample_count']} < {min_samples}")
+    if metrics["x_spread_m"] > max_x_spread:
+        failures.append(f"x_spread={metrics['x_spread_m']:.4f}m > {max_x_spread}")
+    if metrics["y_spread_m"] > max_y_spread:
+        failures.append(f"y_spread={metrics['y_spread_m']:.4f}m > {max_y_spread}")
+    if metrics["yaw_spread_deg"] > max_yaw_spread_deg:
+        failures.append(f"yaw_spread={metrics['yaw_spread_deg']:.2f}deg > {max_yaw_spread_deg}")
+    if metrics["x_cov"] > max_x_cov:
+        failures.append(f"x_cov={metrics['x_cov']:.4f} > {max_x_cov}")
+    if metrics["y_cov"] > max_y_cov:
+        failures.append(f"y_cov={metrics['y_cov']:.4f} > {max_y_cov}")
+    if metrics["yaw_cov"] > max_yaw_cov:
+        failures.append(f"yaw_cov={metrics['yaw_cov']:.4f} > {max_yaw_cov}")
+    if not metrics["scan_filtered_fresh"]:
+        failures.append("scan_filtered not fresh")
+    if not metrics["map_to_base_link_fresh"]:
+        failures.append("map->base_link TF not fresh")
+    if metrics["amcl_active"] is False:
+        failures.append("amcl lifecycle not active")
+    return (len(failures) == 0, failures)
+
+def print_metrics(metrics: dict, failures: list[str] | None = None) -> None:
+    print(
+        "[NAV2_BOOT] AMCL settle metrics: "
+        f"samples={metrics['sample_count']} "
+        f"x_spread={metrics['x_spread_m']:.4f}m "
+        f"y_spread={metrics['y_spread_m']:.4f}m "
+        f"yaw_spread={metrics['yaw_spread_deg']:.2f}deg "
+        f"x_cov={metrics['x_cov']:.4f} "
+        f"y_cov={metrics['y_cov']:.4f} "
+        f"yaw_cov={metrics['yaw_cov']:.4f} "
+        f"scan_filtered_fresh={metrics['scan_filtered_fresh']} "
+        f"map_to_base_link_fresh={metrics['map_to_base_link_fresh']} "
+        f"amcl_active={metrics['amcl_active']}",
+        flush=True,
+    )
+    if failures:
+        print(f"[NAV2_BOOT] AMCL settle FAIL: {'; '.join(failures)}", flush=True)
+
+def write_metrics_file(metrics: dict, passed: bool) -> None:
+    if not metrics_out:
+        return
+    payload = dict(metrics)
+    payload["passed"] = passed
+    path = Path(metrics_out)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
 rclpy.init()
 node = Node("nav2_wait_amcl_settle")
-qos = QoSProfile(
+amcl_qos = QoSProfile(
     depth=10,
     durability=DurabilityPolicy.VOLATILE,
     reliability=ReliabilityPolicy.RELIABLE,
 )
-samples = []
+samples: list[dict] = []
+scan_last = {"t": 0.0}
 
-def cb(msg: PoseWithCovarianceStamped) -> None:
+def on_amcl_pose(msg: PoseWithCovarianceStamped) -> None:
     p = msg.pose.pose.position
     q = msg.pose.pose.orientation
-    siny = 2.0 * (q.w * q.z + q.x * q.y)
-    cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-    yaw = math.atan2(siny, cosy)
-    cov_xy = float(msg.pose.covariance[0]) + float(msg.pose.covariance[7])
-    samples.append((time.time(), p.x, p.y, yaw, cov_xy))
+    cov = msg.pose.covariance
+    samples.append(
+        {
+            "t": time.time(),
+            "x": float(p.x),
+            "y": float(p.y),
+            "yaw": yaw_from_quat(q),
+            "x_cov": float(cov[0]),
+            "y_cov": float(cov[7]),
+            "yaw_cov": float(cov[35]),
+        }
+    )
 
-node.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", cb, qos)
+def on_scan(_msg: LaserScan) -> None:
+    scan_last["t"] = time.time()
+
+node.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", on_amcl_pose, amcl_qos)
+node.create_subscription(LaserScan, "/scan_filtered", on_scan, qos_profile_sensor_data)
+tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
+TransformListener(tf_buffer, node, spin_thread=False)
+
 start = time.time()
-min_samples = 5
-stable_need = 3
-stable_count = 0
+last_report = start
+passed = False
+final_metrics: dict = {}
 
 while time.time() - start < timeout:
     rclpy.spin_once(node, timeout_sec=0.2)
-    if len(samples) < min_samples:
-        continue
-    recent = samples[-stable_need:]
-    xs = [s[1] for s in recent]
-    ys = [s[2] for s in recent]
-    yaws = [s[3] for s in recent]
-    if (
-        max(xs) - min(xs) < 0.08
-        and max(ys) - min(ys) < 0.08
-        and max(yaws) - min(yaws) < 0.12
-    ):
-        stable_count += 1
-        if stable_count >= 4:
-            last = samples[-1]
-            print(
-                f"[NAV2_BOOT] AMCL pose settled: x={last[1]:.3f} y={last[2]:.3f} "
-                f"yaw={last[3]:.3f} rad ({math.degrees(last[3]):.1f} deg), "
-                f"cov_xy_sum={last[4]:.3f}, samples={len(samples)}",
-                flush=True,
-            )
-            node.destroy_node()
-            rclpy.shutdown()
-            raise SystemExit(0)
-    else:
-        stable_count = 0
+    scan_fresh = (time.time() - scan_last["t"]) <= 3.0 if scan_last["t"] > 0 else False
+    map_tf_fresh = False
+    try:
+        tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
+        map_tf_fresh = True
+    except Exception:
+        map_tf_fresh = False
+    amcl_active = probe_amcl_active()
+    metrics = build_metrics(samples, scan_fresh, map_tf_fresh, amcl_active)
+    ok, failures = checks_pass(metrics)
+    now = time.time()
+    if now - last_report >= 5.0:
+        print_metrics(metrics, failures if not ok else None)
+        last_report = now
+    if ok:
+        passed = True
+        final_metrics = metrics
+        break
 
-if samples:
-    last = samples[-1]
-    print(
-        f"[NAV2_BOOT] WARN: AMCL pose not fully settled after {timeout:.0f}s; "
-        f"last x={last[1]:.3f} y={last[2]:.3f} yaw={math.degrees(last[3]):.1f} deg "
-        f"(samples={len(samples)}). Check scan/map overlap in Foxglove.",
-        flush=True,
-    )
-    node.destroy_node()
-    rclpy.shutdown()
-    raise SystemExit(0)
+if not passed:
+    scan_fresh = (time.time() - scan_last["t"]) <= 3.0 if scan_last["t"] > 0 else False
+    map_tf_fresh = False
+    try:
+        tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
+        map_tf_fresh = True
+    except Exception:
+        pass
+    amcl_active = probe_amcl_active()
+    final_metrics = build_metrics(samples, scan_fresh, map_tf_fresh, amcl_active)
+    _, failures = checks_pass(final_metrics)
 
-print(f"[NAV2_BOOT] WARN: no /amcl_pose received in {timeout:.0f}s", flush=True)
 node.destroy_node()
 rclpy.shutdown()
+
+if passed:
+    print_metrics(final_metrics)
+    print("[NAV2_BOOT] AMCL localization settled (hard gate PASS)", flush=True)
+    write_metrics_file(final_metrics, True)
+    raise SystemExit(0)
+
+print_metrics(final_metrics, failures)
+print(f"[NAV2_BOOT] ERROR: AMCL localization NOT settled after {timeout:.0f}s (hard gate FAIL)", flush=True)
+write_metrics_file(final_metrics, False)
 raise SystemExit(1)
+PY
+}
+
+amcl_settle_metrics_json() {
+  local metrics_file="${AMCL_SETTLE_METRICS_FILE:-}"
+  python3 - "$metrics_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+empty = {
+    "x_spread_m": 0.0,
+    "y_spread_m": 0.0,
+    "yaw_spread_deg": 0.0,
+    "x_cov": 0.0,
+    "y_cov": 0.0,
+    "yaw_cov": 0.0,
+}
+path = Path(sys.argv[1]) if sys.argv[1] else None
+if not path or not path.is_file():
+    print(json.dumps(empty))
+    raise SystemExit(0)
+data = json.loads(path.read_text(encoding="utf-8"))
+out = {k: float(data.get(k, 0.0)) for k in empty}
+print(json.dumps(out))
+PY
+}
+
+amcl_settle_sample_count() {
+  local metrics_file="${AMCL_SETTLE_METRICS_FILE:-}"
+  python3 - "$metrics_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1]) if sys.argv[1] else None
+if not path or not path.is_file():
+    print(0)
+    raise SystemExit(0)
+data = json.loads(path.read_text(encoding="utf-8"))
+print(int(data.get("sample_count", 0)))
 PY
 }
 
@@ -512,37 +746,154 @@ verify_nav2_navigation_ready() {
 write_nav2_ready_json() {
   local log_dir="$1"
   local map_yaml="$2"
-  local started_at="${3:-}"
-  local reuse_scan="${4:-0}"
-  local reuse_scan_filtered="${5:-0}"
-  local reuse_chassis="${6:-0}"
-  local reuse_static_tf="${7:-0}"
-  python3 - "$log_dir" "$map_yaml" "$started_at" "$reuse_scan" "$reuse_scan_filtered" "$reuse_chassis" "$reuse_static_tf" <<'PY'
+  local status="$3"
+  local amcl_settled="$4"
+  local amcl_metrics_json="$5"
+  local amcl_sample_count="$6"
+  local reuse_scan="${7:-0}"
+  local reuse_scan_filtered="${8:-0}"
+  local reuse_chassis="${9:-0}"
+  python3 - "$log_dir" "$map_yaml" "$status" "$amcl_settled" "$amcl_metrics_json" \
+    "$amcl_sample_count" "$reuse_scan" "$reuse_scan_filtered" "$reuse_chassis" \
+    "$_LIFECYCLE_PROBE" "$_ROS_TOPIC_PROBE" <<'PY'
 import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
 
+import rclpy
+from rclpy.duration import Duration
+from rclpy.node import Node
+from tf2_ros import Buffer, TransformListener
+
 log_dir = Path(sys.argv[1])
 map_yaml = sys.argv[2]
-started_at = sys.argv[3]
+status = sys.argv[3]
+amcl_settled = sys.argv[4] == "1"
+amcl_metrics = json.loads(sys.argv[5] or "{}")
+amcl_sample_count = int(sys.argv[6] or "0")
+reuse_scan = sys.argv[7] == "1"
+reuse_scan_filtered = sys.argv[8] == "1"
+reuse_chassis = sys.argv[9] == "1"
+lifecycle_probe = sys.argv[10]
+topic_probe = sys.argv[11]
+
+def map_publisher_count() -> int:
+    try:
+        out = subprocess.check_output(
+            ["ros2", "topic", "info", "/map", "-v"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+        )
+        for line in out.splitlines():
+            if "Publisher count:" in line:
+                return int(line.split(":", 1)[1].strip())
+    except Exception:
+        pass
+    return 0
+
+def lifecycle_active(node_name: str) -> bool:
+    try:
+        out = subprocess.check_output(
+            ["python3", lifecycle_probe, "wait", node_name, "5"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+        return "active [3]" in out
+    except Exception:
+        return False
+
+def topic_fresh(topic: str, sensor_qos: bool = False) -> bool:
+    qos_flags = ["--sensor-qos"] if sensor_qos else []
+    try:
+        subprocess.check_call(
+            [
+                "python3",
+                topic_probe,
+                "has-samples",
+                topic,
+                "1",
+                "8",
+                *qos_flags,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=12,
+        )
+        return True
+    except Exception:
+        return False
+
+def nav_actions_ready() -> tuple[bool, bool]:
+    try:
+        subprocess.check_call(
+            ["python3", lifecycle_probe, "nav-actions", "15"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=20,
+        )
+        return True, True
+    except Exception:
+        return False, False
+
+map_tf_fresh = False
+rclpy.init()
+node = Node("nav2_ready_json_probe")
+tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
+TransformListener(tf_buffer, node, spin_thread=False)
+deadline = time.time() + 5.0
+while time.time() < deadline:
+    rclpy.spin_once(node, timeout_sec=0.1)
+    try:
+        tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
+        map_tf_fresh = True
+        break
+    except Exception:
+        pass
+node.destroy_node()
+rclpy.shutdown()
+
+compute_ready, navigate_ready = nav_actions_ready()
+ready_for_goal = status == "READY_FOR_GOAL" and amcl_settled and compute_ready and navigate_ready and map_tf_fresh
+
 payload = {
+    "schema_version": 2,
+    "status": status,
+    "ready_for_goal": ready_for_goal,
     "map_yaml": str(Path(map_yaml).resolve()),
-    "started_at": started_at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    "ready_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    "reuse_scan": sys.argv[4] == "1",
-    "reuse_scan_filtered": sys.argv[5] == "1",
-    "reuse_chassis": sys.argv[6] == "1",
-    "reuse_static_tf": sys.argv[7] == "1",
-    "map_ready": True,
-    "amcl_active": True,
-    "map_to_base_link": True,
-    "navigate_to_pose_ready": True,
-    "compute_path_to_pose_ready": True,
+    "map_publisher_count": map_publisher_count(),
+    "map_server_active": lifecycle_active("/map_server"),
+    "amcl_active": lifecycle_active("/amcl"),
+    "amcl_settled": amcl_settled,
+    "amcl_sample_count": amcl_sample_count,
+    "amcl_metrics": {
+        "x_spread_m": float(amcl_metrics.get("x_spread_m", 0.0)),
+        "y_spread_m": float(amcl_metrics.get("y_spread_m", 0.0)),
+        "yaw_spread_deg": float(amcl_metrics.get("yaw_spread_deg", 0.0)),
+        "x_cov": float(amcl_metrics.get("x_cov", 0.0)),
+        "y_cov": float(amcl_metrics.get("y_cov", 0.0)),
+        "yaw_cov": float(amcl_metrics.get("yaw_cov", 0.0)),
+    },
+    "map_to_base_link_fresh": map_tf_fresh,
+    "scan_fresh": topic_fresh("/scan", sensor_qos=True),
+    "scan_filtered_fresh": topic_fresh("/scan_filtered", sensor_qos=True),
+    "odom_fresh": topic_fresh("/odom"),
+    "compute_path_to_pose_ready": compute_ready,
+    "navigate_to_pose_ready": navigate_ready,
+    "reused_lidar": reuse_scan,
+    "reused_scan_filter": reuse_scan_filtered,
+    "reused_chassis": reuse_chassis,
+    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
 }
+
 out = log_dir / "ready.json"
-out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-# legacy empty ready marker
+tmp = out.with_suffix(".json.tmp")
+tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+os.replace(tmp, out)
 (log_dir / "ready").write_text("", encoding="utf-8")
 print(str(out))
 PY

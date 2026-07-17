@@ -41,6 +41,7 @@ MVP_TUNE="${MVP_TUNE:-$PROJECT_DIR/configs/mvp_tune.yaml}"
 NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-0}"
 NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-1}"
 NAV2_SKIP_DAEMON_REFRESH="${NAV2_SKIP_DAEMON_REFRESH:-0}"
+NAV2_REQUIRE_AMCL_SETTLED="${NAV2_REQUIRE_AMCL_SETTLED:-1}"
 NAV2_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REUSE_SCAN=0
 REUSE_SCAN_FILTERED=0
@@ -64,7 +65,10 @@ fi
 LOG_DIR="$PROJECT_DIR/logs/nav2_$(date +%Y%m%d_%H%M%S)"
 STATE_DIR="$PROJECT_DIR/state"
 POSE_STATE_FILE="${POSE_STATE_FILE:-$STATE_DIR/last_pose_map.json}"
+AMCL_SETTLE_METRICS_FILE="$LOG_DIR/amcl_settle_metrics.json"
+NAV2_STAGE_TIMING_JSON="$LOG_DIR/nav2_stage_timing.json"
 mkdir -p "$LOG_DIR" "$STATE_DIR"
+export AMCL_SETTLE_METRICS_FILE
 
 PIDS=()
 
@@ -199,6 +203,7 @@ log "CHASSIS_DEV=$CHASSIS_DEV"
 log "LASER_FRAME=$LASER_FRAME"
 log "POSE_STATE_FILE=$POSE_STATE_FILE"
 log "NAV2_STOP_CONFLICTS=$NAV2_STOP_CONFLICTS NAV2_REUSE_EXISTING=$NAV2_REUSE_EXISTING"
+log "NAV2_REQUIRE_AMCL_SETTLED=$NAV2_REQUIRE_AMCL_SETTLED"
 log "logs=$LOG_DIR"
 
 if slam_toolbox_running; then
@@ -334,7 +339,13 @@ log "TF OK: odom -> base_link"
 # 7. 启动 Nav2（后台），完成 AMCL 定位后再启动 pose_memory
 # Custom bringup: behavior_server cmd_vel -> cmd_vel_nav (avoids 5-way /cmd_vel conflict).
 NAV2_BRINGUP_LAUNCH="${NAV2_BRINGUP_LAUNCH:-$PROJECT_DIR/configs/nav2_click_nav_bringup_launch.py}"
+map_pub_before="$(get_map_publisher_count)"
+if [ "${map_pub_before:-0}" -gt 0 ]; then
+  log "ERROR: /map already has ${map_pub_before} publisher(s) before Nav2 launch; expected 0 (stop SLAM first)"
+  exit 1
+fi
 log "launch Nav2 (bringup=$NAV2_BRINGUP_LAUNCH)..."
+update_nav2_stage_timing_json "$NAV2_STAGE_TIMING_JSON" nav2_launch_start "$(python3 -c 'import time; print(time.time())')"
 start_bg nav2 ros2 launch "$NAV2_BRINGUP_LAUNCH" \
   use_sim_time:=False \
   autostart:=True \
@@ -353,6 +364,7 @@ if ! wait_map_topic_data 120; then
   fi
   wait_map_topic_data 120 || exit 1
 fi
+wait_map_publisher_count 1 60 || exit 1
 wait_nav2_lifecycle_parallel 120 || exit 1
 sleep 0.5
 
@@ -389,9 +401,16 @@ if ! bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 120; then
 else
   log "TF OK: map -> base_link (AMCL localized)"
 fi
-if ! wait_amcl_localization_settle 60; then
-  log "WARN: AMCL not fully settled; align scan/map in Foxglove before click-nav."
-  log "Use Publish -> 2D Pose estimate -> /initialpose if walls do not match scan."
+
+AMCL_SETTLED=0
+if wait_amcl_localization_settle "${AMCL_SETTLE_TIMEOUT_S:-60}"; then
+  AMCL_SETTLED=1
+  log "AMCL localization settled (hard gate PASS)"
+else
+  log "ERROR: AMCL localization NOT settled (hard gate FAIL)"
+  if [ "$NAV2_REQUIRE_AMCL_SETTLED" = "1" ]; then
+    log "NAV2_REQUIRE_AMCL_SETTLED=1: ready.json will be LOCALIZATION_UNSETTLED"
+  fi
 fi
 
 if ! wait_nav_actions_ready 180; then
@@ -401,9 +420,19 @@ if ! wait_nav_actions_ready 180; then
 fi
 log "Nav2 navigation stack active"
 
-ready_json="$(write_nav2_ready_json "$LOG_DIR" "$MAP_YAML" "$NAV2_STARTED_AT" \
-  "$REUSE_SCAN" "$REUSE_SCAN_FILTERED" "$REUSE_CHASSIS" "$REUSE_STATIC_TF")"
-log "READY json: $ready_json"
+AMCL_METRICS_JSON="$(amcl_settle_metrics_json)"
+AMCL_SAMPLE_COUNT="$(amcl_settle_sample_count)"
+if [ "$AMCL_SETTLED" -eq 1 ]; then
+  READY_STATUS="READY_FOR_GOAL"
+else
+  READY_STATUS="LOCALIZATION_UNSETTLED"
+fi
+
+ready_json="$(write_nav2_ready_json "$LOG_DIR" "$MAP_YAML" "$READY_STATUS" "$AMCL_SETTLED" \
+  "$AMCL_METRICS_JSON" "$AMCL_SAMPLE_COUNT" \
+  "$REUSE_SCAN" "$REUSE_SCAN_FILTERED" "$REUSE_CHASSIS")"
+update_nav2_stage_timing_json "$NAV2_STAGE_TIMING_JSON" nav2_ready "$(python3 -c 'import time; print(time.time())')"
+log "READY json ($READY_STATUS): $ready_json"
 
 start_bg pose_memory python3 "$PROJECT_DIR/scripts/slam/pose_memory_node.py" \
   --state-file "$POSE_STATE_FILE" \
