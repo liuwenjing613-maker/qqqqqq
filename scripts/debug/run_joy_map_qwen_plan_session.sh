@@ -547,20 +547,37 @@ goal_ready_for_nav_validation() {
   local goal_json="$1"
   local map_yaml="$2"
   local allow_fallback="${3:-0}"
-  python3 - "$goal_json" "$map_yaml" "$allow_fallback" "$PROJECT_DIR/scripts/debug" <<'PY'
+  local bundle_json="${4:-}"
+  python3 - "$goal_json" "$map_yaml" "$allow_fallback" "$PROJECT_DIR/scripts/debug" "$bundle_json" <<'PY'
+import json
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[4])
-from qwen_map_goal_utils import validate_goal_for_nav_validation
+from qwen_map_goal_utils import validate_goal_for_nav_validation, validate_proposal_against_bundle
 
+goal_path = Path(sys.argv[1])
 ok, msg = validate_goal_for_nav_validation(
-    Path(sys.argv[1]),
+    goal_path,
     expected_map_yaml=Path(sys.argv[2]),
     allow_fallback=sys.argv[3] == "1",
 )
 if not ok:
     print(msg, file=sys.stderr)
     raise SystemExit(1)
+
+bundle_path = Path(sys.argv[5]) if sys.argv[5] else None
+if bundle_path and bundle_path.is_file():
+    proposal = json.loads(goal_path.read_text(encoding="utf-8"))
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    ok2, msg2 = validate_proposal_against_bundle(
+        proposal,
+        bundle,
+        expected_session_id=str(proposal.get("session_id", "")),
+        allow_fallback=sys.argv[3] == "1",
+    )
+    if not ok2:
+        print(msg2, file=sys.stderr)
+        raise SystemExit(1)
 raise SystemExit(0)
 PY
 }
@@ -642,7 +659,8 @@ PY
 }
 
 stop_mapping_control_for_fast_nav() {
-  local t0
+  local t0 i
+  local handoff_file="$PROJECT_DIR/runtime/request_nav_handoff"
   t0="$(date +%s)"
   log "  [快速交接] 停止 teleop + slam_toolbox，保留雷达/底盘/scan_filter ..."
   source_ros_environment
@@ -654,44 +672,69 @@ stop_mapping_control_for_fast_nav() {
     bash "$PROJECT_DIR/scripts/nav/stop_frontier_region_debug.sh" >> "$SESSION_DIR/session.log" 2>&1 || true
   fi
 
-  pkill -f "joy_node|teleop_twist_joy" 2>/dev/null || true
-  pkill -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
-
-  local i
-  for i in $(seq 1 15); do
-    if ! slam_toolbox_running; then
-      break
-    fi
-    sleep 0.4
-  done
-  if slam_toolbox_running; then
-    log "        WARN: slam_toolbox 仍在运行，尝试 SIGKILL"
-    pkill -9 -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
-    sleep 1
+  # Prefer precise PID / controlled handoff — NEVER pkill -9 the corridor wrapper
+  # (that would either run cleanup killing sensors, or leave orphans).
+  mkdir -p "$PROJECT_DIR/runtime"
+  : > "$handoff_file"
+  if [[ -n "${JOY_PID:-}" ]] && kill -0 "$JOY_PID" 2>/dev/null; then
+    kill -USR1 "$JOY_PID" 2>/dev/null || true
+  fi
+  # Also signal any live corridor wrapper by PID file if present
+  if [[ -f "$PROJECT_DIR/logs/slam_live/pids/slam_toolbox.pid" ]]; then
+    local corridor_pids
+    corridor_pids="$(pgrep -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true)"
+    for pid in $corridor_pids; do
+      kill -USR1 "$pid" 2>/dev/null || true
+    done
   fi
 
-  if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]]; then
-    kill -9 "$JOY_PID" 2>/dev/null || true
-    [[ -n "$JOY_PGID" ]] && kill -9 "-$JOY_PGID" 2>/dev/null || true
-  fi
-  pkill -9 -f "run_joy_mapping_calibrated.sh|run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
+  pkill -TERM -f "joy_node|teleop_twist_joy" 2>/dev/null || true
+  pkill -TERM -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
 
-  for i in $(seq 1 10); do
-    if ! map_topic_has_publisher || ! pgrep -f "slam_toolbox" >/dev/null 2>&1; then
+  for i in $(seq 1 20); do
+    if ! slam_toolbox_running && ! map_topic_has_publisher; then
       break
     fi
     sleep 0.5
   done
+  if slam_toolbox_running; then
+    log "        WARN: slam_toolbox 仍在运行，尝试 SIGKILL（仅 slam 节点）"
+    pkill -9 -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
+    sleep 1
+  fi
+
+  # Hard checks: both must be clear
+  if map_topic_has_publisher; then
+    log "[FAST_NAV] FAIL: SLAM 仍在发布 /map"
+    TIMING_STOP_ROBOT_S=$(( $(date +%s) - t0 ))
+    timing_log "stop_robot=${TIMING_STOP_ROBOT_S}s"
+    return 1
+  fi
+  if slam_toolbox_running; then
+    log "[FAST_NAV] FAIL: slam_toolbox 尚未退出"
+    TIMING_STOP_ROBOT_S=$(( $(date +%s) - t0 ))
+    timing_log "stop_robot=${TIMING_STOP_ROBOT_S}s"
+    return 1
+  fi
+
+  # Stop joy wrapper process tree carefully without killing sensor children via corridor cleanup.
+  # If handoff succeeded, corridor wrapper already exited with sensors kept.
+  if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]] && kill -0 "$JOY_PID" 2>/dev/null; then
+    # Only stop joy_mapping parent if it is still alive AND sensors are healthy;
+    # send TERM (not -9 to corridor) so its children can hand off.
+    kill -TERM "$JOY_PID" 2>/dev/null || true
+    sleep 1
+  fi
 
   TIMING_STOP_ROBOT_S=$(( $(date +%s) - t0 ))
   timing_log "stop_robot=${TIMING_STOP_ROBOT_S}s"
+  return 0
 }
 
 stop_all_stacks_for_cold_nav() {
   local t0
   t0="$(date +%s)"
   log "  [冷启动交接] 全量停止并清理 ..."
-  refresh_session_pose_before_nav || true
   source_ros_environment
   timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
     "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 5 \
@@ -701,6 +744,9 @@ stop_all_stacks_for_cold_nav() {
     bash "$PROJECT_DIR/scripts/nav/stop_frontier_region_debug.sh" >> "$SESSION_DIR/session.log" 2>&1 || true
   fi
   if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]]; then
+    kill -TERM "$JOY_PID" 2>/dev/null || true
+    [[ -n "$JOY_PGID" ]] && kill -TERM "-$JOY_PGID" 2>/dev/null || true
+    sleep 2
     kill -9 "$JOY_PID" 2>/dev/null || true
     [[ -n "$JOY_PGID" ]] && kill -9 "-$JOY_PGID" 2>/dev/null || true
   fi
@@ -721,11 +767,17 @@ stop_all_stacks_for_cold_nav() {
 perform_mapping_to_nav_handoff() {
   local t0 mode
   t0="$(date +%s)"
-  refresh_session_pose_before_nav || true
+  # 禁止在交接前静默刷新会话位姿；使用 OK 时冻结的 SESSION_POSE
 
   if [[ "$FAST_NAV" -eq 1 ]]; then
-    stop_mapping_control_for_fast_nav
-    if check_fast_nav_reusable_stack "FAST_NAV"; then
+    if ! stop_mapping_control_for_fast_nav; then
+      log "  WARN: 快速交接硬检查失败，回退冷启动"
+      stop_all_stacks_for_cold_nav
+      mode="cold_nav_fallback"
+      export NAV2_STOP_CONFLICTS=1
+      export NAV2_REUSE_EXISTING=0
+      unset NAV2_SKIP_DAEMON_REFRESH
+    elif check_fast_nav_reusable_stack "FAST_NAV"; then
       mode="fast_nav"
       export NAV2_STOP_CONFLICTS=0
       export NAV2_REUSE_EXISTING=1
@@ -757,17 +809,24 @@ stop_slam_stack_for_nav() {
 }
 
 run_qwen_nav2_phase() {
-  if [[ ! -f "$NAV_GOAL_JSON" ]]; then
-    log "FAIL: 缺少 navigation_goal_proposal.json"
-    exit 1
-  fi
-  if ! goal_ready_for_nav_validation "$NAV_GOAL_JSON" "$MAP_YAML" "$ALLOW_NAV_FALLBACK"; then
-    log "FAIL: 目标未通过 Nav2 验证门禁（geometry/path/allow-fallback）"
-    exit 1
+  local bundle_json="$SESSION_DIR/qwen_live/candidate_bundle.json"
+  if [[ "$NAV2_START_ONLY" -ne 1 ]]; then
+    if [[ ! -f "$NAV_GOAL_JSON" ]]; then
+      log "FAIL: 缺少 navigation_goal_proposal.json"
+      exit 1
+    fi
+    if ! goal_ready_for_nav_validation "$NAV_GOAL_JSON" "$MAP_YAML" "$ALLOW_NAV_FALLBACK" "$bundle_json"; then
+      log "FAIL: 目标未通过 Nav2 验证门禁（geometry/bundle/allow-fallback）"
+      exit 1
+    fi
   fi
 
   log_phase "[5/5] 自动 Nav2 导航到 Qwen 目标"
-  print_nav_goal_summary "$NAV_GOAL_JSON"
+  if [[ "$NAV2_START_ONLY" -eq 1 ]]; then
+    log "NAV2_START_ONLY：仅启动 Nav2，不发送目标"
+  else
+    print_nav_goal_summary "$NAV_GOAL_JSON"
+  fi
   log "完整日志目录: $SESSION_DIR/nav2_logs/"
 
   local nav_t0 nav_boot_t0
@@ -782,9 +841,27 @@ run_qwen_nav2_phase() {
   export NAV2_START_ONLY="$NAV2_START_ONLY"
   mkdir -p "$LOG_DIR"
 
+  # Placeholder goal for start-only mode
+  local goal_arg="$NAV_GOAL_JSON"
+  if [[ "$NAV2_START_ONLY" -eq 1 ]]; then
+    goal_arg="$SESSION_DIR/nav2_start_only_placeholder.json"
+    python3 - "$goal_arg" "$SESSION_ID" "$MAP_YAML" <<'PY'
+import json, sys
+from pathlib import Path
+path, sid, my = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+path.write_text(json.dumps({
+    "schema_version": "qwen_live_session_nav_goal_v1",
+    "session_id": sid,
+    "map_yaml": my,
+    "selection_status": "PENDING",
+    "note": "nav2-start-only placeholder; no NavigateToPose",
+}, indent=2) + "\n", encoding="utf-8")
+PY
+  fi
+
   nav_boot_t0="$(date +%s)"
   if bash "$PROJECT_DIR/scripts/nav/run_qwen_session_nav2_goal.sh" \
-    "$MAP_YAML" "$NAV_GOAL_JSON" \
+    "$MAP_YAML" "$goal_arg" \
     2>&1 | tee "$SESSION_DIR/nav2_run.log"; then
     log "✓ Nav2 阶段完成"
   else
@@ -795,12 +872,35 @@ run_qwen_nav2_phase() {
     write_pipeline_timing_json "${JQS_NAV_MODE:-fast_nav}"
     exit 1
   fi
-  TIMING_NAV2_BOOT_S=$(( $(date +%s) - nav_boot_t0 ))
-  TIMING_NAVIGATION_S=$(( $(date +%s) - nav_t0 ))
+  # Prefer child stage timing for boot/compute_path/navigation splits
+  if [[ -f "$LOG_DIR/nav2_stage_timing.json" ]]; then
+    eval "$(python3 - "$LOG_DIR/nav2_stage_timing.json" <<'PY'
+import json, sys
+from pathlib import Path
+d = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+def dur(a, b):
+    if a in d and b in d and d[a] and d[b]:
+        return max(0.0, float(d[b]) - float(d[a]))
+    return None
+boot = dur("nav2_launch_start", "nav2_ready")
+comp = dur("compute_path_start", "compute_path_end")
+nav = dur("goal_sent", "navigation_finished")
+if boot is not None:
+    print(f'TIMING_NAV2_BOOT_S={boot}')
+if comp is not None:
+    print(f'TIMING_COMPUTE_PATH_S={comp}')
+if nav is not None:
+    print(f'TIMING_NAVIGATION_S={nav}')
+PY
+)"
+  else
+    TIMING_NAV2_BOOT_S=$(( $(date +%s) - nav_boot_t0 ))
+    TIMING_NAVIGATION_S=$(( $(date +%s) - nav_t0 ))
+  fi
   TIMING_TOTAL_AFTER_OK_S=$(( $(date +%s) - OK_EPOCH ))
   export_timing_env
   write_pipeline_timing_json "${JQS_NAV_MODE:-fast_nav}"
-  timing_log "nav2_boot=${TIMING_NAV2_BOOT_S}s navigation_total=${TIMING_NAVIGATION_S}s total_after_ok=${TIMING_TOTAL_AFTER_OK_S}s"
+  timing_log "nav2_boot=${TIMING_NAV2_BOOT_S}s compute_path=${TIMING_COMPUTE_PATH_S}s navigation=${TIMING_NAVIGATION_S}s total_after_ok=${TIMING_TOTAL_AFTER_OK_S}s"
 }
 
 stop_started_processes() {
@@ -1050,16 +1150,49 @@ done
 # ---------------------------------------------------------------------------
 log "[4/4] 收到 OK，开始保存 ..."
 OK_EPOCH="$(date +%s)"
-log "停车 3s，等待位姿/TF 稳定 ..."
+log "停车并冻结会话输入：零速 → 停 teleop → 等 odom 接近零 → 保存地图/轨迹/位姿 ..."
 source_ros_environment
+# 1) 连续发布零速度
 timeout 2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
-  "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 8 \
+  "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \
   >/dev/null 2>&1 || true
-sleep 3
+# 2) 立即停止/挂起 teleop，保证 OK 后机器人不再移动
+pkill -TERM -f "teleop_twist_joy|joy_node" 2>/dev/null || true
+sleep 0.5
+# 3) 等待 /odom 速度接近零（尽力而为）
+python3 - <<'PY' || true
+import time
+try:
+    import rclpy
+    from nav_msgs.msg import Odometry
+    from rclpy.node import Node
+    rclpy.init()
+    node = Node("jqs_wait_odom_zero")
+    state = {"ok": False}
+    def cb(msg):
+        v = abs(msg.twist.twist.linear.x) + abs(msg.twist.twist.angular.z)
+        if v < 0.01:
+            state["ok"] = True
+    node.create_subscription(Odometry, "/odom", cb, 10)
+    t0 = time.time()
+    while time.time() - t0 < 3.0 and not state["ok"]:
+        rclpy.spin_once(node, timeout_sec=0.1)
+    node.destroy_node()
+    rclpy.shutdown()
+except Exception:
+    pass
+PY
 
 t_copy="$(date +%s)"
-copy_live_debug_artifacts
+# 先保存位姿快照到会话（冻结），再复制轨迹；后续禁止再用全局可变文件
 refresh_session_pose_before_nav || true
+if [[ -f "$POSE_STATE_FILE" ]]; then
+  cp -f "$POSE_STATE_FILE" "$SESSION_DIR/last_pose_map.json"
+fi
+if [[ -f "$TRAJ_FILE" ]]; then
+  cp -f "$TRAJ_FILE" "$SESSION_DIR/trajectory_session.json"
+fi
+copy_live_debug_artifacts
 TIMING_COPY_ARTIFACTS_S=$(( $(date +%s) - t_copy ))
 
 t_save="$(date +%s)"
@@ -1071,6 +1204,10 @@ TIMING_SAVE_MAP_S=$(( $(date +%s) - t_save ))
 timing_log "save_map=${TIMING_SAVE_MAP_S}s"
 
 MAP_YAML="$SESSION_DIR/map/${MAP_NAME}.yaml"
+SESSION_MAP_YAML="$MAP_YAML"
+SESSION_MAP_PGM="$SESSION_DIR/map/${MAP_NAME}.pgm"
+SESSION_TRAJECTORY="$SESSION_DIR/trajectory_session.json"
+SESSION_POSE="$SESSION_DIR/last_pose_map.json"
 ANNOTATED_PNG="$SESSION_DIR/annotated_map_for_qwen.png"
 POSE_UV_JSON="$SESSION_DIR/robot_pose_uv.json"
 QWEN_OUT="$SESSION_DIR/qwen_live"
@@ -1079,15 +1216,30 @@ if [[ -f "$SESSION_DIR/live_annotated_map.png" ]]; then
   LIVE_REF="$SESSION_DIR/live_annotated_map.png"
 fi
 
-if [[ ! -f "$POSE_STATE_FILE" ]]; then
-  log "FAIL: 位姿文件不存在: $POSE_STATE_FILE"
+if [[ ! -f "$SESSION_POSE" ]]; then
+  log "FAIL: 会话位姿快照不存在: $SESSION_POSE"
   exit 1
 fi
-
-TRAJ_FOR_QWEN="$SESSION_DIR/trajectory_session.json"
-if [[ ! -f "$TRAJ_FOR_QWEN" ]] && [[ -f "$TRAJ_FILE" ]]; then
-  TRAJ_FOR_QWEN="$TRAJ_FILE"
+if [[ ! -f "$SESSION_TRAJECTORY" ]] && [[ -f "$TRAJ_FILE" ]]; then
+  cp -f "$TRAJ_FILE" "$SESSION_TRAJECTORY"
 fi
+
+# 校验快照时间差
+python3 - "$SESSION_MAP_YAML" "$SESSION_POSE" "$SESSION_TRAJECTORY" <<'PY'
+import os, sys, time
+from pathlib import Path
+paths = [Path(p) for p in sys.argv[1:] if p]
+times = [p.stat().st_mtime for p in paths if p.is_file()]
+if len(times) >= 2:
+    delta = max(times) - min(times)
+    limit = float(os.environ.get("SNAPSHOT_MAX_TIME_DELTA_S", "30"))
+    print(f"[SNAPSHOT] time_delta_s={delta:.2f} limit={limit:.1f}")
+    if delta > limit:
+        raise SystemExit(f"FAIL: snapshot_time_delta_s={delta:.1f} > {limit}")
+PY
+
+TRAJ_FOR_QWEN="$SESSION_TRAJECTORY"
+POSE_FOR_QWEN="$SESSION_POSE"
 
 VISITED_CORRIDOR_RADIUS_M="${VISITED_CORRIDOR_RADIUS_M:-$(
   python3 -c "import sys; sys.path.insert(0,'$PROJECT_DIR/scripts/debug'); from qwen_map_goal_utils import load_visited_corridor_radius_m; print(load_visited_corridor_radius_m())"
@@ -1111,7 +1263,7 @@ TIMING_EXPORT_QWEN_MAP_S=$(( $(date +%s) - t_eqwen ))
 t_annot="$(date +%s)"
 python3 "$PROJECT_DIR/scripts/debug/export_session_map_annotations.py" \
   --map-yaml "$MAP_YAML" \
-  --pose-json "$POSE_STATE_FILE" \
+  --pose-json "$POSE_FOR_QWEN" \
   --trajectory-json "$TRAJ_FOR_QWEN" \
   --output-png "$ANNOTATED_PNG" \
   --output-pose-json "$POSE_UV_JSON" \
@@ -1134,6 +1286,7 @@ PY
 SESSION_SAVE_DONE=1
 log "标注地图: $ANNOTATED_PNG"
 log "机器人归一化位姿: u=$ROBOT_U v=$ROBOT_V yaw_deg=$ROBOT_YAW"
+log "会话冻结输入: MAP=$SESSION_MAP_YAML POSE=$SESSION_POSE TRAJ=$SESSION_TRAJECTORY"
 
 if [[ "$STOP_AFTER_SAVE" -eq 1 ]]; then
   stop_started_processes
@@ -1141,7 +1294,16 @@ if [[ "$STOP_AFTER_SAVE" -eq 1 ]]; then
 else
   log "保持建图栈与 Foxglove 可视化运行（默认 --keep-mapping）"
   log "Foxglove: 实时 /map + /qwen_session/robot_pose_markers"
+  log "请打开布局: configs/foxglove_slam_mapping.layout.json（建图）"
   trap - EXIT INT TERM
+fi
+
+# --skip-qwen --nav2-start-only：跳过 Qwen，直接做快速 Nav2 启动
+if [[ "$SKIP_QWEN" -eq 1 && "$NAV2_START_ONLY" -eq 1 ]]; then
+  log "--skip-qwen --nav2-start-only：跳过候选/Qwen，进入 Nav2 启动"
+  AUTO_NAV=1
+  run_qwen_nav2_phase
+  exit 0
 fi
 
 if [[ "$SKIP_QWEN" -eq 1 ]]; then
@@ -1154,8 +1316,8 @@ load_qwen_env
 mkdir -p "$(dirname "$NAV_GOAL_JSON")" "$QWEN_OUT"
 QWEN_CMD=(
   python3 -u "$PROJECT_DIR/scripts/debug/qwen_live_session_planner.py"
-  --map-yaml "$MAP_YAML"
-  --pose-json "$POSE_STATE_FILE"
+  --map-yaml "$SESSION_MAP_YAML"
+  --pose-json "$POSE_FOR_QWEN"
   --trajectory-json "$TRAJ_FOR_QWEN"
   --output-dir "$QWEN_OUT"
   --nav-goal-json "$NAV_GOAL_JSON"
@@ -1186,7 +1348,7 @@ log "Foxglove 候选点: runtime/qwen_session/live_candidates_foxglove.json"
 
 if [[ "$DRY_RUN_QWEN" -eq 1 ]]; then
   t_qwen="$(date +%s)"
-  log "dry-run：执行完整 planner（Python 选点，不调用 Qwen API）..."
+  log "dry-run：执行完整 planner（复用 candidate_bundle，Python 选点，不调用 Qwen API）..."
   if ! "${QWEN_CMD[@]}" 2>&1 | tee "$SESSION_DIR/qwen_run.log"; then
     log "FAIL: Qwen dry-run 失败"
     exit 1
@@ -1213,7 +1375,9 @@ fi
 # Phase 5: Nav2 导航
 # ---------------------------------------------------------------------------
 if [[ "$AUTO_NAV" -eq 1 ]]; then
-  if grep -q '"selected_by": "python_fallback_after_qwen_error"' "$NAV_GOAL_JSON" 2>/dev/null \
+  if [[ "$NAV2_START_ONLY" -eq 1 ]]; then
+    run_qwen_nav2_phase
+  elif grep -q '"selected_by": "python_fallback_after_qwen_error"' "$NAV_GOAL_JSON" 2>/dev/null \
     && [[ "$ALLOW_NAV_FALLBACK" -ne 1 ]]; then
     log "[5/5] Qwen fallback 目标已生成，但未开启 --allow-nav-with-fallback，跳过自动导航"
   else
@@ -1221,6 +1385,7 @@ if [[ "$AUTO_NAV" -eq 1 ]]; then
   fi
 else
   log "[5/5] 已跳过自动导航 (--no-auto-nav)"
+  log "导航布局请打开: configs/foxglove_nav2_saved_map.layout.json（若存在）或启用 /map + /qwen_session/planned_path"
   export_timing_env
   write_pipeline_timing_json "no_auto_nav"
 fi
@@ -1244,28 +1409,28 @@ cat > "$SESSION_DIR/README.txt" <<EOF
   annotated_map_for_qwen.png      — 已走路径 + 大号机器人朝向箭头
   robot_pose_uv.json              — Qwen 用归一化 u/v/yaw_deg
   live_annotated_map.png          — frontier debug 实时标注（小箭头，若可用）
-  trajectory_session.json         — 轨迹顶点
-  last_pose_map.json              — 最后位姿快照
+  trajectory_session.json         — 轨迹顶点（OK 时冻结）
+  last_pose_map.json              — 位姿快照（OK 时冻结）
   qwen_live/                      — v6 候选图、Qwen 结果、live_report.json
   navigation_goal_proposal.json   — map 坐标 Nav2/Foxglove 目标
 
 Foxglove（ws://<RDK-IP>:8765）:
-  导入布局 configs/foxglove_slam_mapping.layout.json
+  建图布局: configs/foxglove_slam_mapping.layout.json
   浅绿走廊: /qwen_explore_debug/map_with_visited（勿开 visited_area_grid）
+  导航布局: /map + /qwen_session/planned_path
   /scan_filtered, /qwen_session/robot_pose_markers, /qwen_session/candidate_markers
-  /qwen_session/qwen_goal_markers, /qwen_session/planned_path（Nav2 发目标后）
 
 Nav2:
   默认 Qwen 选点后自动导航；跳过请加 --no-auto-nav
   bash scripts/nav/run_qwen_session_nav2_goal.sh $MAP_YAML $NAV_GOAL_JSON
   日志: $SESSION_DIR/nav2_run.log  $SESSION_DIR/nav2_logs/
 
-重新跑 Qwen live planner:
+重新跑 Qwen live planner（必须用会话冻结文件）:
   python3 scripts/debug/qwen_live_session_planner.py \\
-    --map-yaml $MAP_YAML --pose-json $POSE_STATE_FILE \\
-    --trajectory-json $SESSION_DIR/trajectory_session.json \\
+    --map-yaml $SESSION_MAP_YAML --pose-json $SESSION_POSE \\
+    --trajectory-json $SESSION_TRAJECTORY \\
     --output-dir $QWEN_OUT --nav-goal-json $NAV_GOAL_JSON \\
-    --session-id $SESSION_ID
+    --session-id $SESSION_ID --candidate-bundle $QWEN_OUT/candidate_bundle.json
 EOF
 
 exit 0

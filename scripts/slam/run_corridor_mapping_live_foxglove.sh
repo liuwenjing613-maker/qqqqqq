@@ -17,7 +17,19 @@ CHASSIS_DEV="/dev/rosmaster"
 FOXGLOVE_PORT="${FOXGLOVE_PORT:-8765}"
 
 PIDS=()
+declare -A NAMED_PIDS=()
 FOXGLOVE_STARTED=0
+HANDOFF_DONE=0
+HANDOFF_REQUEST_FILE="${PROJECT_DIR}/runtime/request_nav_handoff"
+SENSOR_BASE_STACK_JSON="${PROJECT_DIR}/runtime/sensor_base_stack.json"
+PID_DIR=""
+
+# Optional: --handoff-to-nav enables watching for handoff signal from the start.
+for _arg in "$@"; do
+  case "$_arg" in
+    --handoff-to-nav) export CORRIDOR_HANDOFF_WATCH=1 ;;
+  esac
+done
 
 set +u
 if [ -f /opt/tros/humble/setup.bash ]; then
@@ -45,7 +57,88 @@ publish_zero_cmd() {
     >/dev/null 2>&1 || true
 }
 
+write_sensor_base_stack_json() {
+  mkdir -p "$(dirname "$SENSOR_BASE_STACK_JSON")"
+  python3 - "$SENSOR_BASE_STACK_JSON" \
+    "${NAMED_PIDS[lidar]:-}" \
+    "${NAMED_PIDS[scan_filter]:-}" \
+    "${NAMED_PIDS[static_tf]:-}" \
+    "${NAMED_PIDS[foxglove_bridge]:-}" \
+    "${NAMED_PIDS[slam_toolbox]:-}" <<'PY'
+import json, sys, time
+from pathlib import Path
+out = Path(sys.argv[1])
+payload = {
+    "schema_version": 1,
+    "status": "sensor_base_owned_by_nav_session",
+    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "pids": {
+        "lidar": int(sys.argv[2]) if sys.argv[2] else None,
+        "scan_filter": int(sys.argv[3]) if sys.argv[3] else None,
+        "static_tf": int(sys.argv[4]) if sys.argv[4] else None,
+        "foxglove_bridge": int(sys.argv[5]) if sys.argv[5] else None,
+        "slam_toolbox_stopped": True,
+        "slam_toolbox_last_pid": int(sys.argv[6]) if sys.argv[6] else None,
+    },
+    "keep": ["lidar", "scan_filter", "chassis_bridge", "odom", "static_tf", "foxglove_bridge"],
+    "stopped": ["slam_toolbox"],
+}
+tmp = out.with_suffix(".json.tmp")
+tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+tmp.replace(out)
+print(out)
+PY
+}
+
+perform_nav_handoff() {
+  if [[ "$HANDOFF_DONE" -eq 1 ]]; then
+    return 0
+  fi
+  log "[handoff] controlled handoff to Nav2: stop slam_toolbox only, keep sensors"
+  publish_zero_cmd
+
+  local slam_pid="${NAMED_PIDS[slam_toolbox]:-}"
+  if [[ -n "$slam_pid" ]] && kill -0 "$slam_pid" 2>/dev/null; then
+    kill -TERM "$slam_pid" 2>/dev/null || true
+    sleep 1
+    kill -KILL "$slam_pid" 2>/dev/null || true
+  fi
+  pkill -TERM -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
+  sleep 1
+  pkill -KILL -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
+
+  # Drop slam from PIDS so EXIT cleanup won't kill sensors via full list semantics
+  local filtered=()
+  local pid
+  for pid in "${PIDS[@]:-}"; do
+    if [[ -n "$slam_pid" && "$pid" == "$slam_pid" ]]; then
+      continue
+    fi
+    filtered+=("$pid")
+  done
+  PIDS=("${filtered[@]:-}")
+  unset 'NAMED_PIDS[slam_toolbox]'
+
+  write_sensor_base_stack_json || true
+  rm -f "$HANDOFF_REQUEST_FILE"
+  HANDOFF_DONE=1
+  log "[handoff] sensor_base_stack written: $SENSOR_BASE_STACK_JSON"
+  log "[handoff] exiting wrapper without stopping lidar/chassis/scan_filter"
+  # Disarm full cleanup; exit 0 and leave sensors running for Nav2 ownership.
+  trap - EXIT TERM
+  exit 0
+}
+
+on_usr1_handoff() {
+  log "[handoff] received SIGUSR1"
+  perform_nav_handoff
+}
+
 cleanup() {
+  if [[ "$HANDOFF_DONE" -eq 1 ]]; then
+    log "[cleanup] handoff done — skip stopping sensor base stack"
+    return 0
+  fi
   echo ""
   log "[cleanup] publishing zero /cmd_vel..."
   publish_zero_cmd
@@ -68,6 +161,7 @@ cleanup() {
 # Do not trap INT: when started under setsid from run_joy_mapping_all.sh,
 # parent Ctrl+C should not tear down slam_toolbox before map save.
 trap cleanup EXIT TERM
+trap on_usr1_handoff USR1
 
 ensure_slam_config() {
   if [ -f "$SLAM_CONFIG" ]; then
@@ -110,10 +204,15 @@ start_background() {
   local name="$1"
   shift
   local log_file="${LOG_DIR}/${name}.log"
+  local pid_file="${PID_DIR}/${name}.pid"
 
   log "Starting ${name} -> ${log_file}"
   "$@" > "$log_file" 2>&1 &
-  PIDS+=("$!")
+  local pid=$!
+  PIDS+=("$pid")
+  NAMED_PIDS["$name"]="$pid"
+  mkdir -p "$PID_DIR"
+  echo "$pid" > "$pid_file"
   sleep 0.5
 }
 
@@ -168,8 +267,12 @@ main() {
   log "===== Corridor SLAM Live (Foxglove, known-good style) ====="
   log "PROJECT_DIR=$PROJECT_DIR"
   log "No auto motion. Drive manually via joystick /cmd_vel."
+  log "Handoff: touch $HANDOFF_REQUEST_FILE or SIGUSR1 for controlled Nav2 handoff"
 
   mkdir -p "$LOG_DIR"
+  PID_DIR="${LOG_DIR}/pids"
+  mkdir -p "$PID_DIR" "$(dirname "$HANDOFF_REQUEST_FILE")"
+  rm -f "$HANDOFF_REQUEST_FILE"
 
   if [ ! -e "$LIDAR_DEV" ]; then
     echo "FAIL: missing $LIDAR_DEV" >&2
@@ -293,9 +396,13 @@ main() {
   log "Now open terminal 2: joy_node."
   log "Then terminal 3: teleop_twist_joy."
   log "Terminal 4: monitoring and map saving."
+  log "Nav handoff: touch ${HANDOFF_REQUEST_FILE}  OR  kill -USR1 $$"
 
   while true; do
-    sleep 3600
+    if [[ -f "$HANDOFF_REQUEST_FILE" ]]; then
+      perform_nav_handoff
+    fi
+    sleep 1
   done
 }
 

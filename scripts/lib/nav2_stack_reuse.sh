@@ -181,31 +181,114 @@ stop_stale_nav2_servers_only() {
   sleep 1
 }
 
+_chassis_bridge_pids() {
+  pgrep -f "m1_pwm_cmd_vel_bridge.py|cmd_vel_to_rosmaster.py" 2>/dev/null || true
+}
+
+_serial_holders() {
+  local port="${1:-${CHASSIS_PORT:-${CHASSIS_DEV:-/dev/rosmaster}}}"
+  if command -v fuser >/dev/null 2>&1; then
+    fuser "$port" 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+$' || true
+    return 0
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -t "$port" 2>/dev/null || true
+    return 0
+  fi
+  return 0
+}
+
+_cmd_vel_unexpected_publishers() {
+  # Return non-empty lines for unexpected /cmd_vel publishers (teleop etc.)
+  ros2 topic info /cmd_vel -v 2>/dev/null | awk '
+    /Publisher count:/{next}
+    /Node name:/{node=$3}
+    /Topic type:/{next}
+    /Endpoint type: PUBLISHER/{print node}
+  ' | while read -r node; do
+    case "$node" in
+      ""|*chassis*|*pwm*|*rosmaster*|*velocity_smoother*|*controller_server*|*behavior_server*)
+        ;;
+      *teleop*|*joy*)
+        echo "$node"
+        ;;
+      *)
+        # treat other publishers as unexpected during handoff
+        echo "$node"
+        ;;
+    esac
+  done
+}
+
 check_fast_nav_reusable_stack() {
   local label="${1:-FAST_NAV}"
   local fail=0
-  _check() {
-    local name="$1"
-    shift
-    if "$@"; then
-      echo "[$label] OK: $name"
-    else
-      echo "[$label] FAIL: $name"
-      fail=1
-    fi
-  }
-  _check "/scan publishing" topic_is_publishing /scan 1 8
-  _check "/scan_filtered publishing" topic_is_publishing /scan_filtered 1 8
-  _check "/odom publishing" topic_is_publishing /odom 1 8
-  _check "odom->base_link TF" odom_base_link_tf_ready
-  _check "base_link->laser TF" laser_static_tf_ready "${LASER_FRAME:-laser}"
-  _check "slam_toolbox stopped" bash -c '! slam_toolbox_running'
-  _check "no stale Nav2 servers" bash -c '! nav2_servers_running'
-  if pgrep -f "teleop_twist_joy|joy_node" >/dev/null 2>&1; then
-    echo "[$label] FAIL: teleop still running"
-    fail=1
+  local bridge_pids bridge_count holders unexpected
+
+  _pass() { echo "[$label] PASS $1"; }
+  _fail() { echo "[$label] FAIL $1"; fail=1; }
+
+  if topic_is_publishing /scan 1 8; then _pass "scan"; else _fail "scan"; fi
+  if topic_is_publishing /scan_filtered 1 8; then _pass "scan_filtered"; else _fail "scan_filtered"; fi
+  if topic_is_publishing /odom 1 8; then _pass "odom"; else _fail "odom"; fi
+  if odom_base_link_tf_ready; then _pass "odom_base_link_tf"; else _fail "odom_base_link_tf"; fi
+  if laser_static_tf_ready "${LASER_FRAME:-laser}"; then _pass "base_link_laser_tf"; else _fail "base_link_laser_tf"; fi
+
+  if chassis_stack_ready; then
+    _pass "chassis_stack_ready"
   else
-    echo "[$label] OK: teleop stopped"
+    _fail "chassis_stack_ready"
   fi
+
+  bridge_pids="$(_chassis_bridge_pids | tr '\n' ' ' | xargs || true)"
+  bridge_count=0
+  if [[ -n "${bridge_pids:-}" ]]; then
+    bridge_count="$(echo "$bridge_pids" | wc -w | tr -d ' ')"
+  fi
+  if [[ "$bridge_count" -eq 1 ]]; then
+    _pass "chassis_owner pid=${bridge_pids}"
+  else
+    _fail "chassis_owner count=${bridge_count} pids=${bridge_pids:-none}"
+  fi
+
+  holders="$(_serial_holders | tr '\n' ' ' | xargs || true)"
+  if [[ -n "$holders" ]]; then
+    # If tools available, require serial owned by the single bridge pid
+    if [[ "$bridge_count" -eq 1 ]] && echo " $holders " | grep -q " ${bridge_pids} "; then
+      _pass "chassis_serial_owner pid=${bridge_pids}"
+    elif [[ "$bridge_count" -eq 1 ]]; then
+      _fail "chassis_serial holders=${holders} expected_bridge=${bridge_pids}"
+    else
+      _fail "chassis_serial holders=${holders}"
+    fi
+  else
+    _pass "chassis_serial (fuser/lsof unavailable or empty; skipped hard owner check)"
+  fi
+
+  if pgrep -f "teleop_twist_joy|joy_node" >/dev/null 2>&1; then
+    _fail "teleop still running"
+  else
+    _pass "teleop stopped"
+  fi
+
+  unexpected="$(_cmd_vel_unexpected_publishers | tr '\n' ',' | sed 's/,$//')"
+  if [[ -n "$unexpected" ]]; then
+    _fail "cmd_vel unexpected publisher=${unexpected}"
+  else
+    _pass "cmd_vel"
+  fi
+
+  if slam_toolbox_running; then
+    _fail "slam_toolbox still running"
+  else
+    _pass "slam_toolbox stopped"
+  fi
+
+  if nav2_servers_running; then
+    _fail "old Nav2 nodes still present"
+  else
+    _pass "no_old_nav2"
+  fi
+
   return "$fail"
 }
