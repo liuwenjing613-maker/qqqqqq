@@ -38,6 +38,14 @@ DEFAULT_MAP = r"C:\Users\Acer\Desktop\x\joy_calibrated_corridor_map.png"
 DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL = "qwen3-vl-flash"
 
+# 候选点几何约束：
+# - 默认严格档：离黑 0.35m、离车 0.8m
+# - 展示候选不足 min_display_candidates 时，启用保护档：离黑 0.2m、离车 0.4m
+DEFAULT_HARD_BLACK_CLEARANCE_M = 0.35
+DEFAULT_HARD_MIN_ROBOT_DISTANCE_M = 0.8
+DEFAULT_FALLBACK_BLACK_CLEARANCE_M = 0.2
+DEFAULT_FALLBACK_MIN_ROBOT_DISTANCE_M = 0.4
+
 FREE_BGR = (255, 255, 255)
 UNKNOWN_BGR = (128, 128, 128)
 BLOCKED_BGR = (0, 0, 0)
@@ -82,10 +90,10 @@ GOAL_PROMPT_TEMPLATE_ZH = """
 - 安全邻域内没有黑色墙体或障碍；
 - 与机器人处于同一安全白色连通区域，不需要穿墙或穿越灰区；
 - 从小车指向候选点的方向与小车朝向夹角不超过 {heading_cone_deg:.0f}°（仅前方扇区）；
-- 距离已通过程序筛选（不足 {min_display_candidates} 个时会自动放宽距离条件）。
+- 到小车直线距离已通过程序筛选：硬下限 ≥ 0.8m；不足 {min_display_candidates} 个时只会放宽距离上限，不会放宽该硬下限。
 
 本案例距离规则（距离除以地图最长边得到 distance_ratio）：
-- 硬下限：distance_ratio >= {min_distance_ratio:.3f}
+- 硬下限：到小车直线距离 ≥ 0.8m（distance_ratio >= {min_distance_ratio:.3f}）
 - 硬上限：distance_ratio <= {max_distance_ratio:.3f}
 - 优选距离：{preferred_min_ratio:.3f} <= distance_ratio <= {preferred_max_ratio:.3f}
 - 本图最近候选距离：{nearest_distance_ratio:.3f}
@@ -96,7 +104,7 @@ GOAL_PROMPT_TEMPLATE_ZH = """
 2. 所有候选均在小车朝向 ±{heading_cone_deg:.0f}° 前方扇区内，禁止选后方目标，优先考虑和小车朝向夹角小的候选；
 3. 优先选择 direct_path=CLEAR；只有不存在任何 CLEAR 候选时，才允许使用 BLOCKED 候选；
 4. BLOCKED 候选不得理解为可以穿墙，仅表示直线经过贴墙窄缝；
-5. 同一方向层级内，优先选择优选距离范围，再选择 distance_ratio 中等者，最后选择 distance_ratio 更大者；
+5. 同一方向层级内，优先选择距离黑色墙体较远的且在优选距离范围，最后选择distance_ratio 中等者，最后选择 distance_ratio 更大者；
 6. 不要为了追求大灰区牺牲距离，不得选择展示范围之外的目标；
 7. 优先选择远离浅绿色已扫区域的候选；同等条件下 visited_clearance_px 更大者优先；不要重复探索已扫过走廊附近。
 
@@ -193,6 +201,36 @@ def parse_args() -> argparse.Namespace:
                         help="候选白点到最近灰色的最大距离/地图最长边。")
     parser.add_argument("--candidate-spacing-ratio", type=float, default=0.018,
                         help="候选点之间最小间距/地图最长边。")
+    parser.add_argument(
+        "--hard-black-clearance-m",
+        type=float,
+        default=float(os.getenv("CANDIDATE_HARD_BLACK_CLEARANCE_M", str(DEFAULT_HARD_BLACK_CLEARANCE_M))),
+        help="严格档：候选周围无黑障碍圆半径（米），默认 0.35；候选不足时再降到 fallback。",
+    )
+    parser.add_argument(
+        "--hard-min-robot-distance-m",
+        type=float,
+        default=float(os.getenv("CANDIDATE_HARD_MIN_ROBOT_DISTANCE_M", str(DEFAULT_HARD_MIN_ROBOT_DISTANCE_M))),
+        help="严格档：候选到小车直线距离下限（米），默认 0.8；候选不足时再降到 fallback。",
+    )
+    parser.add_argument(
+        "--fallback-black-clearance-m",
+        type=float,
+        default=float(os.getenv("CANDIDATE_FALLBACK_BLACK_CLEARANCE_M", str(DEFAULT_FALLBACK_BLACK_CLEARANCE_M))),
+        help="保护档：候选不足时的无黑圆半径（米），默认 0.2。",
+    )
+    parser.add_argument(
+        "--fallback-min-robot-distance-m",
+        type=float,
+        default=float(os.getenv("CANDIDATE_FALLBACK_MIN_ROBOT_DISTANCE_M", str(DEFAULT_FALLBACK_MIN_ROBOT_DISTANCE_M))),
+        help="保护档：候选不足时的离车直线距离下限（米），默认 0.4。",
+    )
+    parser.add_argument(
+        "--map-resolution",
+        type=float,
+        default=None,
+        help="地图分辨率 m/px；提供后启用米制硬约束（硬离黑 / 硬离车）。",
+    )
     parser.add_argument("--min-goal-distance-ratio", type=float, default=0.05,
                         help="目标距离硬下限/地图最长边，默认 0.05。")
     parser.add_argument("--max-goal-distance-ratio", type=float, default=0.22,
@@ -288,6 +326,106 @@ def disk_kernel(radius: int) -> np.ndarray:
     return kernel
 
 
+def resolve_map_resolution(args: argparse.Namespace, resolution: Optional[float] = None) -> Optional[float]:
+    if resolution is not None and float(resolution) > 0:
+        return float(resolution)
+    mapped = getattr(args, "map_resolution", None)
+    if mapped is not None and float(mapped) > 0:
+        return float(mapped)
+    return None
+
+
+def hard_black_clearance_m(args: argparse.Namespace) -> float:
+    val = getattr(args, "hard_black_clearance_m", None)
+    if val is not None:
+        return float(val)
+    return float(os.environ.get("CANDIDATE_HARD_BLACK_CLEARANCE_M", DEFAULT_HARD_BLACK_CLEARANCE_M))
+
+
+def hard_min_robot_distance_m(args: argparse.Namespace) -> float:
+    val = getattr(args, "hard_min_robot_distance_m", None)
+    if val is not None:
+        return float(val)
+    return float(os.environ.get("CANDIDATE_HARD_MIN_ROBOT_DISTANCE_M", DEFAULT_HARD_MIN_ROBOT_DISTANCE_M))
+
+
+def hard_black_clearance_px(args: argparse.Namespace, resolution: Optional[float]) -> Optional[int]:
+    """候选周围无黑圆半径（像素）。有 resolution 时强制；否则返回 None。"""
+    res = resolve_map_resolution(args, resolution)
+    if res is None:
+        return None
+    return max(1, int(math.ceil(hard_black_clearance_m(args) / res)))
+
+
+def hard_min_robot_distance_ratio(
+    args: argparse.Namespace,
+    longest: int,
+    resolution: Optional[float],
+) -> float:
+    """把硬离车距离换成 distance_ratio；无 resolution 时退回 ratio 参数。"""
+    res = resolve_map_resolution(args, resolution)
+    if res is None:
+        return float(args.min_goal_distance_ratio)
+    px = hard_min_robot_distance_m(args) / res
+    return max(float(args.min_goal_distance_ratio), px / float(max(longest, 1)))
+
+
+def fallback_black_clearance_m(args: argparse.Namespace) -> float:
+    val = getattr(args, "fallback_black_clearance_m", None)
+    if val is not None:
+        return float(val)
+    return float(os.environ.get("CANDIDATE_FALLBACK_BLACK_CLEARANCE_M", DEFAULT_FALLBACK_BLACK_CLEARANCE_M))
+
+
+def fallback_min_robot_distance_m(args: argparse.Namespace) -> float:
+    val = getattr(args, "fallback_min_robot_distance_m", None)
+    if val is not None:
+        return float(val)
+    return float(os.environ.get("CANDIDATE_FALLBACK_MIN_ROBOT_DISTANCE_M", DEFAULT_FALLBACK_MIN_ROBOT_DISTANCE_M))
+
+
+def set_candidate_geometry_meters(
+    args: argparse.Namespace,
+    *,
+    black_clearance_m: float,
+    min_robot_distance_m: float,
+    longest: int,
+    resolution: Optional[float],
+) -> None:
+    """设置当前几何约束档位（米），并同步 min_goal_distance_ratio。"""
+    args.hard_black_clearance_m = float(black_clearance_m)
+    args.hard_min_robot_distance_m = float(min_robot_distance_m)
+    base_ratio = float(getattr(args, "base_min_goal_distance_ratio", args.min_goal_distance_ratio))
+    args.base_min_goal_distance_ratio = base_ratio
+    res = resolve_map_resolution(args, resolution)
+    if res is not None and res > 0:
+        hard_min_ratio = (float(min_robot_distance_m) / res) / float(max(longest, 1))
+        args.min_goal_distance_ratio = max(base_ratio, hard_min_ratio)
+    else:
+        args.min_goal_distance_ratio = base_ratio
+
+
+def geometry_constraint_tiers(args: argparse.Namespace) -> Tuple[Tuple[str, float, float], ...]:
+    """返回 (tier_name, black_clearance_m, min_robot_distance_m)。
+
+    strict 使用初始严格值（不受 set_candidate_geometry_meters 覆盖影响）。
+    """
+    strict_black = float(
+        getattr(args, "strict_black_clearance_m", None)
+        if getattr(args, "strict_black_clearance_m", None) is not None
+        else DEFAULT_HARD_BLACK_CLEARANCE_M
+    )
+    strict_dist = float(
+        getattr(args, "strict_min_robot_distance_m", None)
+        if getattr(args, "strict_min_robot_distance_m", None) is not None
+        else DEFAULT_HARD_MIN_ROBOT_DISTANCE_M
+    )
+    return (
+        ("strict", strict_black, strict_dist),
+        ("protect_fallback", fallback_black_clearance_m(args), fallback_min_robot_distance_m(args)),
+    )
+
+
 def nearest_unknown_component(unknown_labels: np.ndarray, x: int, y: int,
                               search_radius: int) -> int:
     h, w = unknown_labels.shape
@@ -376,15 +514,21 @@ def generate_frontier_candidates(
     unknown_areas: Dict[int, int],
     longest: int,
     args: argparse.Namespace,
-) -> Tuple[List[FrontierCandidate], np.ndarray, np.ndarray, np.ndarray, Dict[str, int]]:
+    resolution: Optional[float] = None,
+) -> Tuple[List[FrontierCandidate], np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+    hard_black_px = hard_black_clearance_px(args, resolution)
     black_clearance_px = max(3, int(round(longest * args.black_clearance_ratio)))
+    if hard_black_px is not None:
+        # 硬约束优先：周围 0.35m 圆内不得有黑障碍点。
+        black_clearance_px = max(black_clearance_px, hard_black_px)
     robot_clearance_px = max(3, int(round(longest * args.robot_clearance_ratio)))
     frontier_gap_px = max(1, int(round(longest * args.frontier_gap_ratio)))
     spacing_px = max(5, int(round(longest * args.candidate_spacing_ratio)))
     min_pool = max(5, int(getattr(args, "min_display_candidates", 5)) * 3)
     max_global_candidates = max(80, args.max_candidates * 8)
 
-    # 逐步放宽安全/前沿阈值，避免整张图只有 0~1 个全局候选。
+    # 逐步放宽 gap / unknown / spacing，避免整张图只有 0~1 个全局候选。
+    # 当前档位的 black clearance 米制下限（strict 0.35 / protect 0.2）不被 black_scale 放宽。
     relax_profiles = (
         (1.00, 1.00, 1.00, 1.00, 1.00),
         (0.85, 0.85, 1.40, 0.70, 0.85),
@@ -404,6 +548,8 @@ def generate_frontier_candidates(
 
     for black_scale, robot_scale, gap_scale, area_scale, spacing_scale in relax_profiles:
         used_black = max(2, int(round(black_clearance_px * black_scale)))
+        if hard_black_px is not None:
+            used_black = max(used_black, hard_black_px)
         used_robot = max(2, int(round(robot_clearance_px * robot_scale)))
         used_gap = max(1, int(round(frontier_gap_px * gap_scale)))
         used_unknown_area = max(20, int(round(args.unknown_min_area * area_scale)))
@@ -428,9 +574,16 @@ def generate_frontier_candidates(
             break
 
     if not candidates:
+        hard_msg = ""
+        if hard_black_px is not None:
+            hard_msg = (
+                f"硬约束要求候选周围 {hard_black_clearance_m(args):.2f}m 内无黑障碍"
+                f"（约 {hard_black_px}px）。"
+            )
         raise RuntimeError(
             "没有找到满足条件的灰白前沿（即使已自动放宽 clearance / gap / unknown 阈值）。"
-            "请确认地图存在灰白交界，或适当降低 --black-clearance-ratio / --robot-clearance-ratio。"
+            + hard_msg
+            + "请确认地图存在灰白交界，或适当降低 --black-clearance-ratio / --robot-clearance-ratio。"
         )
 
     parameters = {
@@ -439,6 +592,8 @@ def generate_frontier_candidates(
         "frontier_gap_px": used_gap,
         "candidate_spacing_px": used_spacing,
         "unknown_min_area_used": used_unknown_area,
+        "hard_black_clearance_m": hard_black_clearance_m(args) if hard_black_px is not None else None,
+        "hard_black_clearance_px": hard_black_px,
     }
     return candidates, navigable, nav_labels, frontier_mask, parameters
 
@@ -612,14 +767,26 @@ def supplement_forward_candidates(
     args: argparse.Namespace,
     existing: Sequence[FrontierCandidate],
     need: int,
+    resolution: Optional[float] = None,
 ) -> List[FrontierCandidate]:
-    """当前方严格前沿不足时，从同一连通白区补充前方 navigable 点。"""
+    """当前方严格前沿不足时，从同一连通白区补充前方 navigable 点。
+
+    补充点同样遵守硬约束：离黑 >= hard_black_clearance_m，离车 >= hard_min_robot_distance_m。
+    """
     if need <= 0:
         return []
 
     obstacle_distance = cv2.distanceTransform((~blocked).astype(np.uint8), cv2.DIST_L2, 5)
     unknown_distance = cv2.distanceTransform((~unknown).astype(np.uint8), cv2.DIST_L2, 5)
     max_distance = args.max_goal_distance_ratio * 2.2
+    hard_black_px = hard_black_clearance_px(args, resolution)
+    hard_min_ratio = hard_min_robot_distance_ratio(args, longest, resolution)
+    # 无 resolution 时仍用 ratio 黑净空作为补充点的安全下限。
+    min_black_px = float(
+        hard_black_px
+        if hard_black_px is not None
+        else max(2, int(round(longest * args.black_clearance_ratio)))
+    )
 
     occupied_xy = {(c.x, c.y) for c in existing}
     next_global_id = max((c.global_id for c in existing), default=0)
@@ -638,6 +805,8 @@ def supplement_forward_candidates(
         for x, y in zip(xs.tolist(), ys.tolist()):
             if (x, y) in occupied_xy:
                 continue
+            if float(obstacle_distance[y, x]) < min_black_px - 1e-9:
+                continue
             probe = FrontierCandidate(
                 global_id=0,
                 x=int(x),
@@ -649,6 +818,8 @@ def supplement_forward_candidates(
             )
             metrics = candidate_metrics(pose, probe, longest)
             if abs(metrics["heading_delta_deg"]) > args.front_cone_deg + 1e-9:
+                continue
+            if metrics["distance_ratio"] < hard_min_ratio - 1e-9:
                 continue
             if metrics["distance_ratio"] > max_distance + 1e-9:
                 continue
@@ -736,9 +907,17 @@ def apply_visited_candidate_policy(
     Tier 2：保持障碍/连通安全，只放宽 visited 惩罚
     Tier 3：保持几何安全，选择最优安全候选
 
+    硬约束（永不放宽）：
+    - 候选周围 hard_black_clearance_m 圆内无黑障碍
+    - 到小车直线距离 >= hard_min_robot_distance_m
+
     返回 (kept, attrs, reject_reason_counts, tier_used)
     """
+    hard_black_px = hard_black_clearance_px(args, resolution)
     min_clear = float(longest) * float(args.black_clearance_ratio)
+    if hard_black_px is not None:
+        min_clear = max(min_clear, float(hard_black_px))
+    hard_min_m = hard_min_robot_distance_m(args)
     # 将像素阈值换成与 resolution 相关的面积：约 0.0075 m^2 等价于 0.05m 栅格下 ~3 像素
     min_unexplored_gain_px = max(
         1,
@@ -771,6 +950,10 @@ def apply_visited_candidate_policy(
             or candidate.y >= h - edge_margin
         ):
             reject_counts["map_edge"] += 1
+            continue
+        dist_m = candidate_metrics(pose, candidate, longest)["distance_ratio"] * float(longest) * float(resolution)
+        if dist_m < hard_min_m - 1e-9:
+            reject_counts["too_close"] += 1
             continue
         a = compute_candidate_visit_attributes(
             candidate,
@@ -849,11 +1032,14 @@ def choose_case_candidates(
     navigable: Optional[np.ndarray] = None,
     unknown: Optional[np.ndarray] = None,
     blocked: Optional[np.ndarray] = None,
+    resolution: Optional[float] = None,
 ) -> Tuple[List[FrontierCandidate], Dict[str, float]]:
     """返回给 Qwen 展示的前方扇区候选与本案例距离元数据。
 
     约束：候选与小车朝向夹角不超过 front_cone_deg（默认 90°）。
-    若严格距离下不足 min_display_candidates，会逐级放宽距离，避免出现 0~1 个候选。
+    若严格距离下不足 min_display_candidates，会逐级放宽距离上限；
+    若仍不足，由上层 geometry protect 降到 0.4m/0.2m 再重跑。
+    当前档位内：离车直线距离不得低于 hard_min_robot_distance_m。
     """
     component_id = int(nav_labels[pose.y, pose.x])
     reachable = [c for c in candidates if c.component_id == component_id]
@@ -870,13 +1056,16 @@ def choose_case_candidates(
         )
 
     heading_limit = float(args.front_cone_deg)
+    hard_min_ratio = hard_min_robot_distance_ratio(args, longest, resolution)
+    hard_min_m = hard_min_robot_distance_m(args)
     forward = [
         c for c in reachable
         if abs(metrics_by_id[c.global_id]["heading_delta_deg"]) <= heading_limit + 1e-9
+        and metrics_by_id[c.global_id]["distance_ratio"] >= hard_min_ratio - 1e-9
     ]
     if not forward:
         raise RuntimeError(
-            f"小车前方 ±{heading_limit:.0f}° 内没有可达灰白前沿。"
+            f"小车前方 ±{heading_limit:.0f}° 内没有距车直线距离 ≥ {hard_min_m:.2f}m 的可达灰白前沿。"
             "请调整朝向或继续建图扩大前方白色区域。"
         )
 
@@ -898,6 +1087,7 @@ def choose_case_candidates(
             args,
             forward,
             min_show,
+            resolution=resolution,
         )
         if extra:
             forward = list(forward) + extra
@@ -908,14 +1098,20 @@ def choose_case_candidates(
                 path_clear_by_id[candidate.global_id] = direct_path_is_clear(
                     pose, candidate, nav_labels
                 )
+            # 补充点已按硬下限过滤，这里再保险一次。
+            forward = [
+                c for c in forward
+                if metrics_by_id[c.global_id]["distance_ratio"] >= hard_min_ratio - 1e-9
+            ]
 
     display_cap = max(min_show, args.max_candidates)
 
+    # 距离 tier 可放宽上限，但下限永不低于硬离车距离。
     distance_tiers = (
-        (args.min_goal_distance_ratio, args.max_goal_distance_ratio),
-        (args.min_goal_distance_ratio * 0.75, args.max_goal_distance_ratio * 1.20),
-        (args.min_goal_distance_ratio * 0.50, args.max_goal_distance_ratio * 1.50),
-        (0.0, args.max_goal_distance_ratio * 1.80),
+        (max(hard_min_ratio, args.min_goal_distance_ratio), args.max_goal_distance_ratio),
+        (max(hard_min_ratio, args.min_goal_distance_ratio * 0.75), args.max_goal_distance_ratio * 1.20),
+        (max(hard_min_ratio, args.min_goal_distance_ratio * 0.50), args.max_goal_distance_ratio * 1.50),
+        (hard_min_ratio, args.max_goal_distance_ratio * 1.80),
     )
     pool: List[FrontierCandidate] = []
     distance_limit = args.max_goal_distance_ratio
@@ -930,7 +1126,14 @@ def choose_case_candidates(
         if len(pool) >= min_show:
             break
     if not pool:
-        pool = list(forward)
+        pool = [
+            c for c in forward
+            if metrics_by_id[c.global_id]["distance_ratio"] >= hard_min_ratio - 1e-9
+        ]
+        if not pool:
+            raise RuntimeError(
+                f"没有满足硬离车距离 ≥ {hard_min_m:.2f}m 的前方候选。"
+            )
         distance_limit = max(
             args.max_goal_distance_ratio * 1.80,
             max(metrics_by_id[c.global_id]["distance_ratio"] for c in pool),
@@ -1012,10 +1215,12 @@ def choose_case_candidates(
     meta = {
         "nearest_distance_ratio": nearest_distance,
         "candidate_distance_limit_ratio": distance_limit,
-        "strict_min_distance_ratio": args.min_goal_distance_ratio,
+        "strict_min_distance_ratio": max(args.min_goal_distance_ratio, hard_min_ratio),
         "strict_max_distance_ratio": args.max_goal_distance_ratio,
         "preferred_min_distance_ratio": args.preferred_min_distance_ratio,
         "preferred_max_distance_ratio": args.preferred_max_distance_ratio,
+        "hard_min_robot_distance_m": hard_min_m,
+        "hard_min_distance_ratio": hard_min_ratio,
         "front_clear_candidate_count": float(len(front_clear)),
         "front_blocked_candidate_count": float(len(front_blocked)),
         "forward_candidate_count": float(len(forward)),
@@ -1421,7 +1626,8 @@ def main() -> int:
     try:
         semantic, free, unknown, blocked, unknown_labels, unknown_areas, unknown_value = build_semantic_masks(gray, args)
         candidates, navigable, nav_labels, frontier_mask, parameters = generate_frontier_candidates(
-            free, unknown, blocked, unknown_labels, unknown_areas, longest, args
+            free, unknown, blocked, unknown_labels, unknown_areas, longest, args,
+            resolution=getattr(args, "map_resolution", None),
         )
         robot_candidates = generate_robot_position_candidates(
             navigable=navigable,
@@ -1518,6 +1724,7 @@ def main() -> int:
                 navigable=navigable,
                 unknown=unknown,
                 blocked=blocked,
+                resolution=getattr(args, "map_resolution", None),
             )
         except Exception as exc:
             print(f"[错误] case {case_id}: {exc}", file=sys.stderr)

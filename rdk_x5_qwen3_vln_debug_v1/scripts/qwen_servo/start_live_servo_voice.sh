@@ -40,14 +40,17 @@ if [[ ! -f "$VOICE_ENV_FILE" ]]; then
   exit 1
 fi
 
-# Load the same key for ASR/translation and visual navigation. Unlike the old
-# script, this file contains no hard-coded cloud credential.
+# Load voice .env first (ASR/mic), then nav API loader.
+# Voice .env is passed as the highest-priority override for the three API exports:
+# DASHSCOPE_API_KEY / QWEN_BASE_URL / QWEN_MODEL (beats shell and repo .env).
 set -a
 # shellcheck disable=SC1090
 source "$VOICE_ENV_FILE"
 set +a
+load_nav_api_env "$PROJECT_DIR" "$ROOT" "$VOICE_ENV_FILE"
 : "${DASHSCOPE_API_KEY:?Please configure DASHSCOPE_API_KEY in $VOICE_ENV_FILE}"
-load_nav_api_env "$PROJECT_DIR" "$ROOT"
+: "${QWEN_BASE_URL:?Please configure QWEN_BASE_URL in $VOICE_ENV_FILE}"
+: "${QWEN_MODEL:?Please configure QWEN_MODEL in $VOICE_ENV_FILE}"
 
 # The voice command itself is the final user confirmation, so the voice version
 # enables real motion by default. Use MOTION_ENABLED=0 for a dry run.
@@ -228,15 +231,17 @@ mark_step "image_raw bridge ready"
 
 if [[ "${START_FOXGLOVE:-1}" == "1" ]]; then
   port="${FOXGLOVE_PORT:-8765}"
+  whitelist="${FOXGLOVE_TOPIC_WHITELIST:-['^/image$','^/camera_info$','^/qwen_vln/annotated_image/compressed$','^/qwen_vln/servo/.*','^/qwen_vln/(command|state|result_json|latency_ms|pixel_point|prompt_text)$','^/third_view/.*','^/map_qwen_plan/(backend_debug|bridge_status|status|candidate_summary)$','^/tf$','^/tf_static$','^/scan_filtered$','^/odom$','^/map$','^/map_metadata$']}"
   if ss -tln 2>/dev/null | grep -q ":${port} "; then
     mark_proc foxglove ""
     echo "[foxglove] reuse port $port"
   elif ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
-    ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="$port" \
+    FOXGLOVE_PORT="$port" FOXGLOVE_TOPIC_WHITELIST="$whitelist" \
+      bash "$PROJECT_DIR/scripts/lidar/start_foxglove.sh" \
       >"$ROOT/logs/qwen_servo_foxglove.log" 2>&1 &
     FOXGLOVE_PID=$!
     mark_proc foxglove "$FOXGLOVE_PID"
-    echo "[foxglove] starting on ws://:$port"
+    echo "[foxglove] starting on ws://:$port whitelist=$whitelist"
   else
     echo "[foxglove] WARN: foxglove_bridge package not installed"
   fi

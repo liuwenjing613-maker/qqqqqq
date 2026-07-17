@@ -422,6 +422,19 @@ def build_v6_args(live_args, pgm_path, output_dir):
         robot_clearance_ratio=0.012,
         frontier_gap_ratio=0.006,
         candidate_spacing_ratio=0.018,
+        hard_black_clearance_m=float(
+            os.getenv("CANDIDATE_HARD_BLACK_CLEARANCE_M", "0.35")
+        ),
+        hard_min_robot_distance_m=float(
+            os.getenv("CANDIDATE_HARD_MIN_ROBOT_DISTANCE_M", "0.8")
+        ),
+        fallback_black_clearance_m=float(
+            os.getenv("CANDIDATE_FALLBACK_BLACK_CLEARANCE_M", "0.2")
+        ),
+        fallback_min_robot_distance_m=float(
+            os.getenv("CANDIDATE_FALLBACK_MIN_ROBOT_DISTANCE_M", "0.4")
+        ),
+        map_resolution=None,
         min_goal_distance_ratio=0.05,
         max_goal_distance_ratio=0.22,
         preferred_min_distance_ratio=0.07,
@@ -480,42 +493,95 @@ def _generate_serializable_bundle(args, v6) -> Dict[str, Any]:
 
     v6_args = build_v6_args(args, pgm_path, output_dir)
     longest = max(h, w)
+    v6_args.map_resolution = float(meta.resolution)
+    v6_args.base_min_goal_distance_ratio = float(v6_args.min_goal_distance_ratio)
+    v6_args.strict_black_clearance_m = float(v6_args.hard_black_clearance_m)
+    v6_args.strict_min_robot_distance_m = float(v6_args.hard_min_robot_distance_m)
     rx, ry, yaw_rad = load_pose_json(pose_json)
     yaw_deg = math.degrees(yaw_rad)
 
     semantic, free, unknown, blocked, unknown_labels, unknown_areas, unknown_value = v6.build_semantic_masks(
         gray, v6_args
     )
-    candidates, navigable, nav_labels, frontier_mask, parameters = v6.generate_frontier_candidates(
-        free, unknown, blocked, unknown_labels, unknown_areas, longest, v6_args
-    )
     visited_mask = resolve_visited_mask(gray, meta, map_yaml, qwen_map_yaml, traj_json)
     visited_dist_field = build_visited_distance_field(visited_mask) if visited_mask.any() else None
     paint_visited_on_bgr(semantic, visited_mask)
     vertices = load_trajectory_vertices(traj_json) if traj_json else []
     draw_trajectory_overlay(semantic, vertices, meta)
-    robot_px, robot_py = resolve_robot_pixel(rx, ry, meta, navigable)
-    pose = v6.Pose(robot_px, robot_py, yaw_deg)
 
-    case_candidates, selection_meta = v6.choose_case_candidates(
-        pose, nav_labels, candidates, longest, v6_args,
-        navigable=navigable, unknown=unknown, blocked=blocked,
-    )
-    case_candidates, visit_attrs, reject_stats, tier_used = v6.apply_visited_candidate_policy(
-        pose, case_candidates, nav_labels, longest, v6_args,
-        visited_mask=visited_mask,
-        visited_dist_field=visited_dist_field,
-        unknown=unknown,
-        blocked=blocked,
-        resolution=meta.resolution,
-    )
+    min_show = max(1, int(getattr(v6_args, "min_display_candidates", 5)))
+    last_error: Optional[BaseException] = None
+    case_candidates: List[Any] = []
+    selection_meta: Dict[str, Any] = {}
+    parameters: Dict[str, Any] = {}
+    visit_attrs: Dict[int, Dict[str, Any]] = {}
+    reject_stats: Dict[str, int] = {}
+    tier_used = 1
+    navigable = np.zeros_like(free, dtype=bool)
+    nav_labels = np.zeros(free.shape, dtype=np.int32)
+    frontier_mask = np.zeros_like(free, dtype=bool)
+    robot_px = robot_py = 0
+    pose = None
+    geometry_tier = "strict"
+
+    for tier_name, black_m, dist_m in v6.geometry_constraint_tiers(v6_args):
+        v6.set_candidate_geometry_meters(
+            v6_args,
+            black_clearance_m=black_m,
+            min_robot_distance_m=dist_m,
+            longest=longest,
+            resolution=meta.resolution,
+        )
+        try:
+            candidates, navigable, nav_labels, frontier_mask, parameters = v6.generate_frontier_candidates(
+                free, unknown, blocked, unknown_labels, unknown_areas, longest, v6_args,
+                resolution=meta.resolution,
+            )
+            robot_px, robot_py = resolve_robot_pixel(rx, ry, meta, navigable)
+            pose = v6.Pose(robot_px, robot_py, yaw_deg)
+            case_candidates, selection_meta = v6.choose_case_candidates(
+                pose, nav_labels, candidates, longest, v6_args,
+                navigable=navigable, unknown=unknown, blocked=blocked,
+                resolution=meta.resolution,
+            )
+            case_candidates, visit_attrs, reject_stats, tier_used = v6.apply_visited_candidate_policy(
+                pose, case_candidates, nav_labels, longest, v6_args,
+                visited_mask=visited_mask,
+                visited_dist_field=visited_dist_field,
+                unknown=unknown,
+                blocked=blocked,
+                resolution=meta.resolution,
+            )
+        except Exception as exc:
+            last_error = exc
+            case_candidates = []
+            continue
+
+        geometry_tier = tier_name
+        selection_meta = dict(selection_meta)
+        selection_meta["geometry_constraint_tier"] = tier_name
+        selection_meta["geometry_black_clearance_m"] = float(black_m)
+        selection_meta["geometry_min_robot_distance_m"] = float(dist_m)
+        parameters = dict(parameters)
+        parameters["geometry_constraint_tier"] = tier_name
+        parameters["geometry_black_clearance_m"] = float(black_m)
+        parameters["geometry_min_robot_distance_m"] = float(dist_m)
+
+        if len(case_candidates) >= min_show:
+            break
+        # 不足 5 个时进入保护档（0.4m / 0.2m）；已是最后一档则接受现有结果。
+
+    if pose is None or not case_candidates:
+        raise RuntimeError(
+            f"几何约束下无可用候选（含 protect_fallback 0.4m/0.2m）：{last_error}"
+        )
 
     input_image, _ = v6.build_case_image(
         semantic, pose, case_candidates, v6_args.model_image_side,
         info_lines=[
             "LIVE SESSION INPUT",
             f"robot_map=({rx:.2f},{ry:.2f}) yaw={yaw_deg:.1f}",
-            f"safe_frontier_candidates={len(case_candidates)} tier={tier_used}",
+            f"safe_frontier_candidates={len(case_candidates)} tier={tier_used} geom={geometry_tier}",
         ],
     )
     candidates_path = output_dir / "live_candidates.png"
@@ -560,6 +626,9 @@ def _generate_serializable_bundle(args, v6) -> Dict[str, Any]:
         },
         "reject_reason_counts": reject_stats,
         "candidate_tier_used": tier_used,
+        "geometry_constraint_tier": geometry_tier,
+        "geometry_black_clearance_m": selection_meta.get("geometry_black_clearance_m"),
+        "geometry_min_robot_distance_m": selection_meta.get("geometry_min_robot_distance_m"),
         "candidates": cand_dicts,
         "live_candidates_png": str(candidates_path),
         "live_candidates_foxglove_json": str(foxglove_candidates_json),
@@ -635,6 +704,24 @@ def rebuild_runtime_context(
 
     v6_args = build_v6_args(live_args, pgm_path, output_dir)
     longest = max(h, w)
+    v6_args.map_resolution = float(meta.resolution)
+    v6_args.base_min_goal_distance_ratio = float(v6_args.min_goal_distance_ratio)
+    v6_args.strict_black_clearance_m = float(v6_args.hard_black_clearance_m)
+    v6_args.strict_min_robot_distance_m = float(v6_args.hard_min_robot_distance_m)
+    # 重建时沿用 bundle 最终采用的几何档，避免 navigable 与候选不一致。
+    geom_black = bundle.get("geometry_black_clearance_m")
+    geom_dist = bundle.get("geometry_min_robot_distance_m")
+    if geom_black is None or geom_dist is None:
+        sel = bundle.get("selection_meta") or {}
+        geom_black = sel.get("geometry_black_clearance_m", v6_args.hard_black_clearance_m)
+        geom_dist = sel.get("geometry_min_robot_distance_m", v6_args.hard_min_robot_distance_m)
+    v6_module.set_candidate_geometry_meters(
+        v6_args,
+        black_clearance_m=float(geom_black),
+        min_robot_distance_m=float(geom_dist),
+        longest=longest,
+        resolution=meta.resolution,
+    )
     rx, ry, yaw_rad = load_pose_json(pose_path)
     yaw_deg = math.degrees(yaw_rad)
 
@@ -642,7 +729,8 @@ def rebuild_runtime_context(
         gray, v6_args
     )
     _cands, navigable, nav_labels, _frontier, _params = v6_module.generate_frontier_candidates(
-        free, unknown, blocked, unknown_labels, unknown_areas, longest, v6_args
+        free, unknown, blocked, unknown_labels, unknown_areas, longest, v6_args,
+        resolution=meta.resolution,
     )
     visited_mask = resolve_visited_mask(gray, meta, map_yaml, visited_map_path, trajectory_path)
     visited_dist_field = build_visited_distance_field(visited_mask) if visited_mask.any() else None
@@ -783,39 +871,62 @@ def main() -> int:
     latency_s = None
     error = ""
 
-    if v6_args.dry_run:
-        selected_local_id = v6.deterministic_fallback(
-            pose, case_candidates, nav_labels, longest, v6_args,
-            visited_dist_field=visited_dist_field,
+    def _pick_algorithm_ranked_final() -> int:
+        """按算法等级选最优候选作为最终点（CLEAR/距离/朝向/已扫远离）。"""
+        return int(
+            v6.deterministic_fallback(
+                pose,
+                case_candidates,
+                nav_labels,
+                longest,
+                v6_args,
+                visited_dist_field=visited_dist_field,
+            )
         )
+
+    if v6_args.dry_run:
+        selected_local_id = _pick_algorithm_ranked_final()
         selected_by = "python_dry_run"
         confidence = 1.0
         reason = "dry-run"
     else:
         api_key = v6.get_api_key(v6_args.api_key)
+        qwen_ok = False
         if not api_key:
-            print("[FAIL] 未设置 DASHSCOPE_API_KEY（请在环境或 .env 中配置，勿写入代码）", file=sys.stderr)
-            return 2
-        try:
-            raw_response, latency_s = v6.call_qwen(
-                input_image, prompt, api_key, v6_args, image_format="jpeg"
+            error = "未设置 DASHSCOPE_API_KEY，改用算法等级选点"
+            print(f"[WARN] {error}", file=sys.stderr)
+        else:
+            try:
+                raw_response, latency_s = v6.call_qwen(
+                    input_image, prompt, api_key, v6_args, image_format="jpeg"
+                )
+                (output_dir / "live_qwen_raw.txt").write_text(raw_response, encoding="utf-8")
+                parsed = v6.extract_json(raw_response)
+                if "candidate_id" not in parsed:
+                    raise ValueError("Qwen 响应缺少 candidate_id")
+                selected_local_id = int(parsed.get("candidate_id"))
+                if not 1 <= selected_local_id <= len(case_candidates):
+                    raise ValueError(f"candidate_id={selected_local_id} 超出范围")
+                selected_by = "qwen"
+                if parsed.get("confidence") is not None:
+                    confidence = float(parsed["confidence"])
+                reason = str(parsed.get("reason", "")).strip()
+                qwen_ok = True
+            except Exception as exc:
+                error = str(exc)
+                print(f"[WARN] Qwen 选点失败，改用算法等级选点：{error}", file=sys.stderr)
+
+        if not qwen_ok:
+            selected_local_id = _pick_algorithm_ranked_final()
+            selected_by = "algorithm_rank"
+            if not reason:
+                reason = "algorithm_rank_final"
+            confidence = 1.0 if confidence is None else confidence
+            print(
+                f"[OK] 算法等级最终点 candidate_id={selected_local_id} "
+                f"(selected_by={selected_by})",
+                flush=True,
             )
-            (output_dir / "live_qwen_raw.txt").write_text(raw_response, encoding="utf-8")
-            parsed = v6.extract_json(raw_response)
-            selected_local_id = int(parsed.get("candidate_id"))
-            if not 1 <= selected_local_id <= len(case_candidates):
-                raise ValueError(f"candidate_id={selected_local_id} 超出范围")
-            selected_by = "qwen"
-            if parsed.get("confidence") is not None:
-                confidence = float(parsed["confidence"])
-            reason = str(parsed.get("reason", "")).strip()
-        except Exception as exc:
-            error = str(exc)
-            selected_local_id = v6.deterministic_fallback(
-                pose, case_candidates, nav_labels, longest, v6_args,
-                visited_dist_field=visited_dist_field,
-            )
-            selected_by = "python_fallback_after_qwen_error"
 
     chosen = case_candidates[selected_local_id - 1]
     write_foxglove_candidates_json(

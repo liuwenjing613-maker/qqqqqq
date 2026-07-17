@@ -19,6 +19,8 @@ REUSE_SLAM="${FULLFLOW_REUSE_SLAM:-1}"
 TF_WAIT_SEC="${FULLFLOW_TF_WAIT_SEC:-60}"
 TOPIC_WAIT_SEC="${FULLFLOW_TOPIC_WAIT_SEC:-60}"
 NAV2_WAIT_SEC="${FULLFLOW_NAV2_WAIT_SEC:-90}"
+# Fullflow saturates the X5: bridge debug/status + compressed images, skip raw image/map blobs.
+export FOXGLOVE_TOPIC_WHITELIST="${FOXGLOVE_TOPIC_WHITELIST:-['^/image$','^/camera_info$','^/qwen_vln/annotated_image/compressed$','^/qwen_vln/servo/.*','^/qwen_vln/(command|state|result_json|latency_ms|pixel_point|prompt_text)$','^/third_view/.*','^/map_qwen_plan/(backend_debug|bridge_status|status|candidate_summary)$','^/tf$','^/tf_static$','^/scan_filtered$','^/odom$','^/map$','^/map_metadata$']}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -113,13 +115,21 @@ for f in \
 done
 mark_step "file checks"
 
-if [[ "$MOTION_ENABLED" == "1" && -z "${DASHSCOPE_API_KEY:-${QWEN_API_KEY:-}}" && "${MAP_QWEN_DRY_RUN:-0}" != "1" ]]; then
-  [[ -f "$REPO_ROOT/.env" ]] && { set -a; source "$REPO_ROOT/.env"; set +a; }
+# Repo .env owns the three API exports with highest priority (overrides shell).
+if [[ -f "$REPO_ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$REPO_ROOT/.env"
+  set +a
 fi
 if [[ "$MOTION_ENABLED" == "1" && -z "${DASHSCOPE_API_KEY:-${QWEN_API_KEY:-}}" && "${MAP_QWEN_DRY_RUN:-0}" != "1" ]]; then
-  log_fatal "set DASHSCOPE_API_KEY in the shell or $REPO_ROOT/.env"
+  log_fatal "set DASHSCOPE_API_KEY in $REPO_ROOT/.env (or shell before launch)"
   exit 2
 fi
+: "${QWEN_BASE_URL:=${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}}"
+: "${QWEN_MODEL:=qwen3-vl-flash}"
+export QWEN_BASE_URL QWEN_MODEL
+log_ts "[api] model=$QWEN_MODEL base_url=$QWEN_BASE_URL key_set=$([ -n "${DASHSCOPE_API_KEY:-}" ] && echo 1 || echo 0)"
 mark_step "API key check"
 
 publisher_count() {

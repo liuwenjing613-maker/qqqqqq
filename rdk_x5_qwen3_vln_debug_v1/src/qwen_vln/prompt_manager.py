@@ -40,14 +40,7 @@ class PromptManager:
         path = self.prompt_dir / filename
         if not path.is_file():
             raise FileNotFoundError(f"Prompt file not found: {path}")
-        # Lines starting with '#' are local archives / comments and are not
-        # sent to the model (so old rules can stay in the file for reference).
-        active_lines = [
-            line
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if not line.lstrip().startswith("#")
-        ]
-        return Template("\n".join(active_lines).strip())
+        return Template(path.read_text(encoding="utf-8").strip())
 
     def build(
         self,

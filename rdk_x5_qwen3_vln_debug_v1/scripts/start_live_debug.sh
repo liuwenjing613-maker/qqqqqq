@@ -24,13 +24,16 @@ start_raw_bridge "$ROOT" "$ROOT/logs/image_raw_bridge.log"
 
 if [ "${START_FOXGLOVE:-1}" = "1" ]; then
   port="${FOXGLOVE_PORT:-8765}"
+  whitelist="${FOXGLOVE_TOPIC_WHITELIST:-['^/image$','^/camera_info$','^/qwen_vln/annotated_image/compressed$','^/qwen_vln/servo/.*','^/qwen_vln/(command|state|result_json|latency_ms|pixel_point|prompt_text)$','^/third_view/.*','^/map_qwen_plan/(backend_debug|bridge_status|status|candidate_summary)$','^/tf$','^/tf_static$','^/scan_filtered$','^/odom$','^/map$','^/map_metadata$']}"
+  project_dir="$(cd "$ROOT/.." && pwd)"
   if ss -tln 2>/dev/null | grep -q ":${port} "; then
     echo "[foxglove] reuse port $port"
   elif ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
-    ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="$port" \
+    FOXGLOVE_PORT="$port" FOXGLOVE_TOPIC_WHITELIST="$whitelist" \
+      bash "$project_dir/scripts/lidar/start_foxglove.sh" \
       >"$ROOT/logs/foxglove_bridge.log" 2>&1 &
     FOXGLOVE_PID=$!
-    echo "[foxglove] starting on ws://<RDK-IP>:$port"
+    echo "[foxglove] starting on ws://<RDK-IP>:$port whitelist=$whitelist"
   else
     echo "[foxglove] WARN: foxglove_bridge package not installed"
   fi

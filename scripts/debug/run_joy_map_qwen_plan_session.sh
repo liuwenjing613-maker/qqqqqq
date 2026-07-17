@@ -240,6 +240,12 @@ map_topic_has_publisher() {
   [[ -n "${pub_count:-}" && "${pub_count:-0}" -gt 0 ]]
 }
 
+# Prefer real OccupancyGrid samples over ros2 CLI discovery (FastDDS/daemon lag).
+map_topic_has_data() {
+  local timeout_sec="${1:-12}"
+  topic_is_publishing /map 1 "$timeout_sec"
+}
+
 wait_topic_exists() {
   local topic="$1"
   local timeout_sec="${2:-90}"
@@ -247,6 +253,10 @@ wait_topic_exists() {
   source_ros_environment
   for ((i = 0; i < timeout_sec; i++)); do
     if ros2 topic list 2>/dev/null | grep -qx "$topic"; then
+      return 0
+    fi
+    # /map: CLI list often lags; accept live samples as existence proof.
+    if [[ "$topic" == "/map" ]] && map_topic_has_data 3; then
       return 0
     fi
     sleep 1
@@ -281,23 +291,44 @@ wait_joy_mapping_boot() {
 }
 
 wait_map_for_save() {
-  local timeout_sec="${1:-30}"
+  local timeout_sec="${1:-45}"
   local label="${2:-保存前确认 /map}"
   local i pub_count
+  local refreshed=0
 
   source_ros_environment
-  log "${label} (最多 ${timeout_sec}s) ..."
+  log "${label} (最多 ${timeout_sec}s，优先 rclpy 收 OccupancyGrid) ..."
+
+  # Fast path: actually receive /map (TRANSIENT_LOCAL). This survives CLI discovery lag.
+  if map_topic_has_data 15; then
+    pub_count="$(ros2 topic info /map -v 2>/dev/null | awk '/Publisher count:/{print $3; exit}')"
+    log "  /map 数据就绪 (rclpy samples OK, cli_publishers=${pub_count:-unknown})"
+    return 0
+  fi
+
   for ((i = 0; i < timeout_sec; i++)); do
-    if ros2 topic list 2>/dev/null | grep -qx "/map"; then
-      if map_topic_has_publisher; then
-        pub_count="$(ros2 topic info /map -v 2>/dev/null | awk '/Publisher count:/{print $3; exit}')"
-        log "  /map 就绪 (publishers=${pub_count}, 耗时 ${i}s)"
-        return 0
-      fi
+    if map_topic_has_data 4; then
+      pub_count="$(ros2 topic info /map -v 2>/dev/null | awk '/Publisher count:/{print $3; exit}')"
+      log "  /map 就绪 (rclpy samples OK, cli_publishers=${pub_count:-unknown}, 耗时 ${i}s)"
+      return 0
+    fi
+    # Mid-wait: one daemon refresh can heal stale ros2 CLI graph (used later by map_saver_cli).
+    if [[ "$refreshed" -eq 0 && "$i" -ge 8 ]]; then
+      log "  WARN: /map 样本未到，刷新 ros2 daemon 后重试 ..."
+      refresh_ros2_daemon
+      refreshed=1
+    fi
+    # CLI fallback (weaker): topic list + publisher count
+    if ros2 topic list 2>/dev/null | grep -qx "/map" && map_topic_has_publisher; then
+      pub_count="$(ros2 topic info /map -v 2>/dev/null | awk '/Publisher count:/{print $3; exit}')"
+      log "  /map 就绪 (CLI publishers=${pub_count}, 耗时 ${i}s；样本探测未确认)"
+      return 0
     fi
     sleep 1
   done
-  log "ERROR: ${timeout_sec}s 内 /map 不可用"
+  log "ERROR: ${timeout_sec}s 内 /map 不可用（rclpy 未收到 OccupancyGrid，且 CLI 无发布者）"
+  log "HINT: 检查 slam_toolbox 是否仍在；可手动: python3 scripts/lib/ros_topic_probe.py has-samples /map 1 10"
+  pgrep -af "slam_toolbox|async_slam_toolbox" 2>/dev/null | head -5 || true
   return 1
 }
 
@@ -411,7 +442,7 @@ save_map_to_session() {
   mkdir -p "$SESSION_DIR/map"
   save_start_epoch="$(date +%s)"
 
-  if ! wait_map_for_save 30 "保存前确认 /map"; then
+  if ! wait_map_for_save 45 "保存前确认 /map"; then
     log "ERROR: 无法保存地图（/map 不可用）"
     return 1
   fi
@@ -420,21 +451,44 @@ save_map_to_session() {
     log "WARN: 保存前无 map->base_link TF，仍尝试保存（请确认已用手柄移动过）"
   fi
 
+  # map_saver_cli is a separate ROS process; refresh daemon so it can discover /map.
+  if ! map_topic_has_publisher; then
+    log "  CLI 仍看不到 /map 发布者，刷新 ros2 daemon 后再调 map_saver_cli ..."
+    refresh_ros2_daemon
+    sleep 2
+  fi
+
   pub_count="$(ros2 topic info /map -v 2>/dev/null | awk '/Publisher count:/{print $3; exit}')"
-  log "保存地图到 ${map_out} ... (publishers=${pub_count})"
+  log "保存地图到 ${map_out} ... (cli_publishers=${pub_count:-unknown})"
   set +e
-  timeout 30 ros2 run nav2_map_server map_saver_cli \
+  timeout 45 ros2 run nav2_map_server map_saver_cli \
     -t /map \
     -f "$map_tmp" \
     --ros-args \
-    -p save_map_timeout:=20.0 \
+    -p save_map_timeout:=30.0 \
     >> "$SESSION_DIR/map_saver.log" 2>&1
   saver_rc=$?
   set -e
 
   if [[ "$saver_rc" -ne 0 ]] || [[ ! -f "${map_tmp}.pgm" ]] || [[ ! -f "${map_tmp}.yaml" ]]; then
-    log "ERROR: map_saver_cli 失败 (rc=$saver_rc)"
+    log "WARN: map_saver_cli 首次失败 (rc=$saver_rc)，刷新 daemon 后重试一次 ..."
     tail -20 "$SESSION_DIR/map_saver.log" 2>/dev/null || true
+    refresh_ros2_daemon
+    sleep 2
+    set +e
+    timeout 45 ros2 run nav2_map_server map_saver_cli \
+      -t /map \
+      -f "$map_tmp" \
+      --ros-args \
+      -p save_map_timeout:=30.0 \
+      >> "$SESSION_DIR/map_saver.log" 2>&1
+    saver_rc=$?
+    set -e
+  fi
+
+  if [[ "$saver_rc" -ne 0 ]] || [[ ! -f "${map_tmp}.pgm" ]] || [[ ! -f "${map_tmp}.yaml" ]]; then
+    log "ERROR: map_saver_cli 失败 (rc=$saver_rc)"
+    tail -30 "$SESSION_DIR/map_saver.log" 2>/dev/null || true
     return 1
   fi
 
