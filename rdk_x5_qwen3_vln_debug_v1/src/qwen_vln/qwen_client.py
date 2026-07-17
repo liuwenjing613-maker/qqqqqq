@@ -55,8 +55,10 @@ class ClientConfig:
     max_retries: int = 0
     temperature: float = 0.0
     max_tokens: int = 96
-    # SPAWN_SCAN {"p","t","r","q"} needs more tokens than action JSON.
-    max_tokens_spawn_scan: int = 48
+    # SPAWN_SCAN {"p","t","c","w","d","o","b"} (r/q computed locally).
+    # Previous (model-emitted r/q): max_tokens_spawn_scan: int = 48
+    # Bumped above 80: runaway float dumps on c/w/d/o/b need headroom + repair.
+    max_tokens_spawn_scan: int = 128
     enable_thinking: bool = False
     jpeg_quality: int = 72
     min_pixels: int = 65536
@@ -263,6 +265,9 @@ def _extract_json(text: str) -> Dict[str, Any]:
         repaired = _repair_compact_json(cleaned)
         if repaired is not None:
             return repaired
+        repaired_spawn = _repair_spawn_scan_json(cleaned)
+        if repaired_spawn is not None:
+            return repaired_spawn
         raise ValueError(f"No JSON object found in model output: {cleaned[:300]}")
 
 
@@ -276,6 +281,14 @@ _POINT_RE = re.compile(
 )
 _POINT_NULL_RE = re.compile(r'"p"\s*:\s*null', re.IGNORECASE)
 _CONF_RE = re.compile(r'"c"\s*:\s*(-?\d+(?:\.\d+)?)')
+_SPAWN_T_RE = re.compile(r'"t"\s*:\s*(-?\d+(?:\.\d+)?)')
+_SPAWN_FACTOR_RE = {
+    "c": re.compile(r'"c"\s*:\s*(-?\d+(?:\.\d+)?)'),
+    "w": re.compile(r'"w"\s*:\s*(-?\d+(?:\.\d+)?)'),
+    "d": re.compile(r'"d"\s*:\s*(-?\d+(?:\.\d+)?)'),
+    "o": re.compile(r'"o"\s*:\s*(-?\d+(?:\.\d+)?)'),
+    "b": re.compile(r'"b"\s*:\s*(-?\d+(?:\.\d+)?)'),
+}
 
 
 def _repair_compact_json(text: str) -> Optional[Dict[str, Any]]:
@@ -298,6 +311,40 @@ def _repair_compact_json(text: str) -> Optional[Dict[str, Any]]:
     confidence_match = _CONF_RE.search(text or "")
     if confidence_match:
         data["c"] = float(confidence_match.group(1))
+    return data
+
+
+def _repair_spawn_scan_json(text: str) -> Optional[Dict[str, Any]]:
+    """Recover SPAWN_SCAN JSON truncated mid-float (e.g. b:0.5000... without }).
+
+    Models sometimes emit unit-interval floats or runaway decimals for c/w/d/o/b.
+    Extract whatever leading numeric prefix is present so local scoring can proceed.
+    """
+    raw = text or ""
+    # SPAWN_SCAN has t plus geometric factors; action JSON has s and must not match.
+    if _STATUS_RE.search(raw) and '"w"' not in raw and '"b"' not in raw:
+        return None
+    t_match = _SPAWN_T_RE.search(raw)
+    if not t_match:
+        return None
+    point_match = _POINT_RE.search(raw)
+    point_is_null = bool(_POINT_NULL_RE.search(raw))
+    if not point_match and not point_is_null:
+        return None
+
+    data: Dict[str, Any] = {
+        "p": (
+            [float(point_match.group(1)), float(point_match.group(2))]
+            if point_match
+            else None
+        ),
+        "t": float(t_match.group(1)),
+    }
+    for key, pattern in _SPAWN_FACTOR_RE.items():
+        match = pattern.search(raw)
+        if not match:
+            return None
+        data[key] = float(match.group(1))
     return data
 
 
@@ -397,16 +444,134 @@ def _parse_unit_score(value: Any, name: str) -> float:
     return score
 
 
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _parse_integer_factor(value: Any, name: str) -> int:
+    """Read a geometric factor constrained to integer [0,10].
+
+    Tolerates model mistakes:
+    - 7.0 -> 7
+    - unit-interval 0.50 -> 5 (legacy [0,1] habit)
+    - truncated runaway floats recovered by _repair_spawn_scan_json
+    """
+    if value is None:
+        raise ValueError(f"Missing required JSON field: {name}")
+    if isinstance(value, bool):
+        raise ValueError(f"{name} cannot be boolean")
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer from 0 to 10") from exc
+
+    # Strict integer path (preferred).
+    # Previous strict check (kept for recovery):
+    # if not numeric_value.is_integer():
+    #     raise ValueError(f"{name} must be an integer from 0 to 10, got: {value}")
+    # integer_value = int(numeric_value)
+
+    if abs(numeric_value - round(numeric_value)) < 1e-6:
+        integer_value = int(round(numeric_value))
+    elif 0.0 <= numeric_value <= 1.0:
+        # Model emitted a [0,1] score instead of 0-10.
+        integer_value = int(round(numeric_value * 10.0))
+    else:
+        integer_value = int(round(_clamp(numeric_value, 0.0, 10.0)))
+
+    if not 0 <= integer_value <= 10:
+        raise ValueError(f"{name}={integer_value} is outside [0,10]")
+    return integer_value
+
+
+def _compute_spawn_route_score(c: int, w: int, d: int, o: int, b: int) -> float:
+    """Compute absolute route traversability locally from visual factors.
+
+    c: continuity, w: usable width, d: forward depth, o: openness,
+    b: blockage severity — each 0-10.
+    """
+    continuity = c / 10.0
+    width = w / 10.0
+    depth = d / 10.0
+    openness = o / 10.0
+    blockage = b / 10.0
+
+    # Positive route evidence sums to 1.00.
+    # Blockage is applied separately as a penalty.
+    score = (
+        0.34 * continuity
+        + 0.24 * width
+        + 0.26 * depth
+        + 0.16 * openness
+        - 0.30 * blockage
+    )
+
+    # Geometric safeguards.
+    if b >= 9 and c <= 2 and d <= 2:
+        score = min(score, 0.08)
+    if d <= 2 and o <= 2:
+        score = min(score, 0.28)
+    if b >= 7:
+        score = min(score, 0.42)
+
+    return round(_clamp(score, 0.0, 1.0), 2)
+
+
+# --- ARCHIVED: SPAWN_SCAN parser for model-emitted {"p","t","r","q"} ---
+# def _parse_spawn_scan_output(
+#     data: Dict[str, Any],
+#     image_width: int,
+#     image_height: int,
+# ) -> ModelResult:
+#     """Parse SPAWN_SCAN protocol: {"p","t","r","q"} (no s / no motion action).
+#
+#     Visibility is inferred from p only: non-null => TARGET_VISIBLE, null => TARGET_INFERRED.
+#     """
+#     required = {"p", "t", "r", "q"}
+#     missing = sorted(required.difference(data))
+#     if missing:
+#         raise ValueError(f"Missing required JSON fields: {missing}")
+#
+#     point = _parse_point(data.get("p"), image_width, image_height)
+#     if point is not None:
+#         result_name = "TARGET_VISIBLE"
+#         action = "POINT"
+#         role = "target"
+#         reason = "spawn_visible"
+#     else:
+#         result_name = "TARGET_INFERRED"
+#         action = "STOP"
+#         role = "none"
+#         reason = "spawn_inferred"
+#
+#     score_t = _parse_unit_score(data.get("t"), "t")
+#     score_r = _parse_unit_score(data.get("r"), "r")
+#     score_q = _parse_unit_score(data.get("q"), "q")
+#     return ModelResult(
+#         result=result_name,
+#         point=point,
+#         point_role=role,
+#         label="",
+#         reason_code=reason,
+#         action=action,
+#         confidence=0.0,
+#         score_t=score_t,
+#         score_r=score_r,
+#         score_q=score_q,
+#     )
+
+
 def _parse_spawn_scan_output(
     data: Dict[str, Any],
     image_width: int,
     image_height: int,
 ) -> ModelResult:
-    """Parse SPAWN_SCAN protocol: {"p","t","r","q"} (no s / no motion action).
+    """Parse SPAWN_SCAN protocol: {"p","t","c","w","d","o","b"}.
 
-    Visibility is inferred from p only: non-null => TARGET_VISIBLE, null => TARGET_INFERRED.
+    r and q are computed locally. Visibility follows p only:
+    non-null => TARGET_VISIBLE, null => TARGET_INFERRED.
     """
-    required = {"p", "t", "r", "q"}
+    required = {"p", "t", "c", "w", "d", "o", "b"}
     missing = sorted(required.difference(data))
     if missing:
         raise ValueError(f"Missing required JSON fields: {missing}")
@@ -424,8 +589,27 @@ def _parse_spawn_scan_output(
         reason = "spawn_inferred"
 
     score_t = _parse_unit_score(data.get("t"), "t")
-    score_r = _parse_unit_score(data.get("r"), "r")
-    score_q = _parse_unit_score(data.get("q"), "q")
+    factor_c = _parse_integer_factor(data.get("c"), "c")
+    factor_w = _parse_integer_factor(data.get("w"), "w")
+    factor_d = _parse_integer_factor(data.get("d"), "d")
+    factor_o = _parse_integer_factor(data.get("o"), "o")
+    factor_b = _parse_integer_factor(data.get("b"), "b")
+
+    score_r = _compute_spawn_route_score(
+        c=factor_c,
+        w=factor_w,
+        d=factor_d,
+        o=factor_o,
+        b=factor_b,
+    )
+    if point is None:
+        score_q = score_r
+    else:
+        score_q = round(
+            _clamp(0.75 * score_t + 0.25 * score_r, 0.0, 1.0),
+            2,
+        )
+
     return ModelResult(
         result=result_name,
         point=point,
@@ -450,8 +634,9 @@ def parse_model_output(
 
     Preferred: {"s":"I","a":"TURN_RIGHT","p":null}
     Legacy:    {"s":"I","p":[800,650]} -> inferred as a=POINT
-    SPAWN_SCAN: {"p":null,"t":0.1,"r":0.2,"q":0.3}
-    Optional:  "c" remains accepted if the model still emits it.
+    SPAWN_SCAN: {"p":null,"t":0.12,"c":8,"w":7,"d":6,"o":5,"b":1}
+    # Previous SPAWN_SCAN: {"p":null,"t":0.1,"r":0.2,"q":0.3}
+    Optional:  "c" remains accepted if the model still emits it (non-SPAWN modes).
     """
     data = _extract_json(raw_text)
     if mode == PromptMode.SPAWN_SCAN:

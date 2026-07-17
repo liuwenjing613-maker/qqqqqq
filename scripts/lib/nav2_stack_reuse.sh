@@ -232,10 +232,31 @@ verify_lidar_startup() {
   wait_lidar_driver_ready "$1" "$2" "${3:-$_LIDAR_DRIVER_LOG}" "${4:-60}"
 }
 
+sensor_stack_static_tf_pid() {
+  local project_dir="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
+  local json="${project_dir}/runtime/sensor_base_stack.json"
+  local pid=""
+  if [[ ! -f "$json" ]]; then
+    return 1
+  fi
+  pid="$(python3 - "$json" <<'PY'
+import json, sys
+from pathlib import Path
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+pid = (data.get("pids") or {}).get("static_tf")
+print(pid if pid else "", end="")
+PY
+)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    echo "$pid"
+    return 0
+  fi
+  return 1
+}
+
 laser_static_tf_ready() {
   local laser_frame="$1"
-  timeout 3 ros2 run tf2_ros tf2_echo base_link "$laser_frame" 2>&1 \
-    | grep -m1 -q "Translation:"
+  python3 "$_ROS_TOPIC_PROBE" tf-static-ready base_link "$laser_frame" 5 >/dev/null 2>&1
 }
 
 wait_laser_static_tf() {
@@ -257,11 +278,22 @@ ensure_laser_static_tf() {
   local laser_frame
   local project_dir="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
   local tf_log="${project_dir}/runtime/static_tf_repair.log"
+  local stack_tf_pid=""
 
   laser_frame="$(resolve_laser_frame_for_tf "$configured_frame")"
 
-  if wait_laser_static_tf "$laser_frame" 2; then
+  if wait_laser_static_tf "$laser_frame" 6; then
     return 0
+  fi
+
+  stack_tf_pid="$(sensor_stack_static_tf_pid || true)"
+  if [[ -n "$stack_tf_pid" ]]; then
+    echo "[FAST_NAV] static_tf pid=${stack_tf_pid} alive after handoff; wait TF buffer (20s)"
+    if wait_laser_static_tf "$laser_frame" 20; then
+      echo "[FAST_NAV] base_link_laser_tf OK (reused handoff pid=${stack_tf_pid})"
+      return 0
+    fi
+    echo "[FAST_NAV] WARN: handoff static_tf pid=${stack_tf_pid} alive but TF not visible"
   fi
 
   echo "[FAST_NAV] base_link_laser_tf missing (child=${laser_frame})"
@@ -272,6 +304,10 @@ ensure_laser_static_tf() {
   [ -f "${project_dir}/scripts/lib/ros_dds_env.sh" ] && source "${project_dir}/scripts/lib/ros_dds_env.sh"
 
   mkdir -p "${project_dir}/runtime"
+  if [[ -n "$stack_tf_pid" ]] && kill -0 "$stack_tf_pid" 2>/dev/null; then
+    kill "$stack_tf_pid" 2>/dev/null || true
+    sleep 0.5
+  fi
   pkill -f "static_transform_publisher.*base_link.*${laser_frame}" 2>/dev/null || true
   sleep 0.5
 
@@ -436,7 +472,7 @@ prepare_fast_nav_sensor_stack() {
 
   laser_frame="$(resolve_laser_frame_for_tf "${LASER_FRAME:-laser}")"
 
-  if ! wait_laser_static_tf "$laser_frame" 2; then
+  if ! wait_laser_static_tf "$laser_frame" 6; then
     ensure_laser_static_tf "${LASER_FRAME:-laser}" || return 1
   fi
 

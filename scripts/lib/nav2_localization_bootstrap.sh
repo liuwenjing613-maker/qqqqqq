@@ -273,7 +273,7 @@ initial_qos = QoSProfile(
 )
 amcl_qos = QoSProfile(
     depth=10,
-    durability=DurabilityPolicy.VOLATILE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
     reliability=ReliabilityPolicy.RELIABLE,
 )
 pub = node.create_publisher(PoseWithCovarianceStamped, "/initialpose", initial_qos)
@@ -316,7 +316,7 @@ if not odom_ok:
 
 # Publish initialpose periodically until AMCL converges (not just 2 bursts at t=0).
 last_publish = 0.0
-publish_interval = 3.0
+publish_interval = 1.0
 publish_count = 0
 
 map_base_ok = False
@@ -324,7 +324,13 @@ while time.time() - start < timeout:
     rclpy.spin_once(node, timeout_sec=0.1)
     now = time.time()
     if now - last_publish >= publish_interval:
-        msg.header.stamp = node.get_clock().now().to_msg()
+        try:
+            odom_tf = tf_buffer.lookup_transform(
+                "odom", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2)
+            )
+            msg.header.stamp = odom_tf.header.stamp
+        except Exception:
+            msg.header.stamp = node.get_clock().now().to_msg()
         pub.publish(msg)
         last_publish = now
         publish_count += 1
@@ -595,7 +601,7 @@ rclpy.init()
 node = Node("nav2_wait_amcl_settle")
 amcl_qos = QoSProfile(
     depth=10,
-    durability=DurabilityPolicy.VOLATILE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
     reliability=ReliabilityPolicy.RELIABLE,
 )
 samples: list[dict] = []
@@ -627,22 +633,26 @@ TransformListener(tf_buffer, node, spin_thread=False)
 
 start = time.time()
 last_report = start
+last_amcl_probe = 0.0
+amcl_active_cached = None
 passed = False
 final_metrics: dict = {}
 
 while time.time() - start < timeout:
     rclpy.spin_once(node, timeout_sec=0.2)
-    scan_fresh = (time.time() - scan_last["t"]) <= 3.0 if scan_last["t"] > 0 else False
+    scan_fresh = (time.time() - scan_last["t"]) <= 5.0 if scan_last["t"] > 0 else False
     map_tf_fresh = False
     try:
         tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
         map_tf_fresh = True
     except Exception:
         map_tf_fresh = False
-    amcl_active = probe_amcl_active()
-    metrics = build_metrics(samples, scan_fresh, map_tf_fresh, amcl_active)
-    ok, failures = checks_pass(metrics)
     now = time.time()
+    if now - last_amcl_probe >= 10.0:
+        amcl_active_cached = probe_amcl_active()
+        last_amcl_probe = now
+    metrics = build_metrics(samples, scan_fresh, map_tf_fresh, amcl_active_cached)
+    ok, failures = checks_pass(metrics)
     if now - last_report >= 5.0:
         print_metrics(metrics, failures if not ok else None)
         last_report = now
@@ -652,15 +662,15 @@ while time.time() - start < timeout:
         break
 
 if not passed:
-    scan_fresh = (time.time() - scan_last["t"]) <= 3.0 if scan_last["t"] > 0 else False
+    scan_fresh = (time.time() - scan_last["t"]) <= 5.0 if scan_last["t"] > 0 else False
     map_tf_fresh = False
     try:
         tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time(), timeout=Duration(seconds=0.2))
         map_tf_fresh = True
     except Exception:
         pass
-    amcl_active = probe_amcl_active()
-    final_metrics = build_metrics(samples, scan_fresh, map_tf_fresh, amcl_active)
+    amcl_active_cached = probe_amcl_active()
+    final_metrics = build_metrics(samples, scan_fresh, map_tf_fresh, amcl_active_cached)
     _, failures = checks_pass(final_metrics)
 
 node.destroy_node()
@@ -899,16 +909,18 @@ print(str(out))
 PY
 }
 
-wait_nav2_lifecycle_parallel() {
-  local timeout_sec="${1:-120}"
-  python3 - "$timeout_sec" "$_LIFECYCLE_PROBE" <<'PY'
+_wait_nav2_lifecycle_nodes() {
+  local timeout_sec="$1"
+  shift
+  local -a nodes=("$@")
+  python3 - "$timeout_sec" "$_LIFECYCLE_PROBE" "${nodes[@]}" <<'PY'
 import subprocess
 import sys
 import time
 
 timeout = float(sys.argv[1])
 probe = sys.argv[2]
-nodes = ["/map_server", "/amcl", "/planner_server", "/controller_server", "/bt_navigator"]
+nodes = list(sys.argv[3:])
 start = time.time()
 pending = set(nodes)
 while time.time() - start < timeout and pending:
@@ -926,7 +938,23 @@ while time.time() - start < timeout and pending:
 if pending:
     print(f"[NAV2_BOOT] ERROR: lifecycle not active: {sorted(pending)}", flush=True)
     raise SystemExit(1)
-print("[NAV2_BOOT] Nav2 lifecycle servers active (parallel wait)", flush=True)
+print(f"[NAV2_BOOT] Nav2 lifecycle active: {nodes}", flush=True)
 raise SystemExit(0)
 PY
+}
+
+wait_nav2_localization_lifecycle_parallel() {
+  local timeout_sec="${1:-90}"
+  _wait_nav2_lifecycle_nodes "$timeout_sec" "/map_server" "/amcl"
+}
+
+wait_nav2_navigation_lifecycle_parallel() {
+  local timeout_sec="${1:-120}"
+  _wait_nav2_lifecycle_nodes "$timeout_sec" "/planner_server" "/controller_server" "/bt_navigator"
+}
+
+wait_nav2_lifecycle_parallel() {
+  local timeout_sec="${1:-120}"
+  _wait_nav2_lifecycle_nodes "$timeout_sec" \
+    "/map_server" "/amcl" "/planner_server" "/controller_server" "/bt_navigator"
 }

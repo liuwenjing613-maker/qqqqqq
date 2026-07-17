@@ -25,22 +25,30 @@ camera_topic_has_frame() {
 
 camera_ready() {
   local topic="$1"
-  # Retry topic-info a few times: Publisher count can transiently read as 0
-  # while Foxglove still owns a subscription to a previously-seen topic.
-  local _
-  for _ in 1 2 3; do
-    if camera_topic_has_publisher "$topic"; then
-      return 0
-    fi
-    sleep 0.2
-  done
+  # Publisher count alone is unreliable on RDK: hobot_usb_cam can crash with
+  # "Unable to queue image buffer" while DDS still advertises a publisher.
+  # Require at least one real frame before treating the camera as ready.
   camera_topic_has_frame "$topic"
 }
 
+camera_launch_crashed() {
+  local log_file="$1"
+  [[ -f "$log_file" ]] || return 1
+  grep -Eq 'Unable to queue image buffer|process has died|terminate called' "$log_file"
+}
+
 wait_topic_publisher() {
-  local topic="$1" timeout_sec="${2:-40}"
+  local topic="$1" timeout_sec="${2:-40}" log_file="${3:-}" camera_pid="${4:-}"
   local i
   for i in $(seq 1 "$timeout_sec"); do
+    if [[ -n "$camera_pid" ]] && ! kill -0 "$camera_pid" 2>/dev/null; then
+      echo "[wait] $topic aborted: camera launch pid=$camera_pid exited"
+      return 1
+    fi
+    if [[ -n "$log_file" ]] && camera_launch_crashed "$log_file"; then
+      echo "[wait] $topic aborted: camera crash in $(basename "$log_file")"
+      return 1
+    fi
     if camera_ready "$topic"; then
       echo "[wait] $topic ready (${i}s)"
       return 0
@@ -139,15 +147,17 @@ ensure_compressed_camera() {
       stop_camera_tree "" || true
     fi
 
-    local width="${CAMERA_WIDTH:-1280}" height="${CAMERA_HEIGHT:-720}" fps="${CAMERA_FPS:-20}"
+    # Default 640x480@15: 1280x720@20 often crashes hobot_usb_cam with
+    # "Unable to queue image buffer" on this USB camera / hub.
+    local width="${CAMERA_WIDTH:-640}" height="${CAMERA_HEIGHT:-480}" fps="${CAMERA_FPS:-15}"
     start_project_usb_camera_profile "$package_root" "$log_file" "$width" "$height" "$fps" || return 1
-    if ! wait_topic_publisher "$compressed_topic" 40; then
+    if ! wait_topic_publisher "$compressed_topic" 40 "$log_file" "$CAMERA_PID"; then
       if camera_ready "$compressed_topic"; then
         echo "[camera] $compressed_topic became ready after wait window"
       else
         echo "[camera] WARN: ${width}x${height}@${fps} not ready; full restart then retry 640x480@15"
         stop_camera_tree "$CAMERA_PID" || true
-        sleep 1
+        sleep 2
         if video_device_busy "$dev"; then
           echo "[camera] ERROR: cannot retry because $dev is still busy" >&2
           fuser -v "$dev" >&2 || true
@@ -157,7 +167,7 @@ ensure_compressed_camera() {
           cp -f "$log_file" "${log_file}.prev" 2>/dev/null || true
         fi
         start_project_usb_camera_profile "$package_root" "$log_file" 640 480 15 || return 1
-        wait_topic_publisher "$compressed_topic" 40 || {
+        wait_topic_publisher "$compressed_topic" 40 "$log_file" "$CAMERA_PID" || {
           echo "[camera] ERROR: $compressed_topic did not start; tail $log_file" >&2
           tail -n 60 "$log_file" 2>/dev/null || true
           return 1

@@ -1,0 +1,159 @@
+# Simplified EGO <-> MAP transfer station for the two-day integration sprint.
+# Every trigger threshold used by simple_handoff_supervisor_v2.py is here.
+simple_handoff_v2:
+  enabled: true
+
+  frames:
+    map: map
+    base: base_link
+
+  topics:
+    servo_status: /qwen_vln/servo/status
+    odom: /odom
+    map: /map
+    qwen_command: /qwen_vln/command
+
+    control_mode: /third_view/intervention/control_mode
+    intervention_request: /third_view/intervention/request
+    intervention_cancel: /third_view/intervention/cancel
+    intervention_status: /third_view/intervention/status
+    navigation_status: /third_view/navigation_status
+
+    ego_cmd: /cmd_vel_ego
+    map_cmd: /cmd_vel_map
+    mux_output: /cmd_vel_autonomy
+
+    status: /third_view/simple_handoff/status
+    event: /third_view/simple_handoff/event
+    force: /third_view/simple_handoff/force
+    markers: /third_view/simple_handoff/markers
+    recent_path: /third_view/simple_handoff/recent_path
+    history_path: /third_view/simple_handoff/history_path
+
+  eligibility:
+    # Empty means: accept any state not explicitly blocked below.
+    allowed_states: []
+    blocked_states:
+      - WAIT_IMAGE
+      - SPAWN_SCAN
+      - PAUSED
+      - SUCCESS
+      - ERROR
+      - VERIFY_GOAL
+    active_spawn_phases:
+      - TURNING
+      - SETTLING
+      - DWELLING
+      - WAIT_RESULT
+      - WAITING_RESULT
+      - RETURNING
+    active_view_phases:
+      - PRE_STOP
+      - TURNING
+      - SETTLING
+    require_motion_enabled: true
+    block_target_visible: true
+    startup_grace_s: 6.0
+    servo_max_age_s: 0.80
+    odom_max_age_s: 0.80
+    map_max_age_s: 3.00
+    tf_max_age_s: 1.00
+
+  stuck:
+    enabled: true
+    window_s: 8.0
+    max_sample_gap_s: 0.35
+    # Downsample odometry for progress sums, suppressing high-rate encoder jitter.
+    pose_sample_period_s: 0.25
+
+    # Translation failure: command says "go", odometry says "almost nowhere".
+    min_linear_cmd_mps: 0.020
+    min_linear_active_s: 5.0
+    min_commanded_linear_m: 0.18
+    max_actual_path_m: 0.08
+
+    # Rotation failure is evaluated separately, so a healthy in-place turn is not
+    # mistaken for zero translation progress.
+    min_angular_cmd_radps: 0.020
+    min_angular_active_s: 5.0
+    min_commanded_yaw_rad: 0.25
+    max_actual_yaw_rad: 0.10
+
+    # Prefer a real first-person recovery completion (emergency reverse true->false).
+    require_local_recovery: true
+    recovery_lookback_s: 20.0
+
+    # Conservative fallback for scenes where the local controller never emits a
+    # recovery edge. Two distinct no-progress windows are required.
+    fallback_without_recovery:
+      enabled: true
+      required_windows: 2
+      min_gap_s: 4.0
+
+    cooldown_after_trigger_s: 12.0
+    cooldown_after_map_s: 2.0
+
+  revisit:
+    enabled: true
+
+    # Existing trajectory visualization is approximately 1 m wide. We reproduce
+    # that geometry as a 0.50 m radius binary corridor, without changing its color.
+    corridor_radius_m: 0.50
+    path_sample_step_m: 0.05
+    # A larger one-step jump is treated as SLAM/TF discontinuity, not exploration.
+    max_pose_jump_m: 0.60
+    max_total_path_m: 80.0
+
+    # Compare the latest 1.20 m with old history, while excluding the immediately
+    # preceding 1.00 m. The gap prevents unavoidable overlap of adjacent 1 m-wide
+    # trajectory corridors from becoming a false loop trigger.
+    recent_path_length_m: 1.20
+    history_gap_length_m: 1.00
+    min_history_path_length_m: 0.80
+
+    free_cell_max_value: 20
+    max_new_area_ratio: 0.20
+    min_valid_recent_cells: 80
+    required_consecutive_checks: 2
+    min_travel_between_checks_m: 0.35
+
+    cooldown_after_map_s: 20.0
+    rearm_travel_after_map_m: 0.60
+
+  handoff:
+    stop_hold_s: 0.30
+    request_ack_timeout_s: 8.0
+    navigation_timeout_s: 150.0
+    resume_hold_s: 0.35
+    resume_qwen_command: search
+    observe_during_map: true
+    decision: MAP_QWEN
+    cancel_on_fresh_target_visible: true
+    # No 1 Hz background candidate extraction. The backend extracts candidates
+    # only after A/B requests a transfer, reducing CPU load during stable EGO.
+    backend_candidate_probe_enabled: false
+
+  cmd_mux:
+    rate_hz: 20.0
+    ego_timeout_sec: 0.45
+    map_timeout_sec: 0.45
+    mode_timeout_sec: 2.0
+    default_mode: EGO
+    safety_override_enabled: true
+    safety_status_timeout_sec: 0.80
+    require_fresh_safety_status_in_map: true
+
+  runtime:
+    evaluation_hz: 10.0
+    status_hz: 2.0
+    metrics_log_interval_s: 2.0
+
+  visualization:
+    enabled: true
+    publish_hz: 2.0
+    text_height_m: 0.18
+    line_width_m: 0.035
+    cell_size_m: 0.045
+    max_cell_markers: 500
+    recent_path_z_m: 0.045
+    history_path_z_m: 0.025

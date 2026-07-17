@@ -188,7 +188,7 @@ wait_ready_json() {
     fi
     local ready_json="$LOG_DIR/ready.json"
     if [[ -f "$ready_json" ]]; then
-      local mtime map_in_json
+      local mtime map_in_json ready_ok
       mtime="$(stat -c %Y "$ready_json" 2>/dev/null || echo 0)"
       if (( mtime + 1 >= min_epoch )); then
         map_in_json="$(python3 - "$ready_json" <<'PY'
@@ -197,10 +197,19 @@ print(json.load(open(sys.argv[1], encoding="utf-8")).get("map_yaml", ""))
 PY
 )"
         if [[ -z "$expected_map" ]] || [[ "$(readlink -f "$map_in_json")" == "$(readlink -f "$expected_map")" ]]; then
-          log "Nav2 ready.json OK (耗时 $(( $(date +%s) - start ))s)"
-          return 0
+          ready_ok="$(python3 - "$ready_json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+print("1" if d.get("ready_for_goal") else "0")
+PY
+)"
+          if [[ "$ready_ok" == "1" ]]; then
+            log "Nav2 ready.json OK (耗时 $(( $(date +%s) - start ))s)"
+            return 0
+          fi
+        else
+          log "WARN: ready.json map_yaml 不匹配，继续等待 ..."
         fi
-        log "WARN: ready.json map_yaml 不匹配，继续等待 ..."
       fi
     fi
     elapsed=$(( $(date +%s) - start ))
@@ -268,9 +277,12 @@ export POSE_STATE_FILE
 export LOG_DIR
 export NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-0}"
 export NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-1}"
+export NAV2_SENSORS_PRECHECKED="${NAV2_SENSORS_PRECHECKED:-0}"
 export NAV2_SKIP_DAEMON_REFRESH="${NAV2_SKIP_DAEMON_REFRESH:-1}"
-
-export NAV2_SKIP_DAEMON_REFRESH="${NAV2_SKIP_DAEMON_REFRESH:-1}"
+export AMCL_SETTLE_MIN_SAMPLES="${AMCL_SETTLE_MIN_SAMPLES:-3}"
+export AMCL_SETTLE_MAX_Y_COV="${AMCL_SETTLE_MAX_Y_COV:-0.28}"
+export AMCL_SETTLE_MAX_X_COV="${AMCL_SETTLE_MAX_X_COV:-0.28}"
+export AMCL_SETTLE_TIMEOUT_S="${AMCL_SETTLE_TIMEOUT_S:-45}"
 export NAV2_REQUIRE_AMCL_SETTLED="$NAV2_REQUIRE_AMCL_SETTLED"
 
 log "===== Qwen 会话 Nav2 ======"
@@ -289,7 +301,7 @@ STARTED_NAV2=1
 log "run_nav2_saved_map pid=$NAV2_PID"
 
 log_step 2 "等待并校验 ready.json（schema v2 + AMCL settle 硬门禁）"
-if ! wait_ready_json 300 "$NAV2_START_EPOCH" "$MAP_YAML"; then
+if ! wait_ready_json 360 "$NAV2_START_EPOCH" "$MAP_YAML"; then
   stop_boot_log_follower
   exit 1
 fi

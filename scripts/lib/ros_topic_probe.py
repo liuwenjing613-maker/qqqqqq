@@ -26,6 +26,7 @@ _TOPIC_TYPES: dict[str, tuple[str, str]] = {
     "/scan_filtered": ("sensor_msgs.msg", "LaserScan"),
     "/odom": ("nav_msgs.msg", "Odometry"),
     "/tf": ("tf2_msgs.msg", "TFMessage"),
+    "/tf_static": ("tf2_msgs.msg", "TFMessage"),
     "/map": ("nav_msgs.msg", "OccupancyGrid"),
 }
 
@@ -107,6 +108,58 @@ def has_samples(
             rclpy.shutdown()
 
 
+def tf_static_ready(parent_frame: str, child_frame: str, timeout_sec: float) -> int:
+    timeout_sec = max(0.5, float(timeout_sec))
+    parent_frame = parent_frame.strip()
+    child_frame = child_frame.strip()
+    if not parent_frame or not child_frame:
+        print("parent_frame and child_frame required", file=sys.stderr)
+        return 2
+
+    if not rclpy.ok():
+        rclpy.init()
+
+    node = Node("ros_topic_probe_tf_static")
+    msg_cls = _load_msg_class("tf2_msgs.msg", "TFMessage")
+    qos = QoSProfile(
+        depth=1,
+        durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        reliability=ReliabilityPolicy.RELIABLE,
+    )
+    found = {"ok": False}
+
+    def _cb(msg) -> None:
+        for tf in getattr(msg, "transforms", []) or []:
+            hdr = getattr(tf, "header", None)
+            parent = str(getattr(hdr, "frame_id", "") or "").strip()
+            child = str(getattr(tf, "child_frame_id", "") or "").strip()
+            if parent == parent_frame and child == child_frame:
+                found["ok"] = True
+                return
+
+    node.create_subscription(msg_cls, "/tf_static", _cb, qos)
+    deadline = time.time() + timeout_sec
+    try:
+        while time.time() < deadline and not found["ok"]:
+            rclpy.spin_once(node, timeout_sec=0.2)
+            time.sleep(0.05)
+        if found["ok"]:
+            print(
+                f"tf_static OK: {parent_frame} -> {child_frame}",
+                flush=True,
+            )
+            return 0
+        print(
+            f"tf_static missing: {parent_frame} -> {child_frame} within {timeout_sec}s",
+            file=sys.stderr,
+        )
+        return 1
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
 def scan_frame_id(topic: str, timeout_sec: float) -> int:
     timeout_sec = max(0.5, float(timeout_sec))
     if topic not in _TOPIC_TYPES:
@@ -146,7 +199,8 @@ def main() -> int:
         print(
             "usage: ros_topic_probe.py has-samples <topic> <min_samples> <timeout_sec> "
             "[--sensor-qos|--reliable]\n"
-            "       ros_topic_probe.py scan-frame-id <topic> <timeout_sec>",
+            "       ros_topic_probe.py scan-frame-id <topic> <timeout_sec>\n"
+            "       ros_topic_probe.py tf-static-ready <parent> <child> <timeout_sec>",
             file=sys.stderr,
         )
         return 2
@@ -157,6 +211,15 @@ def main() -> int:
             print("usage: ros_topic_probe.py scan-frame-id <topic> <timeout_sec>", file=sys.stderr)
             return 2
         return scan_frame_id(sys.argv[2], float(sys.argv[3]))
+
+    if cmd == "tf-static-ready":
+        if len(sys.argv) < 5:
+            print(
+                "usage: ros_topic_probe.py tf-static-ready <parent> <child> <timeout_sec>",
+                file=sys.stderr,
+            )
+            return 2
+        return tf_static_ready(sys.argv[2], sys.argv[3], float(sys.argv[4]))
 
     if cmd != "has-samples":
         print(f"unknown command: {cmd}", file=sys.stderr)

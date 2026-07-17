@@ -8,8 +8,10 @@ qwen:
   temperature: 0.0
   # Default protocol is {"s","a","p"}; keep tight for observe/track/search/verify.
   max_tokens: 22
-  # SPAWN_SCAN returns {"p","t","r","q"}; needs more headroom than action JSON.
-  max_tokens_spawn_scan: 35
+  # SPAWN_SCAN returns {"p","t","c","w","d","o","b"}; r/q computed locally.
+  # Previous (model-emitted r/q): max_tokens_spawn_scan: 35
+  # Previous (first factor rollout): max_tokens_spawn_scan: 80
+  max_tokens_spawn_scan: 128
 
   enable_thinking: false
   jpeg_quality: 72

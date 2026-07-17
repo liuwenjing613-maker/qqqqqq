@@ -14,7 +14,9 @@ source "${PROJECT_DIR}/scripts/lib/lidar_frame_config.sh"
 source "${PROJECT_DIR}/scripts/lib/nav2_stack_reuse.sh"
 source "${PROJECT_DIR}/scripts/lib/nav2_localization_bootstrap.sh"
 export_ros_dds_env
-cleanup_ros2_fastrtps_shm
+if [ "${NAV2_SENSORS_PRECHECKED:-0}" != "1" ] && [ "${NAV2_REUSE_EXISTING:-1}" != "1" ]; then
+  cleanup_ros2_fastrtps_shm
+fi
 # 与 calibrated 建图一致：底盘口 /dev/rosmaster + odom 校准参数
 if [ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]; then
   # shellcheck source=scripts/lib/slam_calibrated_env.sh
@@ -90,6 +92,11 @@ zero_cmd() {
 }
 
 cleanup() {
+  if [ "${NAV2_SENSORS_PRECHECKED:-0}" = "1" ]; then
+    log "cleanup: keep external sensors (NAV2_SENSORS_PRECHECKED=1)"
+    zero_cmd
+    return 0
+  fi
   log "cleanup..."
   zero_cmd
   sleep 0.2
@@ -241,8 +248,54 @@ else
 fi
 zero_cmd
 
+_topic_reuse_ready() {
+  local topic="$1"
+  local tries="${2:-5}"
+  while (( tries > 0 )); do
+    if topic_is_publishing "$topic" 1 6; then
+      return 0
+    fi
+    tries=$((tries - 1))
+    sleep 2
+  done
+  return 1
+}
+
+if [ "${NAV2_SENSORS_PRECHECKED:-0}" = "1" ]; then
+  log "NAV2_SENSORS_PRECHECKED=1: sensors verified by handoff; skip cold-start"
+  REUSE_SCAN=1
+  REUSE_SCAN_FILTERED=1
+  REUSE_STATIC_TF=1
+  REUSE_CHASSIS=1
+  LIDAR_PID="$(lidar_driver_pid_from_runtime || pgrep -f 'ydlidar_ros2_driver_node' | head -1 || echo 0)"
+  if ! _topic_reuse_ready /scan 5; then
+    log "WARN: /scan not visible; try ensure_scan_publishing once"
+    ensure_scan_publishing 30 || exit 1
+  fi
+  if ! wait_topic_publishing /scan_filtered 20; then
+    log "WARN: /scan_filtered silent after handoff; restart scan_filter once"
+    pkill -f "simple_scan_filter.py" 2>/dev/null || true
+    sleep 1
+    start_bg scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
+      --in-topic /scan \
+      --out-topic /scan_filtered \
+      --min-range "${SCAN_FILTER_MIN_RANGE:-0.22}" \
+      --max-range "${SCAN_FILTER_MAX_RANGE:-4.0}" \
+      --isolated-window "${SCAN_FILTER_ISOLATED_WINDOW:-2}" \
+      --isolated-delta "${SCAN_FILTER_ISOLATED_DELTA:-0.25}" \
+      --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
+      --stats-every 50
+    sleep 3
+    wait_topic_publishing /scan_filtered 20 || exit 1
+  fi
+  wait_topic_publishing /odom 20 || exit 1
+  wait_topic_exists /tf 15 || exit 1
+  wait_odom_base_link_tf 20 || exit 1
+  log "TF OK: odom -> base_link (prechecked fast-nav)"
+else
+
 # 1. 启动雷达（若已有 /scan 则复用）
-if [ "$NAV2_REUSE_EXISTING" = "1" ] && topic_is_publishing /scan; then
+if [ "$NAV2_REUSE_EXISTING" = "1" ] && _topic_reuse_ready /scan; then
   log "reuse existing /scan publisher (skip lidar start)"
   REUSE_SCAN=1
   LIDAR_PID="$(lidar_driver_pid_from_runtime || true)"
@@ -261,7 +314,7 @@ else
 fi
 
 # 2. 启动 scan filter -> /scan_filtered
-if [ "$NAV2_REUSE_EXISTING" = "1" ] && topic_is_publishing /scan_filtered; then
+if [ "$NAV2_REUSE_EXISTING" = "1" ] && _topic_reuse_ready /scan_filtered; then
   log "reuse existing /scan_filtered publisher (skip scan_filter start)"
   REUSE_SCAN_FILTERED=1
 else
@@ -355,6 +408,8 @@ if ! wait_odom_base_link_tf 60; then
 fi
 log "TF OK: odom -> base_link"
 
+fi  # NAV2_SENSORS_PRECHECKED
+
 # 7. 启动 Nav2（后台），完成 AMCL 定位后再启动 pose_memory
 # Custom bringup: behavior_server cmd_vel -> cmd_vel_nav (avoids 5-way /cmd_vel conflict).
 NAV2_BRINGUP_LAUNCH="${NAV2_BRINGUP_LAUNCH:-$PROJECT_DIR/configs/nav2_click_nav_bringup_launch.py}"
@@ -384,7 +439,21 @@ if ! wait_map_topic_data 120; then
   wait_map_topic_data 120 || exit 1
 fi
 wait_map_publisher_count 1 60 || exit 1
-wait_nav2_lifecycle_parallel 120 || exit 1
+
+print_pose_state_summary "$POSE_STATE_FILE" || true
+log "wait localization lifecycle (map_server + amcl) ..."
+wait_nav2_localization_lifecycle_parallel 90 || exit 1
+
+log "bootstrap AMCL initialpose before navigation lifecycle ..."
+AMCL_EARLY_BOOTSTRAP_OK=0
+if bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 120; then
+  AMCL_EARLY_BOOTSTRAP_OK=1
+else
+  log "WARN: early AMCL bootstrap incomplete; navigation lifecycle may retry TF"
+fi
+
+log "wait navigation lifecycle (planner + controller + bt_navigator) ..."
+wait_nav2_navigation_lifecycle_parallel 120 || exit 1
 sleep 0.5
 
 if ! wait_topic_publishing /scan_filtered 45; then
@@ -408,7 +477,9 @@ fi
 
 print_pose_state_summary "$POSE_STATE_FILE" || true
 
-if ! bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 120; then
+if [ "${AMCL_EARLY_BOOTSTRAP_OK:-0}" -eq 1 ]; then
+  log "skip duplicate AMCL bootstrap (early bootstrap OK)"
+elif ! bootstrap_amcl_from_state_file "$POSE_STATE_FILE" 60; then
   log "WARN: AMCL bootstrap from $POSE_STATE_FILE failed."
   log "Set initial pose in Foxglove: Publish -> 2D Pose estimate -> /initialpose"
   log "Align laser scan with map walls, then click-nav goals."

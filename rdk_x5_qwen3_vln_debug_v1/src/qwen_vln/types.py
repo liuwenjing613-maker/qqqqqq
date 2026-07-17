@@ -45,7 +45,8 @@ class ModelResult:
     # V3 protocol additions. Defaults keep old named/positional construction valid.
     action: str = "POINT"
     confidence: float = 0.0
-    # SPAWN_SCAN scores (t/r/q). Unused by other modes; default 0.
+    # SPAWN_SCAN scores (t + locally computed r/q from c,w,d,o,b).
+    # Previous: model-emitted t/r/q. Unused by other modes; default 0.
     score_t: float = 0.0
     score_r: float = 0.0
     score_q: float = 0.0

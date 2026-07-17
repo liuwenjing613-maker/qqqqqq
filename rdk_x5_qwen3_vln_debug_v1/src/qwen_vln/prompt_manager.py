@@ -42,6 +42,19 @@ class PromptManager:
             raise FileNotFoundError(f"Prompt file not found: {path}")
         return Template(path.read_text(encoding="utf-8").strip())
 
+    @staticmethod
+    def _strip_hash_comment_lines(text: str) -> str:
+        """Drop full-line '#' comments used to archive prior prompt revisions.
+
+        Keeps recovery text in the .txt file without sending it to the model.
+        """
+        kept = [
+            line
+            for line in text.splitlines()
+            if not line.lstrip().startswith("#")
+        ]
+        return "\n".join(kept).strip()
+
     def build(
         self,
         mode: PromptMode,
@@ -53,7 +66,11 @@ class PromptManager:
         instruction_json = json.dumps(instruction, ensure_ascii=False)
         # Spawn scan uses its own standalone prompt (no common.txt mix-in).
         if mode == PromptMode.SPAWN_SCAN:
-            return self.mode_templates[mode].safe_substitute(
+            # Archived (commented) prior SPAWN_SCAN revisions must not be sent.
+            active = self._strip_hash_comment_lines(
+                self.mode_templates[mode].template
+            )
+            return Template(active).safe_substitute(
                 instruction_json=instruction_json,
             )
 

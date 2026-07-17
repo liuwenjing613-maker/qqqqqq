@@ -23,9 +23,46 @@ from qwen_vln.types import ModelResult, PromptMode, VlnState  # noqa: E402
 
 
 class SpawnScanProtocolTests(unittest.TestCase):
-    def test_parse_inferred_scores(self) -> None:
+    # --- ARCHIVED: tests for model-emitted {"p","t","r","q"} ---
+    # def test_parse_inferred_scores(self) -> None:
+    #     r = parse_model_output(
+    #         '{"p":null,"t":0.12,"r":0.34,"q":0.56}',
+    #         PromptMode.SPAWN_SCAN,
+    #         960,
+    #         540,
+    #     )
+    #     self.assertEqual(r.result, "TARGET_INFERRED")
+    #     self.assertEqual(r.action, "STOP")
+    #     self.assertIsNone(r.point)
+    #     self.assertAlmostEqual(r.score_t, 0.12)
+    #     self.assertAlmostEqual(r.score_r, 0.34)
+    #     self.assertAlmostEqual(r.score_q, 0.56)
+    #
+    # def test_parse_visible_point(self) -> None:
+    #     r = parse_model_output(
+    #         '{"p":[500,400],"t":0.9,"r":0.5,"q":0.8}',
+    #         PromptMode.SPAWN_SCAN,
+    #         960,
+    #         540,
+    #     )
+    #     self.assertEqual(r.result, "TARGET_VISIBLE")
+    #     self.assertEqual(r.action, "POINT")
+    #     self.assertIsNotNone(r.point)
+    #
+    # def test_legacy_s_field_ignored(self) -> None:
+    #     # Older model outputs may still include s; visibility follows p only.
+    #     r = parse_model_output(
+    #         '{"s":"V|I","p":[500,400],"t":0.9,"r":0.5,"q":0.8}',
+    #         PromptMode.SPAWN_SCAN,
+    #         960,
+    #         540,
+    #     )
+    #     self.assertEqual(r.result, "TARGET_VISIBLE")
+    #     self.assertIsNotNone(r.point)
+
+    def test_parse_inferred_factors_computes_r_q(self) -> None:
         r = parse_model_output(
-            '{"p":null,"t":0.12,"r":0.34,"q":0.56}',
+            '{"p":null,"t":0.12,"c":8,"w":7,"d":6,"o":5,"b":1}',
             PromptMode.SPAWN_SCAN,
             960,
             540,
@@ -34,12 +71,13 @@ class SpawnScanProtocolTests(unittest.TestCase):
         self.assertEqual(r.action, "STOP")
         self.assertIsNone(r.point)
         self.assertAlmostEqual(r.score_t, 0.12)
-        self.assertAlmostEqual(r.score_r, 0.34)
-        self.assertAlmostEqual(r.score_q, 0.56)
+        # r = 0.34*0.8 + 0.24*0.7 + 0.26*0.6 + 0.16*0.5 - 0.30*0.1 = 0.646 -> 0.65
+        self.assertAlmostEqual(r.score_r, 0.65)
+        self.assertAlmostEqual(r.score_q, 0.65)
 
-    def test_parse_visible_point(self) -> None:
+    def test_parse_visible_point_computes_q(self) -> None:
         r = parse_model_output(
-            '{"p":[500,400],"t":0.9,"r":0.5,"q":0.8}',
+            '{"p":[500,400],"t":0.90,"c":5,"w":5,"d":5,"o":5,"b":0}',
             PromptMode.SPAWN_SCAN,
             960,
             540,
@@ -47,11 +85,39 @@ class SpawnScanProtocolTests(unittest.TestCase):
         self.assertEqual(r.result, "TARGET_VISIBLE")
         self.assertEqual(r.action, "POINT")
         self.assertIsNotNone(r.point)
+        self.assertAlmostEqual(r.score_t, 0.90)
+        # r = 0.34*0.5 + 0.24*0.5 + 0.26*0.5 + 0.16*0.5 = 0.50
+        self.assertAlmostEqual(r.score_r, 0.50)
+        # q = 0.75*0.90 + 0.25*0.50 = 0.80
+        self.assertAlmostEqual(r.score_q, 0.80)
+
+    def test_blocked_wall_safeguard(self) -> None:
+        r = parse_model_output(
+            '{"p":null,"t":0.05,"c":1,"w":2,"d":1,"o":1,"b":10}',
+            PromptMode.SPAWN_SCAN,
+            960,
+            540,
+        )
+        self.assertLessEqual(r.score_r, 0.08)
+        self.assertAlmostEqual(r.score_q, r.score_r)
+
+    def test_repair_truncated_runaway_float_on_b(self) -> None:
+        # Real failure mode: model emits unit-interval float then dumps zeros
+        # until max_tokens cuts the closing brace.
+        raw = (
+            '{"p":null,"t":0.00,"c":2,"w":5,"d":3,"o":2,'
+            '"b":0.500000000000000100000000000000000000000000000000'
+        )
+        r = parse_model_output(raw, PromptMode.SPAWN_SCAN, 960, 540)
+        self.assertEqual(r.result, "TARGET_INFERRED")
+        # 0.5 on [0,1] scale -> integer factor 5
+        self.assertAlmostEqual(r.score_t, 0.0)
+        self.assertGreater(r.score_r, 0.0)
 
     def test_legacy_s_field_ignored(self) -> None:
-        # Older model outputs may still include s; visibility follows p only.
+        # Extra keys (including legacy s) are ignored; visibility follows p.
         r = parse_model_output(
-            '{"s":"V|I","p":[500,400],"t":0.9,"r":0.5,"q":0.8}',
+            '{"s":"V|I","p":[500,400],"t":0.90,"c":5,"w":5,"d":5,"o":5,"b":0}',
             PromptMode.SPAWN_SCAN,
             960,
             540,
@@ -64,6 +130,11 @@ class SpawnScanProtocolTests(unittest.TestCase):
         text = pm.build(PromptMode.SPAWN_SCAN, "find the bottle", 960, 540)
         self.assertIn("SPAWN_SCAN", text)
         self.assertIn("find the bottle", text)
+        self.assertIn('"c":0,"w":0,"d":0,"o":0,"b":0', text)
+        self.assertIn("Do not output r or q", text)
+        # Archived prior prompt must not be sent to the model.
+        self.assertNotIn("Exactly four keys", text)
+        self.assertNotIn("0.35*C", text)
         self.assertNotIn('"s"', text)
         self.assertNotIn("TURN_LEFT", text)
         self.assertNotIn("Mode: OBSERVE", text)
