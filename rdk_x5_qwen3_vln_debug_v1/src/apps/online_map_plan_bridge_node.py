@@ -35,6 +35,7 @@ from fusion.online_map_protocol import (
     normalize_backend_status,
     normalize_candidate_summary,
 )
+from intervention.flow_log import FlowLogger, default_flow_log_path
 
 
 def _load_config(path: str) -> Dict[str, Any]:
@@ -129,6 +130,7 @@ class OnlineMapPlanBridge(Node):
         self.session = BridgeSession(cfg)
         self.last_forwarded_request: Optional[Dict[str, Any]] = None
         self.last_backend_payload: Optional[Dict[str, Any]] = None
+        self._last_flow_backend_status: Optional[str] = None
         self.latest_candidate_summary: Optional[Dict[str, Any]] = None
         self.intervention_phase = "EGO"
         self.probe_enabled = bool(probe.get("enabled", True))
@@ -206,6 +208,16 @@ class OnlineMapPlanBridge(Node):
             1.0 / max(1.0, cfg.output_rate_hz), self._tick
         )
         self.status_timer = self.create_timer(0.5, self._publish_bridge_status)
+        self.flow = FlowLogger(
+            default_flow_log_path(PROJECT_ROOT),
+            also_stdout=False,
+            source="bridge",
+        )
+        self.flow.event(
+            "READY",
+            f"地图桥就绪 | request→backend | auto_ack={self.auto_ack_to_intervention} | "
+            f"task={self.task!r}",
+        )
         self.get_logger().info(
             "online map-plan bridge ready: "
             f"{self.intervention_request_topic} -> {self.backend_request_topic}; "
@@ -243,6 +255,10 @@ class OnlineMapPlanBridge(Node):
                 "REJECTED",
                 reason=f"bridge_busy:{self.session.active_request_id}",
             )
+            self.flow.event(
+                "HANDSHAKE",
+                f"拒绝请求 {request_id} | bridge忙于 {self.session.active_request_id}",
+            )
             return
         try:
             backend_request = build_backend_request(
@@ -264,6 +280,7 @@ class OnlineMapPlanBridge(Node):
             self.session.start(request_id, now)
         except ProtocolError as exc:
             self._publish_navigation_status(request_id, "REJECTED", reason=str(exc))
+            self.flow.event("HANDSHAKE", f"拒绝请求 {request_id} | protocol: {exc}")
             return
 
         self.last_forwarded_request = backend_request
@@ -277,6 +294,12 @@ class OnlineMapPlanBridge(Node):
                 "ACCEPTED",
                 reason="bridge_accepted_waiting_backend",
             )
+        self.flow.event(
+            "HANDSHAKE",
+            f"转发后端 {request_id} | op={backend_request['operation']} | "
+            f"candidates={backend_request['candidate_ids']} | "
+            f"auto_ack={self.auto_ack_to_intervention}",
+        )
         self.get_logger().warning(
             f"forwarded {request_id}: {backend_request['operation']} "
             f"candidates={backend_request['candidate_ids']}"
@@ -298,6 +321,10 @@ class OnlineMapPlanBridge(Node):
         self.backend_cancel_pub.publish(_json_message(cancel_payload))
         self.session.cancel(time.monotonic(), reason)
         self.last_status_reason = f"cancel:{reason}"
+        self.flow.event(
+            "HANDSHAKE",
+            f"取消后端 {cancel_payload['request_id']} | reason={reason}",
+        )
         self.get_logger().warning(
             f"cancel backend request {cancel_payload['request_id']}: {reason}"
         )
@@ -324,8 +351,22 @@ class OnlineMapPlanBridge(Node):
         result = self.session.on_backend_status(normalized, now)
         self.intervention_nav_pub.publish(_json_message(normalized))
         self.last_status_reason = f"backend:{normalized['status'].lower()}"
+        status_key = f"{normalized.get('request_id')}:{normalized['status']}"
+        if status_key != self._last_flow_backend_status:
+            self._last_flow_backend_status = status_key
+            self.flow.event(
+                "NAV",
+                f"后端状态 → 介入侧 status={normalized['status']} "
+                f"request={normalized.get('request_id')} "
+                f"reason={normalized.get('reason', '')}",
+            )
         if result in {"COMPLETED", "FAILED"}:
             self.session.reset(f"backend_{result.lower()}")
+            self.flow.event(
+                "NAV",
+                f"会话结束 result={result} request={normalized.get('request_id')}",
+            )
+            self._last_flow_backend_status = None
         # TARGET_VISIBLE/TARGET_LOCKED deliberately keep the request id in a
         # zero-output FINISHING state.  The intervention manager will publish a
         # matching cancel, which must still be forwarded to stop the backend's

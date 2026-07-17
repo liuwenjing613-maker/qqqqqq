@@ -31,6 +31,14 @@ fi
 python3 "$ROOT/scripts/qwen_servo/make_intervention_servo_config.py" \
   --input "$BASE_CONFIG" --output "$RUNTIME_CONFIG"
 
+FLOW_LOG="${THIRD_VIEW_FLOW_LOG:-$ROOT/logs/third_view_flow.log}"
+export THIRD_VIEW_FLOW_LOG="$FLOW_LOG"
+mkdir -p "$(dirname "$FLOW_LOG")" "$ROOT/logs"
+# Do not truncate here: bridge may already be appending to the same flow log.
+touch "$FLOW_LOG"
+echo "[intervention] 第三视角流程日志: $FLOW_LOG"
+echo "[intervention] 实时查看: tail -f $FLOW_LOG"
+
 MUX_PID=""
 MANAGER_PID=""
 BASE_PID=""
@@ -71,6 +79,7 @@ MUX_PID=$!
 
 python3 -u "$ROOT/src/apps/third_view_intervention_node.py" \
   --config "$RUNTIME_CONFIG" \
+  --flow-log "$FLOW_LOG" \
   >"$ROOT/logs/third_view_intervention.log" 2>&1 &
 MANAGER_PID=$!
 
@@ -91,6 +100,7 @@ echo "[intervention] ego cmd : /cmd_vel_ego"
 echo "[intervention] map cmd : /cmd_vel_map"
 echo "[intervention] mux out : /cmd_vel_autonomy"
 echo "[intervention] request : /third_view/intervention/request"
+echo "[intervention] flow log: $FLOW_LOG"
 
 THIRD_VIEW_WRAPPER_ACTIVE=1 \
 SERVO_CONFIG="$RUNTIME_CONFIG" \

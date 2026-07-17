@@ -153,7 +153,7 @@ ensure_bg_process_alive() {
   local pid="$2"
   local logfile="$3"
   if [[ "$name" == "lidar" ]]; then
-    verify_lidar_startup "$pid" "$logfile"
+    wait_lidar_driver_ready "$pid" "$logfile" "$PROJECT_DIR/logs/lidar_driver.log" 60
     return $?
   fi
   if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
@@ -245,11 +245,16 @@ zero_cmd
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && topic_is_publishing /scan; then
   log "reuse existing /scan publisher (skip lidar start)"
   REUSE_SCAN=1
-  verify_lidar_startup "$(lidar_driver_pid)" "$LOG_DIR/lidar.log" || exit 1
+  LIDAR_PID="$(lidar_driver_pid_from_runtime || true)"
+  if [[ -z "$LIDAR_PID" ]]; then
+    log "ERROR: reuse /scan but no live lidar driver pid in runtime/ydlidar_driver.pid"
+    exit 1
+  fi
+  wait_lidar_driver_ready "$LIDAR_PID" "$LOG_DIR/lidar.log" "$PROJECT_DIR/logs/lidar_driver.log" 60 || exit 1
 elif [ -x "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh" ]; then
   start_bg lidar bash "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh" --foreground
   LIDAR_PID="${PIDS[-1]}"
-  verify_lidar_startup "$LIDAR_PID" "$LOG_DIR/lidar.log" || exit 1
+  wait_lidar_driver_ready "$LIDAR_PID" "$LOG_DIR/lidar.log" "$PROJECT_DIR/logs/lidar_driver.log" 60 || exit 1
 else
   log "ERROR: lidar script not found or not executable: $PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
   exit 1

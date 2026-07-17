@@ -14,7 +14,6 @@ import json
 import math
 import sys
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -39,6 +38,7 @@ from intervention.core import (
     PoseSample,
     ServoSample,
 )
+from intervention.flow_log import FlowLogger, default_flow_log_path, fmt_check
 
 
 ACK_STATES = {"ACCEPTED", "PLANNING", "NAVIGATING", "RUNNING", "ACTIVE"}
@@ -46,9 +46,27 @@ DONE_STATES = {"COMPLETED", "REACHED", "SUCCEEDED", "DONE"}
 FAIL_STATES = {"FAILED", "REJECTED", "CANCELLED", "ABORTED", "TIMEOUT"}
 TARGET_STATES = {"TARGET_VISIBLE", "TARGET_LOCKED"}
 
+# Quiet KEEP_EGO reasons: only log when entering/leaving, not every tick.
+_QUIET_KEEP = {"EGO_HEALTHY", "STARTUP_GRACE", "COOLDOWN", "DISABLED"}
+
+
+def _format_checklist(report: Dict[str, Any]) -> str:
+    checks = report.get("checks") or []
+    parts = [
+        fmt_check(str(c.get("name")), bool(c.get("ok")), str(c.get("detail", "")))
+        for c in checks
+    ]
+    met = report.get("met")
+    total = report.get("total")
+    head = ""
+    if met is not None and total is not None:
+        head = f"{met}/{total}项 "
+    ready = " ★达标可触发" if report.get("ready") else ""
+    return head + " ".join(parts) + ready
+
 
 class ThirdViewInterventionNode(Node):
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, flow_log_path: Optional[str] = None):
         super().__init__("third_view_intervention_node")
         self.config_path = str(config_path)
         root_cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
@@ -111,6 +129,17 @@ class ThirdViewInterventionNode(Node):
         self.target_takeover_enabled = bool(
             handshake.get("target_takeover_enabled", True)
         )
+
+        log_path = Path(
+            flow_log_path
+            or default_flow_log_path(PROJECT_ROOT)
+        )
+        self.flow = FlowLogger(log_path, also_stdout=True, source="intervention")
+        self._last_flow_decision_key: Optional[Tuple[str, str]] = None
+        self._last_branch_persist_logged = -1
+        self._last_junction_persist_logged = -1
+        self._last_recovery_stage_logged = "IDLE"
+        self._last_guard_logged: Optional[str] = None
 
         now = time.monotonic()
         self.core = InterventionCore(self.cfg, start_stamp=now)
@@ -180,11 +209,21 @@ class ThirdViewInterventionNode(Node):
         self.timer = self.create_timer(
             1.0 / max(1.0, self.cfg.evaluation_hz), self._tick
         )
+        self.flow.section(
+            "监控启动 | phase=EGO | "
+            f"branch连续≥{self.cfg.branch_persistence_updates} "
+            f"半径≤{self.cfg.branch_decision_radius_m:.2f}m "
+            f"夹角≥{self.cfg.branch_min_heading_separation_deg:.0f}° "
+            f"分差≤{self.cfg.branch_max_top_score_gap:.2f} "
+            f"比值≤{self.cfg.branch_max_top_score_ratio:.2f} | "
+            f"grace={self.cfg.startup_grace_sec:.0f}s cooldown={self.cfg.cooldown_sec:.0f}s | "
+            f"log={log_path}"
+        )
         self.get_logger().info(
             "third-view intervention ready: "
             f"servo={self.servo_status_topic} odom={self.odom_topic} "
             f"candidates={self.candidate_topic} request={self.request_topic} "
-            f"map_cmd={self.map_cmd_topic}"
+            f"map_cmd={self.map_cmd_topic} flow_log={log_path}"
         )
 
     def _on_servo_status(self, msg: String) -> None:
@@ -324,13 +363,26 @@ class ThirdViewInterventionNode(Node):
             return
         if status in ACK_STATES:
             if self.phase == "WAIT_ACK":
-                self._enter_phase("MAP_NAV", now)
+                self.flow.event(
+                    "HANDSHAKE",
+                    f"收到导航ACK status={status} request={self.active_request_id} → 切换MAP",
+                )
+                self._enter_phase("MAP_NAV", now, detail=f"ack={status}")
                 self._publish_control_mode("MAP", f"navigation_{status.lower()}")
             return
         if status in DONE_STATES:
+            self.flow.event(
+                "NAV",
+                f"导航结束 status={status} request={self.active_request_id}",
+            )
             self._begin_resume(now, f"navigation_{status.lower()}")
             return
         if status in FAIL_STATES:
+            self.flow.event(
+                "NAV",
+                f"导航失败/取消 status={status} request={self.active_request_id} "
+                f"reason={payload.get('reason', '')}",
+            )
             self._begin_resume(now, f"navigation_{status.lower()}")
 
     def _tick(self) -> None:
@@ -339,18 +391,34 @@ class ThirdViewInterventionNode(Node):
         if self.phase == "EGO":
             decision = self.core.evaluate(now, external_busy=False)
             self._publish_decision(decision)
+            self._flow_log_ego_decision(now, decision)
             if decision.kind in {DecisionKind.MAP_DIRECT, DecisionKind.MAP_QWEN}:
                 self._start_transfer(now, decision)
         elif self.phase == "STOPPING":
             if now - self.phase_started >= self.stop_hold_sec:
                 self._publish_map_request(now)
-                self._enter_phase("WAIT_ACK", now)
+                self._enter_phase(
+                    "WAIT_ACK",
+                    now,
+                    detail=(
+                        f"停车{self.stop_hold_sec:.2f}s结束, "
+                        f"等待ACK≤{self.request_ack_timeout_sec:.0f}s"
+                    ),
+                )
         elif self.phase == "WAIT_ACK":
             if now - self.phase_started >= self.request_ack_timeout_sec:
+                self.flow.event(
+                    "HANDSHAKE",
+                    f"ACK超时 {self.request_ack_timeout_sec:.0f}s → 恢复EGO",
+                )
                 self.get_logger().warning("third-view request ACK timeout; resume ego")
                 self._begin_resume(now, "request_ack_timeout")
         elif self.phase == "MAP_NAV":
             if now - self.phase_started >= self.navigation_timeout_sec:
+                self.flow.event(
+                    "NAV",
+                    f"导航超时 {self.navigation_timeout_sec:.0f}s → cancel并恢复EGO",
+                )
                 self._publish_cancel("navigation_timeout")
                 self._begin_resume(now, "navigation_timeout")
         elif self.phase == "RESUMING":
@@ -372,7 +440,15 @@ class ThirdViewInterventionNode(Node):
                     else "resume_fresh_result_timeout"
                 )
                 self._publish_control_mode("EGO", reason)
-                self._enter_phase("EGO", now)
+                self._enter_phase(
+                    "EGO",
+                    now,
+                    detail=(
+                        f"恢复第一人称 ({reason}) | "
+                        f"冷却{self.cfg.cooldown_sec:.0f}s"
+                    ),
+                )
+                self.flow.section("本轮介入结束 → 回到EGO监控")
                 self.core.mark_intervention_finished(now)
                 self.pending_decision = None
                 self.active_request_id = None
@@ -380,10 +456,108 @@ class ThirdViewInterventionNode(Node):
                 self.last_navigation_status_sec = None
                 self.resume_reference_request_id = -1
                 self.resume_fresh_ready = False
+                self._last_branch_persist_logged = -1
+                self._last_junction_persist_logged = -1
 
         self._publish_status(now)
         # Heartbeat keeps the downstream mux from treating a healthy manager as stale.
         self._emit_control_mode()
+
+    def _flow_log_ego_decision(self, now: float, decision: Decision) -> None:
+        """Log meaningful EGO-phase progress without 10 Hz spam."""
+        key = (decision.kind.value, decision.reason)
+
+        if decision.kind == DecisionKind.KEEP_EGO:
+            if decision.reason != self._last_guard_logged:
+                if decision.reason not in _QUIET_KEEP:
+                    self.flow.event(
+                        "GUARD",
+                        f"暂不介入 reason={decision.reason} "
+                        f"state={decision.evidence.get('state')} "
+                        f"action={decision.evidence.get('action')}",
+                    )
+                elif (
+                    self._last_guard_logged is not None
+                    and self._last_guard_logged not in _QUIET_KEEP
+                    and decision.reason == "EGO_HEALTHY"
+                ):
+                    self.flow.event("GUARD", f"解除阻塞 → {decision.reason}")
+                elif (
+                    self._last_guard_logged == "STARTUP_GRACE"
+                    and decision.reason == "EGO_HEALTHY"
+                ):
+                    self.flow.event("GUARD", "启动宽限期结束 → 开始条件评估")
+                self._last_guard_logged = decision.reason
+        else:
+            self._last_guard_logged = decision.reason
+
+        if self.phase == "EGO" and decision.kind == DecisionKind.KEEP_EGO:
+            branch = self.core.branch_condition_report(now)
+            if branch is not None:
+                persist = int(branch.get("persistence", 0))
+                if persist != self._last_branch_persist_logged and (
+                    persist > 0 or branch.get("raw_ambiguous")
+                ):
+                    self._last_branch_persist_logged = persist
+                    self.flow.event(
+                        "CHECK",
+                        f"BRANCH 条件推进 持续{persist}/{branch.get('persistence_need')} | "
+                        f"{_format_checklist(branch)} | "
+                        f"ids={branch.get('candidate_ids')}",
+                    )
+            junction = self.core.junction_condition_report(now)
+            if junction is not None:
+                jpersist = int(junction.get("persistence", 0))
+                if jpersist != self._last_junction_persist_logged and jpersist > 0:
+                    self._last_junction_persist_logged = jpersist
+                    self.flow.event(
+                        "CHECK",
+                        f"JUNCTION 条件推进 持续{jpersist}/{junction.get('persistence_need')} | "
+                        f"{_format_checklist(junction)}",
+                    )
+
+        recovery = self.core.progress_recovery_report(now)
+        stage = str(recovery.get("stage", "IDLE"))
+        if stage != self._last_recovery_stage_logged:
+            if stage != "IDLE" or self._last_recovery_stage_logged != "IDLE":
+                age = recovery.get("stage_age_sec")
+                age_s = f" age={age}s" if age is not None else ""
+                self.flow.event(
+                    "CHECK",
+                    f"PROGRESS 恢复阶段 {self._last_recovery_stage_logged} → {stage}{age_s}",
+                )
+            self._last_recovery_stage_logged = stage
+
+        if decision.kind == DecisionKind.RECOVERY and key != self._last_flow_decision_key:
+            self._last_flow_decision_key = key
+            self.flow.event(
+                "TRIGGER",
+                f"本地恢复(不切MAP) kind=RECOVERY reason={decision.reason} | "
+                f"{self._evidence_brief(decision)}",
+            )
+
+    @staticmethod
+    def _evidence_brief(decision: Decision) -> str:
+        ev = decision.evidence or {}
+        bits = []
+        for key in (
+            "eligible_candidate_count",
+            "decision_distance_m",
+            "max_heading_separation_deg",
+            "top_score_gap",
+            "top_score_ratio",
+            "cmd_active_ratio",
+            "integrated_cmd_distance_m",
+            "actual_displacement_m",
+            "turn_direction_flips",
+            "horizontal_sign_flips",
+            "emergency_reverse_count",
+        ):
+            if key in ev and ev[key] is not None:
+                bits.append(f"{key}={ev[key]}")
+        if decision.candidate_ids:
+            bits.append(f"ids={list(decision.candidate_ids)}")
+        return " ".join(bits) if bits else "—"
 
     def _start_transfer(self, now: float, decision: Decision) -> None:
         self.pending_decision = decision
@@ -392,7 +566,28 @@ class ThirdViewInterventionNode(Node):
         )
         self.request_seq += 1
         self.active_request_id = f"intervention-{self.request_seq:06d}"
-        self._enter_phase("STOPPING", now)
+        self._last_flow_decision_key = (decision.kind.value, decision.reason)
+
+        if decision.reason == "BRANCH_AMBIGUOUS":
+            report = self.core.branch_condition_report(now)
+            if report is not None:
+                self.flow.event("CHECK", f"BRANCH 触发前终检 | {_format_checklist(report)}")
+        elif "JUNCTION" in decision.reason:
+            report = self.core.junction_condition_report(now)
+            if report is not None:
+                self.flow.event(
+                    "CHECK", f"JUNCTION 触发前终检 | {_format_checklist(report)}"
+                )
+
+        self.flow.section(
+            f"★触发介入 | {decision.kind.value} | reason={decision.reason} | "
+            f"request={self.active_request_id} | {self._evidence_brief(decision)}"
+        )
+        self._enter_phase(
+            "STOPPING",
+            now,
+            detail=f"控制→HOLD 停车{self.stop_hold_sec:.2f}s",
+        )
         self._publish_control_mode("HOLD", decision.reason)
         self.get_logger().warning(
             f"intervention trigger: {decision.kind.value} {decision.reason} "
@@ -418,6 +613,12 @@ class ThirdViewInterventionNode(Node):
             "map_cmd_topic": self.map_cmd_topic,
         }
         self.request_pub.publish(String(data=json.dumps(payload, ensure_ascii=False)))
+        self.flow.event(
+            "REQUEST",
+            f"已发MAP请求 {self.active_request_id} | "
+            f"{self.pending_decision.kind.value}/{self.pending_decision.reason} | "
+            f"candidates={list(self.pending_decision.candidate_ids)}",
+        )
         self.get_logger().warning(
             f"published third-view request {self.active_request_id}"
         )
@@ -436,14 +637,23 @@ class ThirdViewInterventionNode(Node):
         )
         self.resume_fresh_ready = bool(fresh_result_already_available)
         self._publish_control_mode("HOLD", reason)
-        # A new SEARCH result is required before restoring EGO, unless the
-        # current first-person callback itself supplied the fresh target result.
         if not fresh_result_already_available:
             self.qwen_command_pub.publish(String(data=self.resume_qwen_command))
-        self._enter_phase("RESUMING", now)
+            cmd_note = f"发送Qwen命令'{self.resume_qwen_command}'"
+        else:
+            cmd_note = "已有新鲜第一人称结果"
+        self._enter_phase(
+            "RESUMING",
+            now,
+            detail=f"原因={reason} | {cmd_note} | 控制=HOLD",
+        )
 
     def _cancel_map_for_target(self, now: float, sample: ServoSample) -> None:
         self._publish_cancel("fresh_first_person_target_visible")
+        self.flow.event(
+            "TRIGGER",
+            f"第一人称看见目标 request_id={sample.request_id} → 取消MAP回EGO",
+        )
         self.get_logger().warning(
             f"fresh target request_id={sample.request_id}; cancel map and return ego"
         )
@@ -455,6 +665,10 @@ class ThirdViewInterventionNode(Node):
         self, now: float, payload: Dict[str, Any]
     ) -> None:
         self._publish_cancel("third_view_target_visible")
+        self.flow.event(
+            "TRIGGER",
+            f"地图侧目标事件 status={payload.get('status')} → 取消MAP回EGO",
+        )
         self.get_logger().warning(
             f"third-view target event: {payload.get('status')}; return ego"
         )
@@ -466,10 +680,12 @@ class ThirdViewInterventionNode(Node):
             "reason": reason,
         }
         self.cancel_pub.publish(String(data=json.dumps(payload, ensure_ascii=False)))
+        self.flow.event(
+            "REQUEST",
+            f"取消MAP request={self.active_request_id} reason={reason}",
+        )
 
     def _publish_decision(self, decision: Decision) -> None:
-        # Publish state changes, not the same RECOVERY reason at 10 Hz. MAP
-        # triggers are still logged and followed by a unique request message.
         key = (decision.kind.value, decision.reason)
         if key == self.last_published_decision_key:
             return
@@ -503,8 +719,14 @@ class ThirdViewInterventionNode(Node):
         self.status_pub.publish(String(data=json.dumps(payload, ensure_ascii=False)))
 
     def _publish_control_mode(self, mode: str, reason: str) -> None:
+        prev = self.current_control_mode
         self.current_control_mode = mode.upper()
         self.current_control_reason = reason
+        if prev != self.current_control_mode:
+            self.flow.event(
+                "CTRL",
+                f"控制源 {prev} → {self.current_control_mode} | reason={reason}",
+            )
         self._emit_control_mode()
 
     def _emit_control_mode(self) -> None:
@@ -516,13 +738,24 @@ class ThirdViewInterventionNode(Node):
             String(data=json.dumps(payload, ensure_ascii=False))
         )
 
-    def _enter_phase(self, phase: str, now: float) -> None:
+    def _enter_phase(self, phase: str, now: float, detail: str = "") -> None:
+        old = self.phase
         self.phase = phase
         self.phase_started = now
+        if old != phase:
+            msg = f"{old} → {phase}"
+            if detail:
+                msg = f"{msg} | {detail}"
+            self.flow.event("PHASE", msg)
 
     def stop(self) -> None:
+        self.flow.event("====", "节点关闭 → HOLD")
         self._publish_control_mode("HOLD", "node_shutdown")
         time.sleep(0.05)
+        try:
+            self.flow.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def main() -> int:
@@ -531,12 +764,20 @@ def main() -> int:
         "--config",
         default=str(PROJECT_ROOT / "configs/qwen3_vln_servo.yaml"),
     )
+    parser.add_argument(
+        "--flow-log",
+        default="",
+        help="Dedicated third-view flow log path (default: logs/third_view_flow.log)",
+    )
     args = parser.parse_args()
 
     rclpy.init()
     node: Optional[ThirdViewInterventionNode] = None
     try:
-        node = ThirdViewInterventionNode(args.config)
+        node = ThirdViewInterventionNode(
+            args.config,
+            flow_log_path=args.flow_log or None,
+        )
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass

@@ -318,8 +318,14 @@ FUSION_PID=
 EOF
 
 log_ts "[fusion] starting V1 fusion stack -> $LOG_DIR/fusion_v1.log"
+FLOW_LOG="${THIRD_VIEW_FLOW_LOG:-$V1_ROOT/logs/third_view_flow.log}"
+export THIRD_VIEW_FLOW_LOG="$FLOW_LOG"
+mkdir -p "$(dirname "$FLOW_LOG")"
+: >"$FLOW_LOG"
+log_ts "[fusion] 第三视角流程日志 -> $FLOW_LOG (tail -f 查看)"
 setsid env MOTION_ENABLED="$MOTION_ENABLED" SERVO_CONFIG="$SERVO_RUNTIME" \
   FUSION_CONFIG="$FUSION_CFG" FUSION_RUNTIME_CONFIG="$RUNTIME_DIR/fusion_runtime_v2.yaml" \
+  THIRD_VIEW_FLOW_LOG="$FLOW_LOG" \
   bash "$V1_ROOT/scripts/fusion/start_v1_online_map_plan_fusion.sh" "$TASK" \
   >"$LOG_DIR/fusion_v1.log" 2>&1 &
 FUSION_PID=$!; mark_proc fusion "$FUSION_PID"
@@ -341,6 +347,8 @@ cat <<EOF
   task   : $TASK
   motion : $MOTION_ENABLED
   logs   : $LOG_DIR
+  第三视角流程日志: $FLOW_LOG
+  实时查看: tail -f $FLOW_LOG
 
 Keep this terminal open. Ctrl+C stops every process started by this launcher.
 EOF

@@ -27,6 +27,7 @@ mkdir -p "$LOG_DIR" "$MAP_DIR" "$STATE_DIR"
 PIDS=()
 SAVED=0
 CLEANUP_DONE=0
+CONTROLLED_NAV_HANDOFF=0
 ROS_ENV_READY=0
 
 source_ros() {
@@ -214,6 +215,10 @@ PY
 }
 
 stop_live_stack() {
+  if [ "$CONTROLLED_NAV_HANDOFF" = "1" ]; then
+    log "controlled handoff: skip stop_live_stack (keep lidar/chassis/static_tf)"
+    return 0
+  fi
   local pid
   local still_alive=0
 
@@ -250,7 +255,27 @@ stop_live_stack() {
   sleep 1
 }
 
+handle_nav_handoff() {
+  CONTROLLED_NAV_HANDOFF=1
+  log "controlled Nav2 handoff (USR1): stop teleop/slam/debug, keep sensors"
+  stop_joystick_nodes
+  pkill -TERM -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
+  sleep 1
+  pkill -KILL -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
+  pkill -TERM -f "frontier_region_debug_node.py" 2>/dev/null || true
+
+  local corridor_pid
+  corridor_pid="$(pgrep -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null | head -1 || true)"
+  if [[ -n "$corridor_pid" ]]; then
+    kill -USR1 "$corridor_pid" 2>/dev/null || true
+  fi
+}
+
 cleanup() {
+  if [ "$CONTROLLED_NAV_HANDOFF" = "1" ]; then
+    log "controlled handoff active — skip full cleanup"
+    return 0
+  fi
   if [ "$CLEANUP_DONE" = "1" ]; then
     return 0
   fi
@@ -274,6 +299,7 @@ cleanup() {
   exit 0
 }
 
+trap handle_nav_handoff USR1
 trap cleanup INT TERM
 
 start_bg() {

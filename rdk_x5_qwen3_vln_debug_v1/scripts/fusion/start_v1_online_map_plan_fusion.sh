@@ -119,6 +119,10 @@ echo "[FUSION] enabled"
 echo "[FUSION] V1 cmd: /cmd_vel_ego -> intervention mux -> /cmd_vel_autonomy"
 echo "[FUSION] map backend cmd: /map_qwen_plan/cmd_vel -> bridge -> /cmd_vel_map"
 echo "[FUSION] task: ${TASK:-<backend default>}"
+FLOW_LOG="${THIRD_VIEW_FLOW_LOG:-$ROOT/logs/third_view_flow.log}"
+export THIRD_VIEW_FLOW_LOG="$FLOW_LOG"
+echo "[FUSION] 第三视角流程日志: $FLOW_LOG"
+echo "[FUSION] 实时查看: tail -f $FLOW_LOG"
 
 SERVO_CONFIG="$RUNTIME_CONFIG" \
   bash "$ROOT/scripts/intervention/start_live_servo_with_intervention.sh" "$@" &

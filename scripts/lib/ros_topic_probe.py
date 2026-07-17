@@ -107,16 +107,57 @@ def has_samples(
             rclpy.shutdown()
 
 
+def scan_frame_id(topic: str, timeout_sec: float) -> int:
+    timeout_sec = max(0.5, float(timeout_sec))
+    if topic not in _TOPIC_TYPES:
+        print(f"unknown topic type for {topic}", file=sys.stderr)
+        return 2
+
+    if not rclpy.ok():
+        rclpy.init()
+
+    node = Node("ros_topic_probe_scan_frame")
+    msg_cls = _load_msg_class(*_TOPIC_TYPES[topic])
+    qos = _qos_for_topic(topic, True)
+    frame = {"id": ""}
+
+    def _cb(msg) -> None:
+        frame["id"] = str(getattr(msg.header, "frame_id", "") or "").strip()
+
+    node.create_subscription(msg_cls, topic, _cb, qos)
+    deadline = time.time() + timeout_sec
+    try:
+        while time.time() < deadline and not frame["id"]:
+            rclpy.spin_once(node, timeout_sec=0.2)
+            time.sleep(0.05)
+        if frame["id"]:
+            print(frame["id"], flush=True)
+            return 0
+        print(f"no frame_id on {topic} within {timeout_sec}s", file=sys.stderr)
+        return 1
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print(
             "usage: ros_topic_probe.py has-samples <topic> <min_samples> <timeout_sec> "
-            "[--sensor-qos|--reliable]",
+            "[--sensor-qos|--reliable]\n"
+            "       ros_topic_probe.py scan-frame-id <topic> <timeout_sec>",
             file=sys.stderr,
         )
         return 2
 
     cmd = sys.argv[1]
+    if cmd == "scan-frame-id":
+        if len(sys.argv) < 4:
+            print("usage: ros_topic_probe.py scan-frame-id <topic> <timeout_sec>", file=sys.stderr)
+            return 2
+        return scan_frame_id(sys.argv[2], float(sys.argv[3]))
+
     if cmd != "has-samples":
         print(f"unknown command: {cmd}", file=sys.stderr)
         return 2

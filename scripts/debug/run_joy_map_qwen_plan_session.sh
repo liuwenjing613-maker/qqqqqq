@@ -733,14 +733,24 @@ stop_mapping_control_for_fast_nav() {
   if [[ -n "${JOY_PID:-}" ]] && kill -0 "$JOY_PID" 2>/dev/null; then
     kill -USR1 "$JOY_PID" 2>/dev/null || true
   fi
-  # Also signal any live corridor wrapper by PID file if present
-  if [[ -f "$PROJECT_DIR/logs/slam_live/pids/slam_toolbox.pid" ]]; then
-    local corridor_pids
-    corridor_pids="$(pgrep -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true)"
-    for pid in $corridor_pids; do
-      kill -USR1 "$pid" 2>/dev/null || true
-    done
-  fi
+  local corridor_pids
+  corridor_pids="$(pgrep -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true)"
+  for pid in $corridor_pids; do
+    kill -USR1 "$pid" 2>/dev/null || true
+  done
+
+  local handoff_json="$PROJECT_DIR/runtime/sensor_base_stack.json"
+  local handoff_wait
+  for handoff_wait in $(seq 1 30); do
+    if [[ -f "$handoff_json" ]]; then
+      log "        受控交接完成: $handoff_json"
+      break
+    fi
+    if [[ -z "$corridor_pids" ]] || ! pgrep -f "run_corridor_mapping_live_foxglove.sh" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.5
+  done
 
   pkill -TERM -f "joy_node|teleop_twist_joy" 2>/dev/null || true
   pkill -TERM -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
@@ -771,14 +781,8 @@ stop_mapping_control_for_fast_nav() {
     return 1
   fi
 
-  # Stop joy wrapper process tree carefully without killing sensor children via corridor cleanup.
-  # If handoff succeeded, corridor wrapper already exited with sensors kept.
-  if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]] && kill -0 "$JOY_PID" 2>/dev/null; then
-    # Only stop joy_mapping parent if it is still alive AND sensors are healthy;
-    # send TERM (not -9 to corridor) so its children can hand off.
-    kill -TERM "$JOY_PID" 2>/dev/null || true
-    sleep 1
-  fi
+  # 快速交接不得 TERM joy_mapping 父进程：其 cleanup/stop_live_stack 会杀掉雷达/底盘/static_tf。
+  log "        保留传感器进程；不停止 joy_mapping 父进程 (pid=${JOY_PID:-none})"
 
   TIMING_STOP_ROBOT_S=$(( $(date +%s) - t0 ))
   timing_log "stop_robot=${TIMING_STOP_ROBOT_S}s"

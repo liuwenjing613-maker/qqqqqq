@@ -26,6 +26,7 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 from std_msgs.msg import String
 
 from intervention.mux_logic import choose_source
+from intervention.flow_log import FlowLogger, default_flow_log_path
 
 
 class CmdVelInterventionMux(Node):
@@ -95,6 +96,11 @@ class CmdVelInterventionMux(Node):
             String, "/third_view/intervention/cmd_mux_status", reliable
         )
         self.timer = self.create_timer(1.0 / max(1.0, self.rate_hz), self._tick)
+        self.flow = FlowLogger(
+            default_flow_log_path(PROJECT_ROOT),
+            also_stdout=False,
+            source="mux",
+        )
         self.get_logger().info(
             f"cmd mux ready: {self.ego_topic} + {self.map_topic} -> "
             f"{self.output_topic}; default={self.default_mode}"
@@ -119,6 +125,7 @@ class CmdVelInterventionMux(Node):
             return
         if mode != self.mode:
             self.get_logger().warning(f"control mode {self.mode} -> {mode}")
+            self.flow.event("MUX", f"请求模式 {self.mode} → {mode}")
         self.mode = mode
         self.mode_received_sec = time.monotonic()
 
@@ -179,6 +186,11 @@ class CmdVelInterventionMux(Node):
             self.get_logger().info(
                 f"mode={self.mode} effective={selection.effective_mode} "
                 f"reason={selection.reason}"
+            )
+            self.flow.event(
+                "MUX",
+                f"生效输出 {selection.effective_mode} | 请求={self.mode} | "
+                f"reason={selection.reason}",
             )
             self.last_effective = key
         status = {

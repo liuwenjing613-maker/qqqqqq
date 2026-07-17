@@ -393,6 +393,194 @@ class InterventionCore:
             self._basic_evidence(now),
         )
 
+    def branch_condition_report(self, now: float) -> Optional[Dict[str, Any]]:
+        """Structured checklist for BRANCH_AMBIGUOUS (for flow logging)."""
+        summary = self._fresh_candidate_summary(now)
+        need = self.cfg.branch_persistence_updates
+        if summary is None:
+            return {
+                "track": "BRANCH",
+                "fresh": False,
+                "persistence": self._branch_confirmations,
+                "persistence_need": need,
+                "ready": False,
+                "checks": [
+                    {
+                        "name": "候选摘要新鲜",
+                        "ok": False,
+                        "detail": f"缺失或超过{self.cfg.candidates_max_age_sec:.1f}s",
+                    }
+                ],
+            }
+
+        eligible = summary.eligible_candidates
+        count_ok = len(eligible) >= self.cfg.branch_min_candidates
+        dist = summary.decision_distance_m
+        if self.cfg.branch_require_decision_distance and dist is None:
+            dist_present_ok = False
+            dist_ok = False
+            dist_detail = "无decision_distance"
+        else:
+            dist_present_ok = True
+            if dist is None:
+                dist_ok = True
+                dist_detail = "不要求距离"
+            else:
+                dist_ok = dist <= self.cfg.branch_decision_radius_m
+                dist_detail = f"{dist:.2f}≤{self.cfg.branch_decision_radius_m:.2f}m"
+
+        max_sep = self._max_heading_separation_deg([c.heading_deg for c in eligible])
+        sep_ok = max_sep >= self.cfg.branch_min_heading_separation_deg
+        scored = sorted(
+            (c.score for c in eligible if c.score is not None), reverse=True
+        )
+        gap: Optional[float] = None
+        ratio: Optional[float] = None
+        if len(scored) < 2:
+            score_ok = count_ok
+            score_detail = "分值不足2个→视为分歧"
+        else:
+            gap = scored[0] - scored[1]
+            gap_ok = gap <= self.cfg.branch_max_top_score_gap
+            if scored[1] <= 1e-9:
+                ratio_ok = gap_ok
+            else:
+                ratio = scored[0] / scored[1]
+                ratio_ok = ratio <= self.cfg.branch_max_top_score_ratio
+            score_ok = gap_ok or ratio_ok
+            score_detail = (
+                f"gap={gap:.3f}≤{self.cfg.branch_max_top_score_gap:.2f}"
+                f" 或 ratio="
+                f"{'n/a' if ratio is None else f'{ratio:.2f}'}"
+                f"≤{self.cfg.branch_max_top_score_ratio:.2f}"
+            )
+
+        raw_ok = self._branch_ambiguous_raw(summary)
+        persist_ok = self._branch_confirmations >= need
+        checks = [
+            {
+                "name": "候选摘要新鲜",
+                "ok": True,
+                "detail": f"age={now - summary.stamp:.2f}s",
+            },
+            {
+                "name": f"合格候选≥{self.cfg.branch_min_candidates}",
+                "ok": count_ok,
+                "detail": f"{len(eligible)}/{self.cfg.branch_min_candidates}",
+            },
+            {
+                "name": "决策距离可用",
+                "ok": dist_present_ok,
+                "detail": dist_detail if not dist_present_ok else "ok",
+            },
+            {
+                "name": f"进入决策半径",
+                "ok": dist_ok,
+                "detail": dist_detail,
+            },
+            {
+                "name": f"航向夹角≥{self.cfg.branch_min_heading_separation_deg:.0f}°",
+                "ok": sep_ok,
+                "detail": f"{max_sep:.1f}°",
+            },
+            {
+                "name": "分数接近(分歧)",
+                "ok": score_ok,
+                "detail": score_detail,
+            },
+            {
+                "name": f"连续确认≥{need}",
+                "ok": persist_ok,
+                "detail": f"{self._branch_confirmations}/{need}",
+            },
+        ]
+        met = sum(1 for c in checks if c["ok"])
+        return {
+            "track": "BRANCH",
+            "fresh": True,
+            "raw_ambiguous": raw_ok,
+            "persistence": self._branch_confirmations,
+            "persistence_need": need,
+            "ready": raw_ok and persist_ok,
+            "met": met,
+            "total": len(checks),
+            "checks": checks,
+            "candidate_ids": [c.candidate_id for c in eligible],
+            "gap": gap,
+            "ratio": ratio,
+            "decision_distance_m": dist,
+            "max_heading_separation_deg": max_sep,
+        }
+
+    def junction_condition_report(self, now: float) -> Optional[Dict[str, Any]]:
+        """Structured checklist for returned-junction triggers."""
+        summary = self._fresh_candidate_summary(now)
+        need = self.cfg.returned_junction_persistence_updates
+        if summary is None:
+            return {
+                "track": "JUNCTION",
+                "fresh": False,
+                "persistence": self._junction_confirmations,
+                "persistence_need": need,
+                "ready": False,
+                "checks": [
+                    {
+                        "name": "候选摘要新鲜",
+                        "ok": False,
+                        "detail": "缺失或过期",
+                    }
+                ],
+            }
+        flag_ok = bool(summary.returned_to_junction)
+        persist_ok = self._junction_confirmations >= need
+        unseen = (
+            summary.unseen_candidate_count
+            if summary.unseen_candidate_count is not None
+            else len(summary.eligible_candidates)
+        )
+        checks = [
+            {
+                "name": "返回路口标记",
+                "ok": flag_ok,
+                "detail": str(bool(summary.returned_to_junction)),
+            },
+            {
+                "name": f"连续确认≥{need}",
+                "ok": persist_ok,
+                "detail": f"{self._junction_confirmations}/{need}",
+            },
+            {
+                "name": "未访问候选",
+                "ok": True,
+                "detail": f"unseen={unseen} eligible={len(summary.eligible_candidates)}",
+            },
+        ]
+        met = sum(1 for c in checks if c["ok"])
+        return {
+            "track": "JUNCTION",
+            "fresh": True,
+            "persistence": self._junction_confirmations,
+            "persistence_need": need,
+            "ready": flag_ok and persist_ok,
+            "met": met,
+            "total": len(checks),
+            "checks": checks,
+            "unseen": unseen,
+            "eligible": len(summary.eligible_candidates),
+            "candidate_ids": [c.candidate_id for c in summary.eligible_candidates],
+        }
+
+    def progress_recovery_report(self, now: float) -> Dict[str, Any]:
+        return {
+            "track": "PROGRESS",
+            "stage": self._recovery_stage,
+            "stage_age_sec": (
+                None
+                if self._recovery_stage == "IDLE"
+                else round(now - self._recovery_stage_started, 2)
+            ),
+        }
+
     def _guard_reason(self, now: float, external_busy: bool) -> Optional[str]:
         if not self.cfg.enabled:
             return "DISABLED"

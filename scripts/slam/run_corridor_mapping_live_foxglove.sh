@@ -20,6 +20,7 @@ PIDS=()
 declare -A NAMED_PIDS=()
 FOXGLOVE_STARTED=0
 HANDOFF_DONE=0
+CONTROLLED_NAV_HANDOFF=0
 HANDOFF_REQUEST_FILE="${PROJECT_DIR}/runtime/request_nav_handoff"
 SENSOR_BASE_STACK_JSON="${PROJECT_DIR}/runtime/sensor_base_stack.json"
 PID_DIR=""
@@ -94,8 +95,12 @@ perform_nav_handoff() {
   if [[ "$HANDOFF_DONE" -eq 1 ]]; then
     return 0
   fi
+  CONTROLLED_NAV_HANDOFF=1
   log "[handoff] controlled handoff to Nav2: stop slam_toolbox only, keep sensors"
   publish_zero_cmd
+
+  pkill -TERM -f "joy_node|teleop_twist_joy" 2>/dev/null || true
+  pkill -TERM -f "frontier_region_debug_node.py" 2>/dev/null || true
 
   local slam_pid="${NAMED_PIDS[slam_toolbox]:-}"
   if [[ -n "$slam_pid" ]] && kill -0 "$slam_pid" 2>/dev/null; then
@@ -135,7 +140,7 @@ on_usr1_handoff() {
 }
 
 cleanup() {
-  if [[ "$HANDOFF_DONE" -eq 1 ]]; then
+  if [[ "$HANDOFF_DONE" -eq 1 || "$CONTROLLED_NAV_HANDOFF" -eq 1 ]]; then
     log "[cleanup] handoff done — skip stopping sensor base stack"
     return 0
   fi
