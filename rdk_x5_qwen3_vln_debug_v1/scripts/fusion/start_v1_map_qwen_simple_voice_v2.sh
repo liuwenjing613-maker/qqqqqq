@@ -305,6 +305,13 @@ cleanup() {
   kill_group "$NAV2_PID"
   [[ "$STARTED_SLAM" == "1" ]] && kill_group "$SLAM_PID"
   kill_group "$FANIN_PID"
+  # First-person stack owns the camera (same as start_live_servo_voice.sh).
+  if declare -F stop_camera_tree >/dev/null 2>&1; then
+    stop_camera_tree "" || true
+  else
+    pkill -f '[p]ython3? -u .*/opencv_compressed_cam.py' 2>/dev/null || true
+    pkill -x hobot_usb_cam 2>/dev/null || true
+  fi
   if [[ "$KEEP_RAW_LOGS" != "1" ]]; then
     for f in "${RAW_LOGS[@]}"; do rm -f "$f"; done
   fi
@@ -317,6 +324,23 @@ if ros2 action info /navigate_to_pose 2>/dev/null | grep -Eq 'Action servers: [1
   fatal "/navigate_to_pose already has a server; stop the old Nav2 stack first"
   exit 3
 fi
+
+# Camera is started by the stable first-person path
+# (scripts/qwen_servo/start_live_servo_voice.sh -> ensure_compressed_camera).
+# Match that proven profile; do not open /dev/video0 here (early open raced
+# with post-voice USB settle and aborted the whole stack before SLAM).
+export ROBOT_PROJECT_DIR="${ROBOT_PROJECT_DIR:-$REPO_ROOT}"
+export CAMERA_BACKEND="${CAMERA_BACKEND:-opencv}"
+export CAMERA_WIDTH="${CAMERA_WIDTH:-640}"
+export CAMERA_HEIGHT="${CAMERA_HEIGHT:-480}"
+export CAMERA_FPS="${CAMERA_FPS:-15}"
+export CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
+# shellcheck source=/dev/null
+source "$V1_ROOT/scripts/lib/camera_stack.sh"
+mkdir -p "$V1_ROOT/logs"
+# Clear stale holders so the first-person stack can open cleanly later.
+stop_camera_tree "" || true
+log "相机交由第一视角启动 backend=$CAMERA_BACKEND ${CAMERA_WIDTH}x${CAMERA_HEIGHT}@${CAMERA_FPS} dev=$CAMERA_DEV"
 
 map_count="$(publisher_count /map || true)"
 odom_count="$(publisher_count /odom || true)"
@@ -400,12 +424,19 @@ FANIN_PID=$!
 export FOXGLOVE_TOPIC_WHITELIST="${FOXGLOVE_TOPIC_WHITELIST:-['^/image$','^/camera_info$','^/qwen_vln/annotated_image/compressed$','^/qwen_vln/servo/.*','^/qwen_vln/(command|state|result_json|latency_ms|pixel_point|prompt_text)$','^/third_view/.*','^/map_qwen_plan/(backend_debug|bridge_status|status|candidate_summary)$','^/tf$','^/tf_static$','^/scan_filtered$','^/odom$','^/map$','^/map_metadata$']}"
 
 log "所有第三视角组件就绪，启动稳定第一视角"
+# Same camera env as a direct start_live_servo_voice.sh run.
 setsid env \
   MOTION_ENABLED="$MOTION_ENABLED" \
   SERVO_CONFIG="$SERVO_RUNTIME" \
   VOICE_INSTRUCTION_OVERRIDE="$TASK" \
   START_FOXGLOVE="$START_FOXGLOVE" \
   FOXGLOVE_TOPIC_WHITELIST="$FOXGLOVE_TOPIC_WHITELIST" \
+  ROBOT_PROJECT_DIR="${ROBOT_PROJECT_DIR:-$REPO_ROOT}" \
+  CAMERA_BACKEND="${CAMERA_BACKEND:-opencv}" \
+  CAMERA_WIDTH="${CAMERA_WIDTH:-640}" \
+  CAMERA_HEIGHT="${CAMERA_HEIGHT:-480}" \
+  CAMERA_FPS="${CAMERA_FPS:-15}" \
+  CAMERA_DEV="${CAMERA_DEV:-/dev/video0}" \
   bash "$V1_ROOT/scripts/qwen_servo/start_live_servo_voice.sh" \
   > >(stdbuf -oL sed -u 's/^/[FIRST_PERSON] /' | tee -a "$FIRST_LOG" | \
       stdbuf -oL grep -E --line-buffered '\[VOICE->NAV\]|\[step\]|\[nav\]|\[wait\]|ERROR|FATAL|stack ready|最终导航指令' || true) \

@@ -20,7 +20,9 @@ camera_topic_has_publisher() {
 
 camera_topic_has_frame() {
   local topic="$1"
-  timeout 3 ros2 topic echo "$topic" --once >/dev/null 2>&1
+  # Camera topics use sensor-data / BEST_EFFORT QoS. The default ros2 echo
+  # reliability can miss frames even while the publisher is healthy.
+  timeout 3 ros2 topic echo "$topic" --once --qos-profile sensor_data >/dev/null 2>&1
 }
 
 camera_ready() {
@@ -49,6 +51,10 @@ wait_topic_publisher() {
       echo "[wait] $topic aborted: camera crash in $(basename "$log_file")"
       return 1
     fi
+    if [[ -n "$log_file" ]] && grep -Eq 'published [0-9]+ frames|published /image_raw:' "$log_file" 2>/dev/null; then
+      echo "[wait] $topic ready from frame log (${i}s)"
+      return 0
+    fi
     if camera_ready "$topic"; then
       echo "[wait] $topic ready (${i}s)"
       return 0
@@ -73,7 +79,7 @@ video_device_busy() {
 }
 
 stop_camera_tree() {
-  # Stop launch parent + children, then any leftover hobot_usb_cam binary.
+  # Stop launch parent + children, then any leftover hobot/opencv camera publishers.
   local pid="${1:-${CAMERA_PID:-}}"
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
     local child
@@ -85,6 +91,9 @@ stop_camera_tree() {
   fi
   local orphan
   for orphan in $(pgrep -x hobot_usb_cam 2>/dev/null || true); do
+    kill "$orphan" 2>/dev/null || true
+  done
+  for orphan in $(pgrep -f '[p]ython3? -u .*/opencv_compressed_cam.py' 2>/dev/null || true); do
     kill "$orphan" 2>/dev/null || true
   done
   CAMERA_PID=""
@@ -101,8 +110,46 @@ stop_camera_tree() {
   return 1
 }
 
+start_opencv_usb_camera() {
+  local package_root="$1" log_file="$2" width="$3" height="$4" fps="$5"
+  local dev="${CAMERA_DEV:-/dev/video0}"
+  local topic="${CAMERA_COMPRESSED_TOPIC:-/image}"
+  local script="$package_root/src/perception/opencv_compressed_cam.py"
+  if [ ! -f "$script" ]; then
+    echo "[camera] ERROR: missing $script" >&2
+    return 1
+  fi
+  if video_device_busy "$dev"; then
+    echo "[camera] $dev busy before opencv launch; clearing stale holders"
+    stop_camera_tree "" || true
+    sleep 0.5
+  fi
+  if video_device_busy "$dev"; then
+    echo "[camera] ERROR: $dev is busy before opencv launch: $(fuser -v "$dev" 2>&1 | tr '\n' ' ')" >&2
+    return 1
+  fi
+  mkdir -p "$(dirname "$log_file")"
+  : >"$log_file"
+  # Proven profile used by start_live_servo_voice.sh (OpenCV MJPG USB).
+  echo "[camera] start OpenCV USB camera: $dev ${width}x${height}@${fps} -> $topic"
+  python3 -u "$script" \
+    --device "$dev" \
+    --topic "$topic" \
+    --width "$width" \
+    --height "$height" \
+    --fps "$fps" \
+    >"$log_file" 2>&1 &
+  CAMERA_PID=$!
+  export CAMERA_PID
+}
+
 start_project_usb_camera_profile() {
   local package_root="$1" log_file="$2" width="$3" height="$4" fps="$5"
+  local backend="${CAMERA_BACKEND:-opencv}"
+  if [ "$backend" = "opencv" ]; then
+    start_opencv_usb_camera "$package_root" "$log_file" "$width" "$height" "$fps"
+    return $?
+  fi
   local project_dir="${ROBOT_PROJECT_DIR:-$(cd "$package_root/.." && pwd)}"
   local launch_file="$project_dir/perception/launch/usb_cam.launch.py"
   local dev="${CAMERA_DEV:-/dev/video0}"
@@ -147,32 +194,28 @@ ensure_compressed_camera() {
       stop_camera_tree "" || true
     fi
 
-    # Default 640x480@15: 1280x720@20 often crashes hobot_usb_cam with
-    # "Unable to queue image buffer" on this USB camera / hub.
+    # Default 640x480@15. Prefer OpenCV backend: hobot_usb_cam often advertises
+    # /image under a busy Nav2 graph but never delivers frames.
     local width="${CAMERA_WIDTH:-640}" height="${CAMERA_HEIGHT:-480}" fps="${CAMERA_FPS:-15}"
     start_project_usb_camera_profile "$package_root" "$log_file" "$width" "$height" "$fps" || return 1
-    if ! wait_topic_publisher "$compressed_topic" 40 "$log_file" "$CAMERA_PID"; then
-      if camera_ready "$compressed_topic"; then
-        echo "[camera] $compressed_topic became ready after wait window"
-      else
-        echo "[camera] WARN: ${width}x${height}@${fps} not ready; full restart then retry 640x480@15"
-        stop_camera_tree "$CAMERA_PID" || true
-        sleep 2
-        if video_device_busy "$dev"; then
-          echo "[camera] ERROR: cannot retry because $dev is still busy" >&2
-          fuser -v "$dev" >&2 || true
-          return 1
-        fi
-        if [ -f "$log_file" ]; then
-          cp -f "$log_file" "${log_file}.prev" 2>/dev/null || true
-        fi
-        start_project_usb_camera_profile "$package_root" "$log_file" 640 480 15 || return 1
-        wait_topic_publisher "$compressed_topic" 40 "$log_file" "$CAMERA_PID" || {
-          echo "[camera] ERROR: $compressed_topic did not start; tail $log_file" >&2
-          tail -n 60 "$log_file" 2>/dev/null || true
-          return 1
-        }
+    if ! wait_topic_publisher "$compressed_topic" 25 "$log_file" "$CAMERA_PID"; then
+      echo "[camera] WARN: primary camera backend not ready; falling back to OpenCV 640x480@15"
+      stop_camera_tree "$CAMERA_PID" || true
+      sleep 1
+      if video_device_busy "$dev"; then
+        echo "[camera] ERROR: cannot fallback because $dev is still busy" >&2
+        fuser -v "$dev" >&2 || true
+        return 1
       fi
+      if [ -f "$log_file" ]; then
+        cp -f "$log_file" "${log_file}.prev" 2>/dev/null || true
+      fi
+      CAMERA_BACKEND=opencv start_opencv_usb_camera "$package_root" "$log_file" 640 480 15 || return 1
+      wait_topic_publisher "$compressed_topic" 25 "$log_file" "$CAMERA_PID" || {
+        echo "[camera] ERROR: $compressed_topic did not start; tail $log_file" >&2
+        tail -n 60 "$log_file" 2>/dev/null || true
+        return 1
+      }
     fi
   fi
   local actual_type
@@ -207,7 +250,7 @@ start_raw_bridge() {
     >"$log_file" 2>&1 &
   BRIDGE_PID=$!
   export BRIDGE_PID
-  wait_topic_publisher "$raw_topic" 25 || {
+  wait_topic_publisher "$raw_topic" 25 "$log_file" "$BRIDGE_PID" || {
     echo "[bridge] ERROR: $raw_topic publisher not created" >&2
     tail -n 40 "$log_file" 2>/dev/null || true
     return 1

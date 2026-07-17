@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import re
 import time
@@ -448,6 +449,36 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
 
+def _recover_runaway_integer_factor(value: Any) -> Optional[int]:
+    """Recover factors when the model dumps digits after a valid 0-10 value.
+
+    Real failure: `"b":8000000000000000000...` meant `b=8` (or `0.8` without '.').
+    """
+    text = str(value).strip().replace(" ", "")
+    if not text:
+        return None
+    sci = re.match(r"^(-?)(\d+)(?:\.(\d+))?[eE][+-]?\d+$", text)
+    if sci:
+        whole = sci.group(2)
+        frac = sci.group(3) or ""
+        if frac and int(frac) != 0:
+            # e.g. 8.5e0 — out of scope for digit-dump recovery
+            return None
+        digits = whole
+    else:
+        m = re.match(r"^(-?)(\d+)(?:\.\d+)?$", text)
+        if not m:
+            return None
+        digits = m.group(2)
+
+    # Prefer a 1-2 digit prefix that already lies in [0,10].
+    if len(digits) >= 2 and int(digits[:2]) <= 10:
+        return int(digits[:2])
+    if digits:
+        return int(digits[0])
+    return None
+
+
 def _parse_integer_factor(value: Any, name: str) -> int:
     """Read a geometric factor constrained to integer [0,10].
 
@@ -455,6 +486,7 @@ def _parse_integer_factor(value: Any, name: str) -> int:
     - 7.0 -> 7
     - unit-interval 0.50 -> 5 (legacy [0,1] habit)
     - truncated runaway floats recovered by _repair_spawn_scan_json
+    - digit-dump integers like b:8000... -> 8
     """
     if value is None:
         raise ValueError(f"Missing required JSON field: {name}")
@@ -464,6 +496,13 @@ def _parse_integer_factor(value: Any, name: str) -> int:
         numeric_value = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{name} must be an integer from 0 to 10") from exc
+
+    # Huge / non-finite values are almost always runaway digit dumps.
+    if not math.isfinite(numeric_value) or abs(numeric_value) > 10.0:
+        recovered = _recover_runaway_integer_factor(value)
+        if recovered is not None:
+            return recovered
+        return int(round(_clamp(numeric_value if math.isfinite(numeric_value) else 0.0, 0.0, 10.0)))
 
     # Strict integer path (preferred).
     # Previous strict check (kept for recovery):
@@ -480,7 +519,10 @@ def _parse_integer_factor(value: Any, name: str) -> int:
         integer_value = int(round(_clamp(numeric_value, 0.0, 10.0)))
 
     if not 0 <= integer_value <= 10:
-        raise ValueError(f"{name}={integer_value} is outside [0,10]")
+        recovered = _recover_runaway_integer_factor(value)
+        if recovered is not None:
+            return recovered
+        return int(round(_clamp(float(integer_value), 0.0, 10.0)))
     return integer_value
 
 

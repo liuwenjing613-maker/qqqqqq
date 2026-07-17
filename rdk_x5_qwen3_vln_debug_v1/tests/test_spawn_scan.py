@@ -114,6 +114,18 @@ class SpawnScanProtocolTests(unittest.TestCase):
         self.assertAlmostEqual(r.score_t, 0.0)
         self.assertGreater(r.score_r, 0.0)
 
+    def test_repair_runaway_digit_dump_on_b(self) -> None:
+        # Live failure: model writes b=8 then keeps emitting zeros (no decimal).
+        raw = (
+            '{"p":null,"t":0.00,"c":2,"w":3,"d":2,"o":2,'
+            '"b":80000000000000000000000000000000000000000000000000}'
+        )
+        r = parse_model_output(raw, PromptMode.SPAWN_SCAN, 960, 540)
+        self.assertEqual(r.result, "TARGET_INFERRED")
+        # b=8 blockage with weak continuity/depth -> low route score, but valid.
+        self.assertLessEqual(r.score_r, 0.42)
+        self.assertGreaterEqual(r.score_r, 0.0)
+
     def test_legacy_s_field_ignored(self) -> None:
         # Extra keys (including legacy s) are ignored; visibility follows p.
         r = parse_model_output(

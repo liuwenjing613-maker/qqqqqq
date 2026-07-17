@@ -42,6 +42,9 @@ class NavPhase(str, Enum):
     LOCALIZATION_ACTIVE = "LOCALIZATION_ACTIVE"
     LOCALIZATION_SETTLED = "LOCALIZATION_SETTLED"
     LOCALIZATION_UNSETTLED = "LOCALIZATION_UNSETTLED"
+    MAP_NOT_RECEIVED = "MAP_NOT_RECEIVED"
+    MAP_METADATA_MISMATCH = "MAP_METADATA_MISMATCH"
+    PHYSICAL_MOVE_DETECTED = "PHYSICAL_MOVE_DETECTED"
     PATH_VALIDATED = "PATH_VALIDATED"
     GOAL_ACCEPTED = "GOAL_ACCEPTED"
     NAVIGATING = "NAVIGATING"
@@ -58,6 +61,9 @@ TERMINAL_PHASES = frozenset(
         NavPhase.FAILED,
         NavPhase.CANCELED,
         NavPhase.LOCALIZATION_UNSETTLED,
+        NavPhase.MAP_NOT_RECEIVED,
+        NavPhase.MAP_METADATA_MISMATCH,
+        NavPhase.PHYSICAL_MOVE_DETECTED,
         NavPhase.SENSOR_LOST,
         NavPhase.NO_PROGRESS,
     }
@@ -394,6 +400,7 @@ def write_nav2_state(
     atomic_write_json(runtime_dir / "nav2_state.json", payload)
 
 
+
 def time_now() -> float:
     import time
 
@@ -401,72 +408,7 @@ def time_now() -> float:
 
 
 # ---------------------------------------------------------------------------
-# Sensor health / process policy (read-only decision helpers)
-# ---------------------------------------------------------------------------
-
-
-def sensor_health_overall_pass(
-    *,
-    scan_ok: bool,
-    scan_filtered_ok: bool,
-    odom_ok: bool,
-    tf_ok: bool,
-    chassis_ok: bool,
-    foxglove_ok: bool = False,
-) -> bool:
-    """Foxglove must NOT gate overall PASS."""
-    del foxglove_ok  # intentionally ignored
-    return all([scan_ok, scan_filtered_ok, odom_ok, tf_ok, chassis_ok])
-
-
-def decide_scan_filter_action(
-    count: int,
-    topic_fresh: bool,
-) -> Tuple[str, str]:
-    """
-    Returns (action, reason) where action in:
-      reuse | start_once | fail
-    """
-    if count == 0 and not topic_fresh:
-        return "start_once", "no_filter_and_no_data"
-    if count == 0 and topic_fresh:
-        return "fail", "data_without_process"
-    if count == 1 and topic_fresh:
-        return "reuse", "single_fresh"
-    if count == 1 and not topic_fresh:
-        return "fail", "single_stale_do_not_restart"
-    if count > 1:
-        return "fail", "multiple_filters"
-    return "fail", "unknown"
-
-
-def decide_static_tf_action(
-    *,
-    tf_exists: bool,
-    owner_pid: Optional[int],
-    owner_alive: bool,
-) -> Tuple[str, str]:
-    if tf_exists:
-        return "reuse", "tf_exists"
-    if owner_pid is not None and owner_alive:
-        return "fail", "owner_alive_but_tf_missing"
-    return "start_once", "tf_missing_owner_absent"
-
-
-def decide_foxglove_action(
-    *,
-    port_listening: bool,
-    bridge_count: int,
-) -> Tuple[str, str]:
-    if port_listening:
-        return "reuse", "port_listening"
-    if bridge_count == 0:
-        return "start_once", "no_bridge"
-    return "warn", "bridge_exists_but_port_dead"
-
-
-# ---------------------------------------------------------------------------
-# Handoff session validation
+# Process identity / handoff ack
 # ---------------------------------------------------------------------------
 
 
@@ -478,6 +420,13 @@ def read_proc_cmdline(pid: int) -> str:
     return raw.replace(b"\x00", b" ").decode("utf-8", errors="replace").strip()
 
 
+def read_proc_exe(pid: int) -> str:
+    try:
+        return os.readlink(f"/proc/{pid}/exe")
+    except OSError:
+        return ""
+
+
 def pid_alive(pid: Optional[int]) -> bool:
     if pid is None:
         return False
@@ -486,6 +435,91 @@ def pid_alive(pid: Optional[int]) -> bool:
         return True
     except OSError:
         return False
+
+
+def read_proc_start_ticks(pid: int) -> Optional[int]:
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").split()
+        return int(fields[21])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def script_basename_from_cmdline(cmdline: str) -> str:
+    for tok in cmdline.split():
+        if tok.endswith(".py"):
+            return Path(tok).name
+    return ""
+
+
+def build_process_identity(role: str, pid: Optional[int]) -> Optional[Dict[str, Any]]:
+    if pid is None:
+        return None
+    pid_i = int(pid)
+    if not pid_alive(pid_i):
+        return None
+    cmdline = read_proc_cmdline(pid_i)
+    return {
+        "role": role,
+        "pid": pid_i,
+        "start_ticks": str(read_proc_start_ticks(pid_i) or ""),
+        "exe": read_proc_exe(pid_i),
+        "script_basename": script_basename_from_cmdline(cmdline),
+        "cmdline": cmdline,
+    }
+
+
+ROLE_MATCHERS: Dict[str, Dict[str, Any]] = {
+    "lidar": {"script_substrings": ("ydlidar",), "exe_substrings": ("ydlidar",)},
+    "scan_filter": {
+        "script_basenames": ("simple_scan_filter.py",),
+        "script_substrings": ("simple_scan_filter",),
+    },
+    "chassis": {
+        "script_basenames": ("m1_pwm_cmd_vel_bridge.py",),
+        "script_substrings": ("m1_pwm_cmd_vel_bridge",),
+    },
+    "static_tf": {
+        "exe_substrings": ("static_transform_publisher",),
+        "script_substrings": ("static_transform_publisher",),
+    },
+    "foxglove": {
+        "script_substrings": ("foxglove_bridge",),
+        "exe_substrings": ("foxglove_bridge",),
+    },
+}
+
+
+def identity_matches_role(identity: Dict[str, Any], role: str) -> bool:
+    rules = ROLE_MATCHERS.get(role) or {}
+    exe = str(identity.get("exe", "")).lower()
+    cmdline = str(identity.get("cmdline", "")).lower()
+    basename = str(identity.get("script_basename", "")).lower()
+    for b in rules.get("script_basenames", ()):
+        if basename == b.lower():
+            return True
+    for s in rules.get("script_substrings", ()):
+        if s.lower() in cmdline or s.lower() in basename:
+            return True
+    for s in rules.get("exe_substrings", ()):
+        if s.lower() in exe:
+            return True
+    return False
+
+
+def validate_process_identity(identity: Optional[Dict[str, Any]], role: str) -> Tuple[bool, str]:
+    if identity is None:
+        return False, f"{role} missing"
+    pid = identity.get("pid")
+    if not pid_alive(pid):
+        return False, f"{role} pid={pid} not alive"
+    recorded = str(identity.get("start_ticks", "") or "")
+    current = read_proc_start_ticks(int(pid))
+    if recorded and current is not None and recorded != str(current):
+        return False, f"{role} PID reuse (start_ticks {recorded}!={current})"
+    if not identity_matches_role(identity, role):
+        return False, f"{role} identity mismatch exe/script"
+    return True, "ok"
 
 
 def validate_handoff_ack(
@@ -508,38 +542,67 @@ def validate_handoff_ack(
     if completed <= requested:
         return False, f"completed_epoch {completed} <= requested_epoch {requested}"
 
-    for key in (
-        "lidar_pid",
-        "scan_filter_pid",
-        "chassis_pid",
-        "static_tf_pid",
-        "foxglove_pid",
-    ):
-        pid = ack.get(key)
-        if pid is None:
-            continue
-        if not pid_alive(int(pid)):
-            return False, f"{key}={pid} not alive"
-        expected_sub = str(request.get("expected_cmdlines", {}).get(key, "") or "")
-        if expected_sub:
-            cmd = read_proc_cmdline(int(pid))
-            if expected_sub not in cmd:
-                return False, f"{key} cmdline mismatch: expected substring {expected_sub!r} got {cmd!r}"
+    stopped = ack.get("stopped") or {}
+    for key in ("joy", "teleop", "slam", "frontier"):
+        if not stopped.get(key, False):
+            return False, f"stopped.{key} not confirmed"
+
+    processes = ack.get("processes") or {}
+    # Legacy flat pid fields are NOT accepted as formal success.
+    if not processes and any(k.endswith("_pid") for k in ack.keys()):
+        return False, "legacy flat-pid ack rejected; require processes{} identities"
+
+    for role in ("lidar", "scan_filter", "chassis"):
+        ok, reason = validate_process_identity(processes.get(role), role)
+        if not ok:
+            return False, reason
+
+    static_id = processes.get("static_tf")
+    if static_id is not None:
+        ok, reason = validate_process_identity(static_id, "static_tf")
+        if not ok:
+            return False, reason
+    elif not ack.get("static_tf_present_via_tf", False):
+        return False, "static_tf missing and TF not confirmed"
+
+    # foxglove optional
     return True, "ok"
 
 
-# ---------------------------------------------------------------------------
-# Nav2 owner / PGID safety
-# ---------------------------------------------------------------------------
+OWNERSHIP_STATES = (
+    "MAPPING_OWNS_SENSOR",
+    "HANDOFF_REQUESTED",
+    "NAV_SESSION_OWNS_SENSOR",
+    "NAV2_OWNS_MOTION",
+    "FINISHED",
+)
 
 
-def read_proc_start_ticks(pid: int) -> Optional[int]:
+def write_ownership(path: Path, session_id: str, state: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    if state not in OWNERSHIP_STATES:
+        raise ValueError(f"invalid ownership state {state}")
+    payload: Dict[str, Any] = {
+        "session_id": session_id,
+        "state": state,
+        "updated_epoch": time_now(),
+    }
+    if extra:
+        payload.update(extra)
+    atomic_write_json(path, payload)
+
+
+def read_ownership(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
     try:
-        # /proc/PID/stat field 22 is starttime
-        fields = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").split()
-        return int(fields[21])
-    except (OSError, IndexError, ValueError):
-        return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def ownership_protects_sensors(path: Path) -> bool:
+    st = str(read_ownership(path).get("state", ""))
+    return st in ("NAV_SESSION_OWNS_SENSOR", "NAV2_OWNS_MOTION", "FINISHED")
 
 
 def validate_nav2_owner(
@@ -568,9 +631,111 @@ def validate_nav2_owner(
     return True, "ok"
 
 
-# ---------------------------------------------------------------------------
-# Progress watchdog
-# ---------------------------------------------------------------------------
+def owner_is_stale(owner: Dict[str, Any]) -> bool:
+    launch_pid = owner.get("launch_pid")
+    if launch_pid is None:
+        return True
+    if not pid_alive(int(launch_pid)):
+        return True
+    recorded = owner.get("start_ticks")
+    if recorded is not None:
+        current = read_proc_start_ticks(int(launch_pid))
+        if current is None or int(recorded) != int(current):
+            return True
+    return False
+
+
+def pose_delta_ok(
+    frozen_x: float,
+    frozen_y: float,
+    frozen_yaw: float,
+    live_x: float,
+    live_y: float,
+    live_yaw: float,
+    *,
+    max_xy_m: float = 0.20,
+    max_yaw_deg: float = 12.0,
+) -> Tuple[bool, Dict[str, float]]:
+    xy = math.hypot(live_x - frozen_x, live_y - frozen_y)
+    yaw_err = abs(math.degrees(normalize_yaw(live_yaw - frozen_yaw)))
+    metrics = {"xy_err_m": xy, "yaw_err_deg": yaw_err}
+    return xy <= max_xy_m and yaw_err <= max_yaw_deg, metrics
+
+
+def classify_map_pose_delta(xy_err: float, yaw_err_deg: float) -> str:
+    if xy_err <= 0.20 and yaw_err_deg <= 12.0:
+        return "PASS"
+    if xy_err <= 0.50 and yaw_err_deg <= 30.0:
+        return "WARN"
+    return "FAIL"
+
+
+def classify_odom_pose_delta(
+    xy_err: float,
+    yaw_err_deg: float,
+    *,
+    max_xy_m: float = 0.12,
+    max_yaw_deg: float = 8.0,
+) -> str:
+    if xy_err <= max_xy_m and yaw_err_deg <= max_yaw_deg:
+        return "PASS"
+    return "PHYSICAL_MOVE_DETECTED"
+
+
+def evaluate_handoff_pose_gates(
+    *,
+    frozen_map: Tuple[float, float, float],
+    live_map: Optional[Tuple[float, float, float]],
+    frozen_odom: Optional[Tuple[float, float, float]],
+    live_odom: Optional[Tuple[float, float, float]],
+) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "ok": True,
+        "hard_fail": None,
+        "map_status": "SKIP",
+        "odom_status": "SKIP",
+        "frozen_map_pose": {"x": frozen_map[0], "y": frozen_map[1], "yaw": frozen_map[2]},
+        "thresholds": {
+            "odom_xy_m": 0.12,
+            "odom_yaw_deg": 8.0,
+            "map_pass_xy_m": 0.20,
+            "map_pass_yaw_deg": 12.0,
+            "map_fail_xy_m": 0.50,
+            "map_fail_yaw_deg": 30.0,
+        },
+    }
+    if frozen_odom is not None and live_odom is not None:
+        oxy = math.hypot(live_odom[0] - frozen_odom[0], live_odom[1] - frozen_odom[1])
+        oyaw = abs(math.degrees(normalize_yaw(live_odom[2] - frozen_odom[2])))
+        ostatus = classify_odom_pose_delta(oxy, oyaw)
+        result["odom_status"] = ostatus
+        result["frozen_odom_pose"] = {"x": frozen_odom[0], "y": frozen_odom[1], "yaw": frozen_odom[2]}
+        result["current_odom_pose"] = {"x": live_odom[0], "y": live_odom[1], "yaw": live_odom[2]}
+        result["odom_delta"] = {"xy_err_m": oxy, "yaw_err_deg": oyaw}
+        if ostatus != "PASS":
+            result["ok"] = False
+            result["hard_fail"] = "PHYSICAL_MOVE_DETECTED"
+    elif frozen_odom is None:
+        result["ok"] = False
+        result["odom_status"] = "MISSING_FROZEN_ODOM"
+        result["hard_fail"] = "MISSING_FROZEN_ODOM"
+    else:
+        result["ok"] = False
+        result["odom_status"] = "MISSING_LIVE_ODOM"
+        result["hard_fail"] = "MISSING_LIVE_ODOM"
+
+    if live_map is not None:
+        mxy = math.hypot(live_map[0] - frozen_map[0], live_map[1] - frozen_map[1])
+        myaw = abs(math.degrees(normalize_yaw(live_map[2] - frozen_map[2])))
+        mstatus = classify_map_pose_delta(mxy, myaw)
+        result["map_status"] = mstatus
+        result["current_map_pose"] = {"x": live_map[0], "y": live_map[1], "yaw": live_map[2]}
+        result["map_delta"] = {"xy_err_m": mxy, "yaw_err_deg": myaw}
+        if mstatus == "FAIL":
+            result["ok"] = False
+            if result["hard_fail"] is None:
+                result["hard_fail"] = "MAP_POSE_JUMP"
+    return result
 
 
 @dataclass
@@ -589,7 +754,6 @@ def update_progress_watch(
     distance_delta_m: float = 0.10,
     move_delta_m: float = 0.08,
 ) -> bool:
-    """Return True if progress was made (and state updated)."""
     progressed = False
     if distance_remaining is not None:
         if state.best_distance_remaining is None:
@@ -617,33 +781,6 @@ def progress_timed_out(state: ProgressWatchState, now: float, timeout_s: float =
     if state.last_progress_time <= 0.0:
         return False
     return (now - state.last_progress_time) >= timeout_s
-
-
-# ---------------------------------------------------------------------------
-# Pose consistency before AMCL
-# ---------------------------------------------------------------------------
-
-
-def pose_delta_ok(
-    frozen_x: float,
-    frozen_y: float,
-    frozen_yaw: float,
-    live_x: float,
-    live_y: float,
-    live_yaw: float,
-    *,
-    max_xy_m: float = 0.20,
-    max_yaw_deg: float = 12.0,
-) -> Tuple[bool, Dict[str, float]]:
-    xy = math.hypot(live_x - frozen_x, live_y - frozen_y)
-    yaw_err = abs(math.degrees(normalize_yaw(live_yaw - frozen_yaw)))
-    metrics = {"xy_err_m": xy, "yaw_err_deg": yaw_err}
-    return xy <= max_xy_m and yaw_err <= max_yaw_deg, metrics
-
-
-# ---------------------------------------------------------------------------
-# AMCL settle evaluation (pure)
-# ---------------------------------------------------------------------------
 
 
 def evaluate_amcl_settle_window(
@@ -704,3 +841,97 @@ def evaluate_amcl_settle_window(
         "reasons": reasons,
     }
     return len(reasons) == 0, reasons, metrics
+
+
+def amcl_settle_near_threshold(metrics: Dict[str, Any]) -> bool:
+    if int(metrics.get("sample_count", 0)) < 5:
+        return False
+    if not metrics.get("map_tf_ok"):
+        return False
+    if float(metrics.get("scan_age_s", 99)) > 1.0:
+        return False
+    if float(metrics.get("odom_age_s", 99)) > 0.5:
+        return False
+    return (
+        float(metrics.get("x_spread_m", 9)) <= 0.18
+        and float(metrics.get("y_spread_m", 9)) <= 0.18
+        and float(metrics.get("yaw_spread_deg", 99)) <= 15.0
+        and float(metrics.get("x_cov", 9)) <= 0.45
+        and float(metrics.get("y_cov", 9)) <= 0.45
+        and float(metrics.get("yaw_cov", 9)) <= 0.30
+    )
+
+
+def sensor_health_overall_pass(
+    *,
+    scan_ok: bool,
+    scan_filtered_ok: bool,
+    odom_ok: bool,
+    tf_ok: bool,
+    chassis_ok: bool,
+    foxglove_ok: bool = False,
+) -> bool:
+    del foxglove_ok
+    return all([scan_ok, scan_filtered_ok, odom_ok, tf_ok, chassis_ok])
+
+
+def sensor_health_overall_pass_v2(
+    *,
+    scan_ok: bool,
+    scan_filtered_ok: bool,
+    odom_ok: bool,
+    tf_ok: bool,
+    chassis_ok: bool,
+    lidar_count: int,
+    scan_filter_count: int,
+    chassis_count: int,
+    foxglove_ok: bool = False,
+) -> bool:
+    del foxglove_ok
+    return all(
+        [
+            scan_ok,
+            scan_filtered_ok,
+            odom_ok,
+            tf_ok,
+            chassis_ok,
+            lidar_count == 1,
+            scan_filter_count == 1,
+            chassis_count == 1,
+        ]
+    )
+
+
+def decide_scan_filter_action(count: int, topic_fresh: bool) -> Tuple[str, str]:
+    if count == 0 and not topic_fresh:
+        return "start_once", "no_filter_and_no_data"
+    if count == 0 and topic_fresh:
+        return "fail", "data_without_process"
+    if count == 1 and topic_fresh:
+        return "reuse", "single_fresh"
+    if count == 1 and not topic_fresh:
+        return "fail", "single_stale_do_not_restart"
+    if count > 1:
+        return "fail", "multiple_filters"
+    return "fail", "unknown"
+
+
+def decide_static_tf_action(
+    *,
+    tf_exists: bool,
+    owner_pid: Optional[int],
+    owner_alive: bool,
+) -> Tuple[str, str]:
+    if tf_exists:
+        return "reuse", "tf_exists"
+    if owner_pid is not None and owner_alive:
+        return "fail", "owner_alive_but_tf_missing"
+    return "start_once", "tf_missing_owner_absent"
+
+
+def decide_foxglove_action(*, port_listening: bool, bridge_count: int) -> Tuple[str, str]:
+    if port_listening:
+        return "reuse", "port_listening"
+    if bridge_count == 0:
+        return "start_once", "no_bridge"
+    return "warn", "bridge_exists_but_port_dead"
