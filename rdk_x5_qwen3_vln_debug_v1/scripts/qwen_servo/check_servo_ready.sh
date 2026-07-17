@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -u
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/qwen_ready.sh"
+
 check_topic() {
   local name="$1"
-  if ros2 topic info "$name" 2>/dev/null | grep -Eq 'Publisher count: [1-9]'; then
+  if _qwen_debug_topic_ready "$name"; then
     echo "[OK] publisher $name"
   else
     echo "[MISS] publisher $name"
@@ -10,7 +14,7 @@ check_topic() {
 }
 check_subscriber() {
   local name="$1"
-  if ros2 topic info "$name" 2>/dev/null | grep -Eq 'Subscription count: [1-9]'; then
+  if _qwen_ros2_topic_info "$name" | grep -Eq 'Subscription count: [1-9][0-9]*'; then
     echo "[OK] subscriber $name"
   else
     echo "[MISS] subscriber $name"

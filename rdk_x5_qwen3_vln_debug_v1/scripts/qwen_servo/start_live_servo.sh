@@ -7,10 +7,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_DIR="$(cd "$ROOT/.." && pwd)"
 source "$ROOT/scripts/lib/ros_env.sh"
 source "$ROOT/scripts/lib/camera_stack.sh"
-export DASHSCOPE_API_KEY="sk-ws-H.EMDRILX.kTsc.MEUCIQD5UgFGckkMu8pAf-oYK_ZgcxQMXYHj1gJDwy2J75_skQIgIPOraFvC3yeARZyAIMwuypWh0tFj3StA6AEDaSVYVtA"
+source "$ROOT/scripts/lib/qwen_ready.sh"
+source "$ROOT/scripts/lib/nav_api_env.sh"
+
+if [[ -f "$PROJECT_DIR/scripts/lib/ros_dds_env.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$PROJECT_DIR/scripts/lib/ros_dds_env.sh"
+  attach_ros_dds_env
+fi
 
 mkdir -p "$ROOT/logs"
 INSTRUCTION="${1:-find the bottle}"
+load_nav_api_env "$PROJECT_DIR" "$ROOT"
 : "${DASHSCOPE_API_KEY:?Please export DASHSCOPE_API_KEY first}"
 
 BASE_CONFIG="${QWEN_BASE_CONFIG:-$ROOT/configs/qwen3_vln_debug.yaml}"
@@ -121,17 +129,13 @@ QWEN_CONFIG="$FAST_CONFIG" \
   >"$ROOT/logs/qwen_live_servo_qwen.log" 2>&1 &
 QWEN_PID=$!
 
-for _ in $(seq 1 30); do
-  if ros2 topic info /qwen_vln/result_json 2>/dev/null | grep -Eq 'Publisher count: [1-9]'; then
-    break
-  fi
-  if ! kill -0 "$QWEN_PID" 2>/dev/null; then
-    echo "ERROR: Qwen node exited" >&2
-    tail -n 100 "$ROOT/logs/qwen_live_servo_qwen.log" || true
-    exit 1
-  fi
-  sleep 1
-done
+QWEN_LOG="$ROOT/logs/qwen_live_servo_qwen.log"
+QWEN_WAIT_MAX="${QWEN_WAIT_MAX:-60}"
+if ! wait_qwen_debug_ready "$QWEN_PID" "$QWEN_LOG" "$QWEN_WAIT_MAX"; then
+  echo "ERROR: Qwen node did not become ready within ${QWEN_WAIT_MAX}s" >&2
+  tail -n 100 "$QWEN_LOG" || true
+  exit 1
+fi
 
 SERVO_ARGS=(--config "${SERVO_CONFIG:-$ROOT/configs/qwen3_vln_servo.yaml}")
 if [[ "${MOTION_ENABLED:-0}" == "1" ]]; then

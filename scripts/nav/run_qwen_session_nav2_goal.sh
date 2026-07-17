@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 启动 saved-map Nav2（冷启动，对齐 run_nav2_foxglove_click_goal.sh）并发送 Qwen 导航目标。
+# 启动 saved-map Nav2 并发送 Qwen 导航目标（快速/冷启动由入口脚本决定）。
 set -Eeuo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -14,6 +14,7 @@ STARTED_NAV2=0
 NAV2_START_EPOCH=0
 BOOT_LOG_TAIL_PID=""
 NAV2_TOTAL_STEPS=4
+NAV2_START_ONLY="${NAV2_START_ONLY:-0}"
 
 # shellcheck source=scripts/lib/nav2_localization_bootstrap.sh
 source "${PROJECT_DIR}/scripts/lib/nav2_localization_bootstrap.sh"
@@ -24,7 +25,7 @@ source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
 
 if [[ -z "$MAP_YAML" ]] || [[ -z "$GOAL_JSON" ]]; then
   echo "Usage: $0 <map.yaml> <navigation_goal_proposal.json>"
-  echo "  env: POSE_STATE_FILE, LOG_DIR, NAV2_REUSE_EXISTING=0"
+  echo "  env: POSE_STATE_FILE, LOG_DIR, NAV2_REUSE_EXISTING, NAV2_STOP_CONFLICTS, NAV2_START_ONLY"
   exit 1
 fi
 
@@ -53,31 +54,11 @@ log_step() {
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
-wait_topic_exists_cli() {
-  local topic="$1"
-  local timeout_sec="${2:-60}"
-  local start
-  start="$(date +%s)"
-  log "等待 topic ${topic} (最多 ${timeout_sec}s) ..."
-  while true; do
-    if ros2 topic list 2>/dev/null | grep -qx "$topic"; then
-      log "topic OK: ${topic}"
-      return 0
-    fi
-    if (( $(date +%s) - start >= timeout_sec )); then
-      log "ERROR: topic not found: ${topic}"
-      return 1
-    fi
-    sleep 1
-  done
-}
-
 wait_action_exists_cli() {
   local action_name="$1"
-  local timeout_sec="${2:-90}"
+  local timeout_sec="${2:-30}"
   local start
   start="$(date +%s)"
-  log "等待 action ${action_name} (最多 ${timeout_sec}s) ..."
   while true; do
     if ros2 action list 2>/dev/null | grep -qx "$action_name"; then
       log "action OK: ${action_name}"
@@ -91,93 +72,48 @@ wait_action_exists_cli() {
   done
 }
 
-find_nav2_ready_file_since() {
-  local min_epoch="${1:-0}"
-  python3 - "$PROJECT_DIR" "$min_epoch" "$LOG_DIR" <<'PY'
-import glob
-import os
-import sys
-
-project_dir = sys.argv[1]
-min_epoch = float(sys.argv[2])
-log_dir = sys.argv[3]
-candidates = []
-
-def consider(path: str) -> None:
-    try:
-        mtime = os.path.getmtime(path)
-    except OSError:
-        return
-    if mtime + 1.0 >= min_epoch:
-        candidates.append((mtime, path))
-
-if log_dir:
-    consider(os.path.join(log_dir, "ready"))
-for path in glob.glob(os.path.join(project_dir, "logs", "nav2_*", "ready")):
-    consider(path)
-if not candidates:
-    raise SystemExit(0)
-candidates.sort(reverse=True)
-print(candidates[0][1])
-PY
-}
-
-wait_nav2_saved_map_ready() {
+wait_ready_json() {
   local ready_timeout="${1:-300}"
   local min_epoch="${2:-0}"
-  local start last_heartbeat ready_file elapsed
+  local expected_map="${3:-}"
+  local start last_heartbeat elapsed
   start="$(date +%s)"
   last_heartbeat="$start"
-  log "等待 Nav2 ready 文件 (最多 ${ready_timeout}s，正常约 90–210s) ..."
-  log "boot 日志: $LOG_DIR/nav2_saved_map.log"
+  log "等待 ready.json (最多 ${ready_timeout}s) ..."
   while true; do
     if [[ -n "${NAV2_PID:-}" ]] && ! kill -0 "$NAV2_PID" 2>/dev/null; then
       log "FAIL: run_nav2_saved_map 在 ready 之前退出"
       tail -40 "$LOG_DIR/nav2_saved_map.log" 2>/dev/null || true
       return 1
     fi
-    ready_file="$(find_nav2_ready_file_since "$min_epoch")"
-    if [[ -n "$ready_file" && -f "$ready_file" ]]; then
-      log "Nav2 ready: $ready_file (耗时 $(( $(date +%s) - start ))s)"
-      return 0
+    local ready_json="$LOG_DIR/ready.json"
+    if [[ -f "$ready_json" ]]; then
+      local mtime map_in_json
+      mtime="$(stat -c %Y "$ready_json" 2>/dev/null || echo 0)"
+      if (( mtime + 1 >= min_epoch )); then
+        map_in_json="$(python3 - "$ready_json" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("map_yaml", ""))
+PY
+)"
+        if [[ -z "$expected_map" ]] || [[ "$(readlink -f "$map_in_json")" == "$(readlink -f "$expected_map")" ]]; then
+          log "Nav2 ready.json OK (耗时 $(( $(date +%s) - start ))s)"
+          return 0
+        fi
+        log "WARN: ready.json map_yaml 不匹配，继续等待 ..."
+      fi
     fi
     elapsed=$(( $(date +%s) - start ))
     if (( $(date +%s) - last_heartbeat >= 15 )); then
-      local boot_hint
-      boot_hint="$(tail -n 1 "$LOG_DIR/nav2_saved_map.log" 2>/dev/null | sed 's/^[[:space:]]*//')"
-      if [[ -n "$boot_hint" ]]; then
-        log "仍在等待 ready... ${elapsed}s | ${boot_hint:0:120}"
-      else
-        log "仍在等待 ready... ${elapsed}s"
-      fi
+      log "仍在等待 ready.json... ${elapsed}s"
       last_heartbeat="$(date +%s)"
     fi
     if (( elapsed >= ready_timeout )); then
-      log "FAIL: ${ready_timeout}s 内未出现 ready 文件"
-      tail -40 "$LOG_DIR/nav2_saved_map.log" 2>/dev/null || true
+      log "FAIL: ${ready_timeout}s 内未出现有效 ready.json"
       return 1
     fi
     sleep 2
   done
-}
-
-wait_nav2_stack_like_click_nav() {
-  local min_epoch="${1:-0}"
-  log "按 Foxglove 点击导航顺序验证 Nav2 栈 ..."
-  wait_topic_exists_cli /map 180 || return 1
-  wait_topic_exists_cli /odom 180 || return 1
-  wait_topic_exists_cli /tf 120 || return 1
-  wait_nav2_saved_map_ready 300 "$min_epoch" || return 1
-  log "rclpy 等待 map -> base_link TF (120s) ..."
-  wait_map_base_link_tf_rclpy 120 "QWEN_NAV2" || return 1
-  log "等待 Nav2 navigation actions ..."
-  wait_nav_actions_ready 90 || return 1
-  wait_action_exists_cli /navigate_to_pose 30 || return 1
-  wait_action_exists_cli /compute_path_to_pose 30 \
-    || log "WARN: /compute_path_to_pose 未就绪（发目标仍可进行）"
-  wait_amcl_localization_settle 45 \
-    || log "WARN: AMCL 尚未完全稳定；若导航失败请在 Foxglove 用 /initialpose 校正"
-  return 0
 }
 
 start_boot_log_follower() {
@@ -203,10 +139,8 @@ stop_boot_log_follower() {
 
 print_nav_goal_from_json() {
   python3 - "$GOAL_JSON" <<'PY'
-import json
-import sys
+import json, sys
 from pathlib import Path
-
 p = Path(sys.argv[1])
 if not p.is_file():
     raise SystemExit(0)
@@ -224,7 +158,6 @@ cleanup() {
   stop_boot_log_follower
   if [[ "$STARTED_NAV2" -eq 1 ]] && [[ -n "$NAV2_PID" ]] && kill -0 "$NAV2_PID" 2>/dev/null; then
     log "Nav2 后台继续运行 (pid=$NAV2_PID)"
-    log "停止: source scripts/lib/cleanup_lidar_slam_nav.sh && cleanup_click_nav_stack_processes STOP echo"
   fi
 }
 trap cleanup EXIT
@@ -233,37 +166,39 @@ source_ros
 export MAP_YAML
 export POSE_STATE_FILE
 export LOG_DIR
-export NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-1}"
-export NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-0}"
+export NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-0}"
+export NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-1}"
+export NAV2_SKIP_DAEMON_REFRESH="${NAV2_SKIP_DAEMON_REFRESH:-1}"
 
-log "===== Qwen 会话 Nav2 导航（方案A 冷启动）====="
+log "===== Qwen 会话 Nav2 ======"
 log "MAP_YAML=$MAP_YAML"
 log "GOAL_JSON=$GOAL_JSON"
-log "POSE_STATE_FILE=$POSE_STATE_FILE"
-log "LOG_DIR=$LOG_DIR"
-log "NAV2_REUSE_EXISTING=$NAV2_REUSE_EXISTING"
+log "NAV2_REUSE_EXISTING=$NAV2_REUSE_EXISTING NAV2_STOP_CONFLICTS=$NAV2_STOP_CONFLICTS"
 print_nav_goal_from_json
 
-log_step 1 "冷启动 run_nav2_saved_map.sh"
+log_step 1 "启动 run_nav2_saved_map.sh"
 NAV2_START_EPOCH="$(date +%s)"
-log "后台启动 run_nav2_saved_map.sh ..."
-log "  步骤: 雷达 → 底盘 → map_server → AMCL → planner → bt_navigator"
 start_boot_log_follower
 bash "$PROJECT_DIR/scripts/slam/run_nav2_saved_map.sh" >> "$LOG_DIR/nav2_saved_map.log" 2>&1 &
 NAV2_PID=$!
 STARTED_NAV2=1
 log "run_nav2_saved_map pid=$NAV2_PID"
 
-log_step 2 "等待 Nav2 栈就绪（与 Foxglove 点击导航相同顺序）"
-if ! wait_nav2_stack_like_click_nav "$NAV2_START_EPOCH"; then
+log_step 2 "等待 ready.json（run_nav2_saved_map 内部已完成 readiness）"
+if ! wait_ready_json 300 "$NAV2_START_EPOCH" "$MAP_YAML"; then
   stop_boot_log_follower
   exit 1
 fi
 stop_boot_log_follower
-print_pose_state_summary "$POSE_STATE_FILE" || true
+wait_action_exists_cli /navigate_to_pose 20 || exit 1
+wait_action_exists_cli /compute_path_to_pose 20 || exit 1
 
-log_step 3 "发送 Qwen 目标到 /navigate_to_pose"
-log "Nav2 栈与 map->base_link TF 已就绪，发送目标 ..."
+if [[ "$NAV2_START_ONLY" == "1" ]]; then
+  log_step 3 "NAV2_START_ONLY：不发送导航目标"
+  exit 0
+fi
+
+log_step 3 "发送 Qwen 目标（ComputePathToPose 硬门禁）"
 python3 -u "$PROJECT_DIR/scripts/nav/send_navigation_goal_proposal.py" \
   --goal-json "$GOAL_JSON" \
   --pose-state-file "$POSE_STATE_FILE" \

@@ -508,3 +508,74 @@ verify_nav2_navigation_ready() {
   wait_nav_actions_ready "$timeout_sec" || return 1
   return 0
 }
+
+write_nav2_ready_json() {
+  local log_dir="$1"
+  local map_yaml="$2"
+  local started_at="${3:-}"
+  local reuse_scan="${4:-0}"
+  local reuse_scan_filtered="${5:-0}"
+  local reuse_chassis="${6:-0}"
+  local reuse_static_tf="${7:-0}"
+  python3 - "$log_dir" "$map_yaml" "$started_at" "$reuse_scan" "$reuse_scan_filtered" "$reuse_chassis" "$reuse_static_tf" <<'PY'
+import json
+import sys
+import time
+from pathlib import Path
+
+log_dir = Path(sys.argv[1])
+map_yaml = sys.argv[2]
+started_at = sys.argv[3]
+payload = {
+    "map_yaml": str(Path(map_yaml).resolve()),
+    "started_at": started_at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "ready_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "reuse_scan": sys.argv[4] == "1",
+    "reuse_scan_filtered": sys.argv[5] == "1",
+    "reuse_chassis": sys.argv[6] == "1",
+    "reuse_static_tf": sys.argv[7] == "1",
+    "map_ready": True,
+    "amcl_active": True,
+    "map_to_base_link": True,
+    "navigate_to_pose_ready": True,
+    "compute_path_to_pose_ready": True,
+}
+out = log_dir / "ready.json"
+out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+# legacy empty ready marker
+(log_dir / "ready").write_text("", encoding="utf-8")
+print(str(out))
+PY
+}
+
+wait_nav2_lifecycle_parallel() {
+  local timeout_sec="${1:-120}"
+  python3 - "$timeout_sec" "$_LIFECYCLE_PROBE" <<'PY'
+import subprocess
+import sys
+import time
+
+timeout = float(sys.argv[1])
+probe = sys.argv[2]
+nodes = ["/map_server", "/amcl", "/planner_server", "/controller_server", "/bt_navigator"]
+start = time.time()
+pending = set(nodes)
+while time.time() - start < timeout and pending:
+    for node in list(pending):
+        try:
+            out = subprocess.check_output(
+                ["python3", probe, "wait", node, "5"], text=True, stderr=subprocess.DEVNULL
+            )
+            if "active [3]" in out:
+                pending.discard(node)
+        except subprocess.CalledProcessError:
+            pass
+    if pending:
+        time.sleep(0.5)
+if pending:
+    print(f"[NAV2_BOOT] ERROR: lifecycle not active: {sorted(pending)}", flush=True)
+    raise SystemExit(1)
+print("[NAV2_BOOT] Nav2 lifecycle servers active (parallel wait)", flush=True)
+raise SystemExit(0)
+PY
+}

@@ -170,3 +170,42 @@ wait_map_base_link_tf() {
     sleep 1
   done
 }
+
+nav2_servers_running() {
+  pgrep -f "map_server|planner_server|controller_server|bt_navigator|amcl" >/dev/null 2>&1
+}
+
+stop_stale_nav2_servers_only() {
+  echo "[NAV2_REUSE] stop stale Nav2 servers (keep lidar/chassis) ..."
+  pkill -f "map_server|amcl|planner_server|controller_server|bt_navigator|behavior_server|smoother_server|velocity_smoother|waypoint_follower|lifecycle_manager|nav2_click_nav_bringup_launch.py|run_nav2_saved_map.sh" 2>/dev/null || true
+  sleep 1
+}
+
+check_fast_nav_reusable_stack() {
+  local label="${1:-FAST_NAV}"
+  local fail=0
+  _check() {
+    local name="$1"
+    shift
+    if "$@"; then
+      echo "[$label] OK: $name"
+    else
+      echo "[$label] FAIL: $name"
+      fail=1
+    fi
+  }
+  _check "/scan publishing" topic_is_publishing /scan 1 8
+  _check "/scan_filtered publishing" topic_is_publishing /scan_filtered 1 8
+  _check "/odom publishing" topic_is_publishing /odom 1 8
+  _check "odom->base_link TF" odom_base_link_tf_ready
+  _check "base_link->laser TF" laser_static_tf_ready "${LASER_FRAME:-laser}"
+  _check "slam_toolbox stopped" bash -c '! slam_toolbox_running'
+  _check "no stale Nav2 servers" bash -c '! nav2_servers_running'
+  if pgrep -f "teleop_twist_joy|joy_node" >/dev/null 2>&1; then
+    echo "[$label] FAIL: teleop still running"
+    fail=1
+  else
+    echo "[$label] OK: teleop stopped"
+  fi
+  return "$fail"
+}

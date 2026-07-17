@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -287,6 +288,88 @@ def resolve_qwen_map_yaml(nav_map_yaml: Path) -> Path:
     """默认查找与 nav yaml 同目录的 {stem}_qwen.yaml。"""
     candidate = nav_map_yaml.with_name(f"{nav_map_yaml.stem}_qwen.yaml")
     return candidate
+
+
+def parse_trajectory_line_bgr() -> Tuple[int, int, int]:
+    """轨迹中心线 BGR，默认绿色 (60, 170, 60)。"""
+    raw = os.environ.get("TRAJECTORY_LINE_BGR", "60,170,60").strip()
+    parts = [int(x.strip()) for x in raw.split(",")]
+    if len(parts) != 3:
+        return (60, 170, 60)
+    return tuple(parts)  # type: ignore[return-value]
+
+
+def file_fingerprint(path: Path) -> Dict[str, Any]:
+    path = path.expanduser().resolve()
+    if not path.is_file():
+        return {"path": str(path), "exists": False}
+    stat = path.stat()
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return {
+        "path": str(path),
+        "exists": True,
+        "mtime": stat.st_mtime,
+        "size": stat.st_size,
+        "sha256": digest.hexdigest()[:16],
+    }
+
+
+def read_robot_pose_uv(pose_uv_json: Path) -> Tuple[float, float, float]:
+    data = json.loads(pose_uv_json.read_text(encoding="utf-8"))
+    pose = data["robot_image_pose"]
+    return float(pose["u"]), float(pose["v"]), float(pose["yaw_deg"])
+
+
+def validate_goal_for_nav_validation(
+    goal_json: Path,
+    *,
+    expected_map_yaml: Path,
+    allow_fallback: bool = False,
+    free_threshold: int = FREE_THRESHOLD,
+) -> Tuple[bool, str]:
+    """检查是否允许启动 Nav2 进行路径验证（非 ready_for_nav2）。"""
+    if not goal_json.is_file():
+        return False, "navigation_goal_proposal.json 不存在"
+    data = json.loads(goal_json.read_text(encoding="utf-8"))
+    if data.get("selection_status") != "REGION_PROPOSED":
+        return False, "selection_status 不是 REGION_PROPOSED"
+    goal = data.get("goal_pose_map") or {}
+    for key in ("x", "y", "yaw_rad", "yaw_deg"):
+        if key not in goal or not math.isfinite(float(goal[key])):
+            return False, f"goal_pose_map.{key} 无效"
+    map_yaml = Path(str(data.get("map_yaml", ""))).resolve()
+    if map_yaml != expected_map_yaml.resolve():
+        return False, "map_yaml 与会话 MAP_YAML 不一致"
+    safety = data.get("safety") or {}
+    if not safety.get("candidate_geometry_validated", False):
+        return False, "candidate_geometry_validated != true"
+    sel = data.get("qwen_selection") or {}
+    selected_by = str(sel.get("selected_by", ""))
+    if selected_by == "python_fallback_after_qwen_error" and not allow_fallback:
+        return False, "Qwen fallback 目标未显式允许导航 (--allow-nav-with-fallback)"
+    local_id = int(sel.get("selected_local_id", 0))
+    if local_id < 1:
+        return False, "selected_local_id 无效"
+    try:
+        meta = load_map_yaml_meta(expected_map_yaml)
+        pgm = expected_map_yaml.parent / yaml.safe_load(
+            expected_map_yaml.read_text(encoding="utf-8")
+        ).get("image", expected_map_yaml.with_suffix(".pgm").name)
+        if not pgm.is_file():
+            pgm = expected_map_yaml.with_suffix(".pgm")
+        gray = cv2.imread(str(pgm), cv2.IMREAD_GRAYSCALE)
+        if gray is None:
+            return False, "无法读取干净 PGM"
+        px = int(goal.get("pixel_x", -1))
+        py = int(goal.get("pixel_y", -1))
+        if not (0 <= px < meta.width and 0 <= py < meta.height):
+            return False, "目标像素超出地图边界"
+        if gray[py, px] < free_threshold:
+            return False, "目标不在干净地图 free 区域"
+    except Exception as exc:
+        return False, f"几何校验异常: {exc}"
+    return True, "ok"
 
 
 def proposal_dict_from_region_proposal(proposal: Any) -> Dict[str, Any]:

@@ -16,6 +16,14 @@ VOICE_ENV_FILE="${VOICE_ENV_FILE:-$VOICE_ROOT/.env}"
 
 source "$ROOT/scripts/lib/ros_env.sh"
 source "$ROOT/scripts/lib/camera_stack.sh"
+source "$ROOT/scripts/lib/qwen_ready.sh"
+source "$ROOT/scripts/lib/nav_api_env.sh"
+
+if [[ -f "$PROJECT_DIR/scripts/lib/ros_dds_env.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$PROJECT_DIR/scripts/lib/ros_dds_env.sh"
+  attach_ros_dds_env
+fi
 
 mkdir -p "$ROOT/logs"
 
@@ -39,6 +47,7 @@ set -a
 source "$VOICE_ENV_FILE"
 set +a
 : "${DASHSCOPE_API_KEY:?Please configure DASHSCOPE_API_KEY in $VOICE_ENV_FILE}"
+load_nav_api_env "$PROJECT_DIR" "$ROOT"
 
 # The voice command itself is the final user confirmation, so the voice version
 # enables real motion by default. Use MOTION_ENABLED=0 for a dry run.
@@ -101,6 +110,68 @@ MUX_PID=""
 FOXGLOVE_PID=""
 CLEANUP_DONE=0
 
+# Startup timing helpers: wall clock + per-process age while waiting.
+STACK_T0="$(date +%s.%N)"
+STEP_T0="$STACK_T0"
+declare -A PROC_T0=()
+
+now_s() { date +%s.%N; }
+
+elapsed_s() {
+  local start="${1:-$STACK_T0}"
+  awk -v s="$start" -v e="$(now_s)" 'BEGIN { printf "%.1f", e - s }'
+}
+
+log_ts() {
+  echo "[$(date '+%H:%M:%S')][+$(elapsed_s "$STACK_T0")s] $*"
+}
+
+mark_step() {
+  local name="$1"
+  local took
+  took="$(elapsed_s "$STEP_T0")"
+  log_ts "[step] $name (took ${took}s since previous step)"
+  STEP_T0="$(now_s)"
+}
+
+mark_proc() {
+  local name="$1"
+  local pid="${2:-}"
+  PROC_T0["$name"]="$(now_s)"
+  if [[ -n "$pid" ]]; then
+    log_ts "[proc] start $name pid=$pid"
+  else
+    log_ts "[proc] start $name (reuse/external)"
+  fi
+}
+
+proc_status_line() {
+  local name="$1"
+  local pid="${2:-}"
+  local age="-"
+  if [[ -n "${PROC_T0[$name]:-}" ]]; then
+    age="$(elapsed_s "${PROC_T0[$name]}")s"
+  fi
+  if [[ -z "$pid" ]]; then
+    printf '%s=n/a(%s)' "$name" "$age"
+  elif kill -0 "$pid" 2>/dev/null; then
+    printf '%s=alive(pid=%s,age=%s)' "$name" "$pid" "$age"
+  else
+    printf '%s=DEAD(pid=%s,age=%s)' "$name" "$pid" "$age"
+  fi
+}
+
+log_proc_snapshot() {
+  local parts=()
+  parts+=("$(proc_status_line camera "${CAMERA_PID:-}")")
+  parts+=("$(proc_status_line bridge "${BRIDGE_PID:-}")")
+  parts+=("$(proc_status_line foxglove "${FOXGLOVE_PID:-}")")
+  parts+=("$(proc_status_line mux "${MUX_PID:-}")")
+  parts+=("$(proc_status_line qwen "${QWEN_PID:-}")")
+  parts+=("$(proc_status_line servo "${SERVO_PID:-}")")
+  log_ts "[procs] ${parts[*]}"
+}
+
 kill_pid_tree() {
   local pid="$1"
   [[ -z "$pid" ]] && return 0
@@ -145,26 +216,37 @@ trap cleanup EXIT
 trap on_signal INT TERM
 
 # Reuse the tested camera -> bgr8 bridge stack.
+STACK_T0="$(now_s)"
+STEP_T0="$STACK_T0"
+log_ts "[nav] begin camera / bridge / mux / qwen / servo startup"
 ensure_compressed_camera "$ROOT" "$ROOT/logs/camera.log"
+mark_proc camera "${CAMERA_PID:-}"
+mark_step "camera ready"
 start_raw_bridge "$ROOT" "$ROOT/logs/image_raw_bridge.log"
+mark_proc bridge "${BRIDGE_PID:-}"
+mark_step "image_raw bridge ready"
 
 if [[ "${START_FOXGLOVE:-1}" == "1" ]]; then
   port="${FOXGLOVE_PORT:-8765}"
   if ss -tln 2>/dev/null | grep -q ":${port} "; then
+    mark_proc foxglove ""
     echo "[foxglove] reuse port $port"
   elif ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
     ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:="$port" \
       >"$ROOT/logs/qwen_servo_foxglove.log" 2>&1 &
     FOXGLOVE_PID=$!
+    mark_proc foxglove "$FOXGLOVE_PID"
     echo "[foxglove] starting on ws://:$port"
   else
     echo "[foxglove] WARN: foxglove_bridge package not installed"
   fi
+  mark_step "foxglove checked"
 fi
 
 # Reuse the joy > autonomy priority mux used by the current V1 stack.
 if [[ "${START_CMD_VEL_MUX:-1}" == "1" ]]; then
   if pgrep -f "cmd_vel_priority_mux.py" >/dev/null 2>&1; then
+    mark_proc mux ""
     echo "[mux] reuse existing cmd_vel_priority_mux.py"
   elif [[ -f "$PROJECT_DIR/scripts/control/cmd_vel_priority_mux.py" ]]; then
     python3 -u "$PROJECT_DIR/scripts/control/cmd_vel_priority_mux.py" \
@@ -177,53 +259,68 @@ if [[ "${START_CMD_VEL_MUX:-1}" == "1" ]]; then
       --joy-deadzone "${JOY_DEADZONE:-0.08}" \
       >"$ROOT/logs/qwen_servo_cmd_vel_mux.log" 2>&1 &
     MUX_PID=$!
+    mark_proc mux "$MUX_PID"
     echo "[mux] /cmd_vel_autonomy -> /cmd_vel"
   else
     echo "ERROR: cmd_vel mux missing: $PROJECT_DIR/scripts/control/cmd_vel_priority_mux.py" >&2
     exit 1
   fi
+  mark_step "mux ready"
 fi
 
 # The English instruction produced by the voice stage is passed exactly through
 # the same positional interface used by the original start_live_servo.sh.
+log_ts "[qwen] launching start_debug_node.sh (log: $ROOT/logs/qwen_live_servo_qwen.log)"
 QWEN_CONFIG="$FAST_CONFIG" \
   bash "$ROOT/scripts/start_debug_node.sh" "$INSTRUCTION" \
   >"$ROOT/logs/qwen_live_servo_qwen.log" 2>&1 &
 QWEN_PID=$!
+mark_proc qwen "$QWEN_PID"
 
-for _ in $(seq 1 30); do
-  if ros2 topic info /qwen_vln/result_json 2>/dev/null | grep -Eq 'Publisher count: [1-9]'; then
-    break
-  fi
-  if ! kill -0 "$QWEN_PID" 2>/dev/null; then
-    echo "ERROR: Qwen node exited" >&2
-    tail -n 100 "$ROOT/logs/qwen_live_servo_qwen.log" || true
-    exit 1
-  fi
-  sleep 1
-done
+QWEN_LOG="$ROOT/logs/qwen_live_servo_qwen.log"
+QWEN_WAIT_MAX="${QWEN_WAIT_MAX:-60}"
 
-if ! ros2 topic info /qwen_vln/result_json 2>/dev/null | grep -Eq 'Publisher count: [1-9]'; then
-  echo "ERROR: /qwen_vln/result_json did not become ready within 30 seconds" >&2
-  tail -n 100 "$ROOT/logs/qwen_live_servo_qwen.log" || true
+_qwen_wait_tick() {
+  local attempt="$1"
+  local max_attempts="$2"
+  log_ts "[wait] try ${attempt}/${max_attempts} qwen not ready yet (qwen age $(elapsed_s "${PROC_T0[qwen]}")s)"
+  log_proc_snapshot
+}
+
+if ! wait_qwen_debug_ready "$QWEN_PID" "$QWEN_LOG" "$QWEN_WAIT_MAX" \
+    /qwen_vln/result_json _qwen_wait_tick; then
+  log_ts "[wait] FAILED after ${QWEN_WAIT_MAX}s / total $(elapsed_s "$STACK_T0")s"
+  log_proc_snapshot
+  echo "ERROR: Qwen node did not become ready within ${QWEN_WAIT_MAX}s" >&2
+  tail -n 100 "$QWEN_LOG" || true
   exit 1
 fi
+log_ts "[wait] qwen ready (qwen age $(elapsed_s "${PROC_T0[qwen]}")s)"
+log_proc_snapshot
+mark_step "qwen /qwen_vln/result_json ready"
 
 SERVO_ARGS=(--config "${SERVO_CONFIG:-$ROOT/configs/qwen3_vln_servo.yaml}")
 if [[ "$MOTION_ENABLED" == "1" ]]; then
   SERVO_ARGS+=(--enable-motion)
 fi
 
+log_ts "[servo] launching qwen_visual_servo_node.py"
 python3 -u "$ROOT/src/apps/qwen_visual_servo_node.py" "${SERVO_ARGS[@]}" \
   >"$ROOT/logs/qwen_visual_servo.log" 2>&1 &
 SERVO_PID=$!
+mark_proc servo "$SERVO_PID"
 
 sleep 1
 if ! kill -0 "$SERVO_PID" 2>/dev/null; then
+  log_ts "[servo] FAILED during startup"
+  log_proc_snapshot
   echo "ERROR: visual servo node exited during startup" >&2
   tail -n 100 "$ROOT/logs/qwen_visual_servo.log" || true
   exit 1
 fi
+mark_step "servo process alive"
+log_proc_snapshot
+log_ts "[nav] stack ready in $(elapsed_s "$STACK_T0")s total"
 
 cat <<EOF
 

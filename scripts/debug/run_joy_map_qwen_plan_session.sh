@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# 手柄建图 + 路径/位姿标注 + OK 保存 + Qwen 全局区域规划 — 仅编排已有脚本，不修改其它进程代码。
+# 手柄建图 + 路径/位姿标注 + OK 保存 + Qwen 全局区域规划 — 编排层脚本。
 #
 # 流程：
-#   1) 调用 run_joy_mapping_calibrated.sh（或 --attach-only 附着已运行的建图栈）
-#   2) 调用 start_frontier_region_debug.sh 实时标注已走路径（若尚未运行）
-#   3) 终端输入 OK → 保存地图与标注 → 调用 export_session_map_annotations.py（大号朝向箭头）
-#   4) 调用 qwen_live_session_planner.py（v6 候选 + Qwen 第二阶段）
-#   5) Qwen 选点完成后自动 Nav2 导航（默认开启，方案A 冷启动，对齐 Foxglove 点击导航）
+#   1) run_joy_mapping_calibrated.sh（或 --attach-only）
+#   2) start_frontier_region_debug.sh 实时标注
+#   3) OK → 保存地图 → export 标注 → Qwen 选点
+#   4) 快速 SLAM→Nav2 交接（默认 --fast-nav）或冷启动回退（--cold-nav）
 #
-# 启动：默认不预清理、不重复 ros2 健康检查（建图脚本内部已验证）；冲突时加 --preflight-cleanup
-#
-# 安全：本脚本不直接发布 /cmd_vel；仅停止本脚本自己启动的子进程。
+# 安全：本脚本在 Nav2 交接时会 pkill 建图/teleop/slam_toolbox，快速模式保留雷达/底盘；
+#       冷启动模式会调用 cleanup_click_nav_stack_processes 全量清理。预清理见 --preflight-cleanup。
 set -Eeuo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,9 +21,27 @@ KEEP_MAPPING=1
 STOP_AFTER_SAVE=0
 AUTO_NAV=1
 PREFLIGHT_CLEANUP=0
+FAST_NAV=1
+ALLOW_NAV_FALLBACK=0
+NAV2_START_ONLY=0
 MAP_NAME="${MAP_NAME:-joy_calibrated_corridor_map}"
 TASK="${QWEN_TASK:-优先探索尚未覆盖、最可能扩展地图的区域。}"
 QWEN_EXTRA_ARGS=()
+
+# 阶段耗时（秒，浮点）
+TIMING_STOP_ROBOT_S=0
+TIMING_COPY_ARTIFACTS_S=0
+TIMING_SAVE_MAP_S=0
+TIMING_EXPORT_QWEN_MAP_S=0
+TIMING_EXPORT_ANNOTATION_S=0
+TIMING_CANDIDATE_GENERATION_S=0
+TIMING_QWEN_API_S=0
+TIMING_MAPPING_TO_NAV_HANDOFF_S=0
+TIMING_NAV2_BOOT_S=0
+TIMING_COMPUTE_PATH_S=0
+TIMING_NAVIGATION_S=0
+TIMING_TOTAL_AFTER_OK_S=0
+OK_EPOCH=0
 
 # shellcheck source=scripts/lib/ros_dds_env.sh
 source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
@@ -50,6 +66,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN_QWEN=1
+      AUTO_NAV=0
       shift
       ;;
     --stop-after-save)
@@ -67,6 +84,23 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-auto-nav)
       AUTO_NAV=0
+      shift
+      ;;
+    --fast-nav)
+      FAST_NAV=1
+      shift
+      ;;
+    --cold-nav)
+      FAST_NAV=0
+      shift
+      ;;
+    --allow-nav-with-fallback)
+      ALLOW_NAV_FALLBACK=1
+      shift
+      ;;
+    --nav2-start-only)
+      NAV2_START_ONLY=1
+      AUTO_NAV=1
       shift
       ;;
     --preflight-cleanup)
@@ -99,6 +133,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$DRY_RUN_QWEN" -eq 1 && "$AUTO_NAV" -eq 1 ]]; then
+  echo "[FATAL] --dry-run 禁止真实运动，不能与 --auto-nav 同时使用"
+  exit 1
+fi
 
 SESSION_ID="JQS_$(date -u +%Y%m%dT%H%M%SZ)"
 SESSION_DIR="$PROJECT_DIR/logs/joy_qwen_session/$SESSION_ID"
@@ -143,6 +182,50 @@ source_ros_environment() {
 
 log() {
   echo "[$(date +%H:%M:%S)] $*" | tee -a "$SESSION_DIR/session.log"
+}
+
+timing_log() {
+  log "[TIMING] $*"
+}
+
+write_pipeline_timing_json() {
+  local mode="${1:-fast_nav}"
+  python3 - "$SESSION_DIR/pipeline_timing.json" "$mode" <<'PY'
+import json, os, sys
+from pathlib import Path
+path, mode = sys.argv[1], sys.argv[2]
+payload = {
+    "mode": mode,
+    "stop_robot_s": float(os.environ.get("JQS_TIMING_STOP_ROBOT_S", 0)),
+    "copy_artifacts_s": float(os.environ.get("JQS_TIMING_COPY_ARTIFACTS_S", 0)),
+    "save_map_s": float(os.environ.get("JQS_TIMING_SAVE_MAP_S", 0)),
+    "export_qwen_map_s": float(os.environ.get("JQS_TIMING_EXPORT_QWEN_MAP_S", 0)),
+    "export_annotation_s": float(os.environ.get("JQS_TIMING_EXPORT_ANNOTATION_S", 0)),
+    "candidate_generation_s": float(os.environ.get("JQS_TIMING_CANDIDATE_GENERATION_S", 0)),
+    "qwen_api_s": float(os.environ.get("JQS_TIMING_QWEN_API_S", 0)),
+    "mapping_to_nav_handoff_s": float(os.environ.get("JQS_TIMING_MAPPING_TO_NAV_HANDOFF_S", 0)),
+    "nav2_boot_s": float(os.environ.get("JQS_TIMING_NAV2_BOOT_S", 0)),
+    "compute_path_s": float(os.environ.get("JQS_TIMING_COMPUTE_PATH_S", 0)),
+    "navigation_s": float(os.environ.get("JQS_TIMING_NAVIGATION_S", 0)),
+    "total_after_ok_s": float(os.environ.get("JQS_TIMING_TOTAL_AFTER_OK_S", 0)),
+}
+Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+export_timing_env() {
+  export JQS_TIMING_STOP_ROBOT_S="$TIMING_STOP_ROBOT_S"
+  export JQS_TIMING_COPY_ARTIFACTS_S="$TIMING_COPY_ARTIFACTS_S"
+  export JQS_TIMING_SAVE_MAP_S="$TIMING_SAVE_MAP_S"
+  export JQS_TIMING_EXPORT_QWEN_MAP_S="$TIMING_EXPORT_QWEN_MAP_S"
+  export JQS_TIMING_EXPORT_ANNOTATION_S="$TIMING_EXPORT_ANNOTATION_S"
+  export JQS_TIMING_CANDIDATE_GENERATION_S="$TIMING_CANDIDATE_GENERATION_S"
+  export JQS_TIMING_QWEN_API_S="$TIMING_QWEN_API_S"
+  export JQS_TIMING_MAPPING_TO_NAV_HANDOFF_S="$TIMING_MAPPING_TO_NAV_HANDOFF_S"
+  export JQS_TIMING_NAV2_BOOT_S="$TIMING_NAV2_BOOT_S"
+  export JQS_TIMING_COMPUTE_PATH_S="$TIMING_COMPUTE_PATH_S"
+  export JQS_TIMING_NAVIGATION_S="$TIMING_NAVIGATION_S"
+  export JQS_TIMING_TOTAL_AFTER_OK_S="$TIMING_TOTAL_AFTER_OK_S"
 }
 
 refresh_ros2_daemon() {
@@ -397,6 +480,7 @@ PY
 
 reset_nav_goal_json_pending() {
   mkdir -p "$(dirname "$NAV_GOAL_JSON")"
+  rm -f "$PROJECT_DIR/runtime/qwen_session/live_candidates_foxglove.json"
   python3 - "$NAV_GOAL_JSON" "$SESSION_ID" <<'PY'
 import json
 import sys
@@ -459,21 +543,23 @@ else:
 PY
 }
 
-goal_ready_for_nav() {
+goal_ready_for_nav_validation() {
   local goal_json="$1"
-  python3 - "$goal_json" <<'PY'
-import json
+  local map_yaml="$2"
+  local allow_fallback="${3:-0}"
+  python3 - "$goal_json" "$map_yaml" "$allow_fallback" "$PROJECT_DIR/scripts/debug" <<'PY'
 import sys
 from pathlib import Path
+sys.path.insert(0, sys.argv[4])
+from qwen_map_goal_utils import validate_goal_for_nav_validation
 
-path = Path(sys.argv[1])
-if not path.is_file():
-    raise SystemExit(1)
-data = json.loads(path.read_text(encoding="utf-8"))
-if data.get("selection_status") != "REGION_PROPOSED":
-    raise SystemExit(1)
-goal = data.get("goal_pose_map")
-if not goal or "x" not in goal or "y" not in goal:
+ok, msg = validate_goal_for_nav_validation(
+    Path(sys.argv[1]),
+    expected_map_yaml=Path(sys.argv[2]),
+    allow_fallback=sys.argv[3] == "1",
+)
+if not ok:
+    print(msg, file=sys.stderr)
     raise SystemExit(1)
 raise SystemExit(0)
 PY
@@ -555,13 +641,10 @@ PY
   return 1
 }
 
-stop_slam_stack_for_nav() {
-  log "  [方案A] Nav2 冷启动交接（对齐 run_nav2_foxglove_click_goal.sh）..."
-
-  log "  [1/6] 刷新 Nav2 初始位姿（切换前最后一次 map->base_link）..."
-  refresh_session_pose_before_nav || true
-
-  log "  [2/6] 停车并结束本会话建图/标注进程 ..."
+stop_mapping_control_for_fast_nav() {
+  local t0
+  t0="$(date +%s)"
+  log "  [快速交接] 停止 teleop + slam_toolbox，保留雷达/底盘/scan_filter ..."
   source_ros_environment
   timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
     "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 5 \
@@ -571,32 +654,106 @@ stop_slam_stack_for_nav() {
     bash "$PROJECT_DIR/scripts/nav/stop_frontier_region_debug.sh" >> "$SESSION_DIR/session.log" 2>&1 || true
   fi
 
-  if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]]; then
-    log "        → 结束 joy_mapping pid=$JOY_PID（SIGKILL，避免 INT 二次 save_map）"
-    kill -9 "$JOY_PID" 2>/dev/null || true
-    if [[ -n "$JOY_PGID" ]]; then
-      kill -9 "-$JOY_PGID" 2>/dev/null || true
+  pkill -f "joy_node|teleop_twist_joy" 2>/dev/null || true
+  pkill -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
+
+  local i
+  for i in $(seq 1 15); do
+    if ! slam_toolbox_running; then
+      break
     fi
+    sleep 0.4
+  done
+  if slam_toolbox_running; then
+    log "        WARN: slam_toolbox 仍在运行，尝试 SIGKILL"
+    pkill -9 -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
+    sleep 1
+  fi
+
+  if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]]; then
+    kill -9 "$JOY_PID" 2>/dev/null || true
+    [[ -n "$JOY_PGID" ]] && kill -9 "-$JOY_PGID" 2>/dev/null || true
+  fi
+  pkill -9 -f "run_joy_mapping_calibrated.sh|run_corridor_mapping_live_foxglove.sh" 2>/dev/null || true
+
+  for i in $(seq 1 10); do
+    if ! map_topic_has_publisher || ! pgrep -f "slam_toolbox" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.5
+  done
+
+  TIMING_STOP_ROBOT_S=$(( $(date +%s) - t0 ))
+  timing_log "stop_robot=${TIMING_STOP_ROBOT_S}s"
+}
+
+stop_all_stacks_for_cold_nav() {
+  local t0
+  t0="$(date +%s)"
+  log "  [冷启动交接] 全量停止并清理 ..."
+  refresh_session_pose_before_nav || true
+  source_ros_environment
+  timeout 1.2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 5 \
+    >/dev/null 2>&1 || true
+
+  if [[ "$STARTED_DEBUG" -eq 1 ]]; then
+    bash "$PROJECT_DIR/scripts/nav/stop_frontier_region_debug.sh" >> "$SESSION_DIR/session.log" 2>&1 || true
+  fi
+  if [[ "$STARTED_JOY" -eq 1 ]] && [[ -n "$JOY_PID" ]]; then
+    kill -9 "$JOY_PID" 2>/dev/null || true
+    [[ -n "$JOY_PGID" ]] && kill -9 "-$JOY_PGID" 2>/dev/null || true
   fi
   pkill -9 -f "run_joy_mapping_calibrated.sh|run_corridor_mapping_live_foxglove.sh|run_slam_calibrated.sh" 2>/dev/null || true
   pkill -9 -f "joy_node|teleop_twist_joy|async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
   sleep 2
-
-  log "  [3/6] 全量清理 Nav2/雷达/底盘栈（cleanup_click_nav_stack_processes）..."
   cleanup_click_nav_stack_processes "QWEN_NAV2" log
-
-  log "  [4/6] 刷新 ros2 daemon ..."
   timeout 5 ros2 daemon stop >> "$SESSION_DIR/session.log" 2>&1 || true
   sleep 2
   timeout 10 ros2 daemon start >> "$SESSION_DIR/session.log" 2>&1 || true
   sleep 2
-
-  log "  [5/6] 准备 DDS 环境 + 等待串口释放 (ydlidar/rosmaster) ..."
   prepare_ros_dds_env
-  sleep 4
+  sleep 2
+  TIMING_STOP_ROBOT_S=$(( $(date +%s) - t0 ))
+  timing_log "stop_robot(cold)=${TIMING_STOP_ROBOT_S}s"
+}
 
-  log "  [6/6] Nav2 将冷启动传感器栈（NAV2_REUSE_EXISTING=0）"
-  NAV2_REUSE_SCAN=0
+perform_mapping_to_nav_handoff() {
+  local t0 mode
+  t0="$(date +%s)"
+  refresh_session_pose_before_nav || true
+
+  if [[ "$FAST_NAV" -eq 1 ]]; then
+    stop_mapping_control_for_fast_nav
+    if check_fast_nav_reusable_stack "FAST_NAV"; then
+      mode="fast_nav"
+      export NAV2_STOP_CONFLICTS=0
+      export NAV2_REUSE_EXISTING=1
+      export NAV2_SKIP_DAEMON_REFRESH=1
+      log "  快速模式：复用传感器，仅启动 map_server/AMCL/Nav2"
+    else
+      log "  WARN: 快速模式健康检查失败，回退冷启动"
+      stop_all_stacks_for_cold_nav
+      mode="cold_nav_fallback"
+      export NAV2_STOP_CONFLICTS=1
+      export NAV2_REUSE_EXISTING=0
+      unset NAV2_SKIP_DAEMON_REFRESH
+    fi
+  else
+    stop_all_stacks_for_cold_nav
+    mode="cold_nav"
+    export NAV2_STOP_CONFLICTS=1
+    export NAV2_REUSE_EXISTING=0
+    unset NAV2_SKIP_DAEMON_REFRESH
+  fi
+
+  TIMING_MAPPING_TO_NAV_HANDOFF_S=$(( $(date +%s) - t0 ))
+  timing_log "mapping_to_nav_handoff=${TIMING_MAPPING_TO_NAV_HANDOFF_S}s mode=$mode"
+  export JQS_NAV_MODE="$mode"
+}
+
+stop_slam_stack_for_nav() {
+  perform_mapping_to_nav_handoff
 }
 
 run_qwen_nav2_phase() {
@@ -604,47 +761,46 @@ run_qwen_nav2_phase() {
     log "FAIL: 缺少 navigation_goal_proposal.json"
     exit 1
   fi
-  if ! goal_ready_for_nav "$NAV_GOAL_JSON"; then
-    log "FAIL: Qwen 目标无效 (需要 selection_status=REGION_PROPOSED)"
+  if ! goal_ready_for_nav_validation "$NAV_GOAL_JSON" "$MAP_YAML" "$ALLOW_NAV_FALLBACK"; then
+    log "FAIL: 目标未通过 Nav2 验证门禁（geometry/path/allow-fallback）"
     exit 1
   fi
 
   log_phase "[5/5] 自动 Nav2 导航到 Qwen 目标"
   print_nav_goal_summary "$NAV_GOAL_JSON"
-  log "Nav2 冷启动通常需 90–210s；下方会逐步打印 [QWEN_NAV2] 进度"
   log "完整日志目录: $SESSION_DIR/nav2_logs/"
 
+  local nav_t0 nav_boot_t0
+  nav_t0="$(date +%s)"
   stop_slam_stack_for_nav
 
   SESSION_POSE="$SESSION_DIR/last_pose_map.json"
   if [[ -f "$SESSION_POSE" ]]; then
     export POSE_STATE_FILE="$SESSION_POSE"
-  else
-    export POSE_STATE_FILE="$POSE_STATE_FILE"
   fi
   export LOG_DIR="$SESSION_DIR/nav2_logs"
-  export NAV2_STOP_CONFLICTS=1
-  export NAV2_REUSE_EXISTING=0
-  unset NAV2_SKIP_DAEMON_REFRESH
-  if [[ -f "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh" ]]; then
-    # shellcheck source=scripts/lib/slam_calibrated_env.sh
-    source "${PROJECT_DIR}/scripts/lib/slam_calibrated_env.sh"
-  fi
-  log "Nav2 冷启动（方案A，NAV2_REUSE_EXISTING=0，与 Foxglove 点击导航一致）"
+  export NAV2_START_ONLY="$NAV2_START_ONLY"
   mkdir -p "$LOG_DIR"
 
-  log "启动 run_qwen_session_nav2_goal.sh ..."
-  log "  map=$MAP_YAML"
-  log "  pose=$POSE_STATE_FILE"
+  nav_boot_t0="$(date +%s)"
   if bash "$PROJECT_DIR/scripts/nav/run_qwen_session_nav2_goal.sh" \
     "$MAP_YAML" "$NAV_GOAL_JSON" \
     2>&1 | tee "$SESSION_DIR/nav2_run.log"; then
-    log "✓ Nav2 导航成功完成"
+    log "✓ Nav2 阶段完成"
   else
-    log "✗ Nav2 导航失败，详见 $SESSION_DIR/nav2_run.log"
-    tail -40 "$SESSION_DIR/nav2_run.log" 2>/dev/null || true
+    log "✗ Nav2 阶段失败，详见 $SESSION_DIR/nav2_run.log"
+    TIMING_NAV2_BOOT_S=$(( $(date +%s) - nav_boot_t0 ))
+    TIMING_TOTAL_AFTER_OK_S=$(( $(date +%s) - OK_EPOCH ))
+    export_timing_env
+    write_pipeline_timing_json "${JQS_NAV_MODE:-fast_nav}"
     exit 1
   fi
+  TIMING_NAV2_BOOT_S=$(( $(date +%s) - nav_boot_t0 ))
+  TIMING_NAVIGATION_S=$(( $(date +%s) - nav_t0 ))
+  TIMING_TOTAL_AFTER_OK_S=$(( $(date +%s) - OK_EPOCH ))
+  export_timing_env
+  write_pipeline_timing_json "${JQS_NAV_MODE:-fast_nav}"
+  timing_log "nav2_boot=${TIMING_NAV2_BOOT_S}s navigation_total=${TIMING_NAVIGATION_S}s total_after_ok=${TIMING_TOTAL_AFTER_OK_S}s"
 }
 
 stop_started_processes() {
@@ -732,6 +888,10 @@ write_session_meta() {
   export JQS_META_STARTED_JOY="$STARTED_JOY"
   export JQS_META_STARTED_DEBUG="$STARTED_DEBUG"
   export JQS_META_SKIP_QWEN="$SKIP_QWEN"
+  export JQS_META_DRY_RUN_QWEN="$DRY_RUN_QWEN"
+  export JQS_META_FAST_NAV="$FAST_NAV"
+  export JQS_META_ALLOW_NAV_FALLBACK="$ALLOW_NAV_FALLBACK"
+  export JQS_META_NAV2_START_ONLY="$NAV2_START_ONLY"
   export JQS_META_KEEP_MAPPING="$KEEP_MAPPING"
   export JQS_META_AUTO_NAV="$AUTO_NAV"
   export JQS_META_TASK="$TASK"
@@ -749,6 +909,9 @@ meta = {
     "started_frontier_debug": os.environ.get("JQS_META_STARTED_DEBUG") == "1",
     "skip_qwen": os.environ.get("JQS_META_SKIP_QWEN") == "1",
     "dry_run_qwen": os.environ.get("JQS_META_DRY_RUN_QWEN") == "1",
+    "fast_nav": os.environ.get("JQS_META_FAST_NAV", "1") == "1",
+    "allow_nav_fallback": os.environ.get("JQS_META_ALLOW_NAV_FALLBACK") == "1",
+    "nav2_start_only": os.environ.get("JQS_META_NAV2_START_ONLY") == "1",
     "keep_mapping": os.environ.get("JQS_META_KEEP_MAPPING") == "1",
     "stop_after_save": os.environ.get("JQS_META_STOP_AFTER_SAVE") == "1",
     "auto_nav": os.environ.get("JQS_META_AUTO_NAV") == "1",
@@ -886,6 +1049,7 @@ done
 # Phase 4: 保存 + 导出标注 + Qwen
 # ---------------------------------------------------------------------------
 log "[4/4] 收到 OK，开始保存 ..."
+OK_EPOCH="$(date +%s)"
 log "停车 3s，等待位姿/TF 稳定 ..."
 source_ros_environment
 timeout 2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
@@ -893,12 +1057,18 @@ timeout 2 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
   >/dev/null 2>&1 || true
 sleep 3
 
+t_copy="$(date +%s)"
 copy_live_debug_artifacts
+refresh_session_pose_before_nav || true
+TIMING_COPY_ARTIFACTS_S=$(( $(date +%s) - t_copy ))
 
+t_save="$(date +%s)"
 if ! save_map_to_session; then
   log "FAIL: 地图保存失败"
   exit 1
 fi
+TIMING_SAVE_MAP_S=$(( $(date +%s) - t_save ))
+timing_log "save_map=${TIMING_SAVE_MAP_S}s"
 
 MAP_YAML="$SESSION_DIR/map/${MAP_NAME}.yaml"
 ANNOTATED_PNG="$SESSION_DIR/annotated_map_for_qwen.png"
@@ -924,6 +1094,7 @@ VISITED_CORRIDOR_RADIUS_M="${VISITED_CORRIDOR_RADIUS_M:-$(
 )}"
 
 QWEN_MAP_YAML="$SESSION_DIR/map/${MAP_NAME}_qwen.yaml"
+t_eqwen="$(date +%s)"
 if [[ -f "$TRAJ_FOR_QWEN" ]]; then
   python3 "$PROJECT_DIR/scripts/debug/export_qwen_visited_map.py" \
     --map-yaml "$MAP_YAML" \
@@ -935,7 +1106,9 @@ if [[ -f "$TRAJ_FOR_QWEN" ]]; then
 else
   log "WARN: 无 trajectory，跳过 Qwen 专用 PGM 导出"
 fi
+TIMING_EXPORT_QWEN_MAP_S=$(( $(date +%s) - t_eqwen ))
 
+t_annot="$(date +%s)"
 python3 "$PROJECT_DIR/scripts/debug/export_session_map_annotations.py" \
   --map-yaml "$MAP_YAML" \
   --pose-json "$POSE_STATE_FILE" \
@@ -945,10 +1118,18 @@ python3 "$PROJECT_DIR/scripts/debug/export_session_map_annotations.py" \
   --corridor-radius-m "$VISITED_CORRIDOR_RADIUS_M" \
   ${LIVE_REF:+--copy-live-annotated "$LIVE_REF"} \
   | tee "$SESSION_DIR/robot_pose_uv.stdout.json"
+TIMING_EXPORT_ANNOTATION_S=$(( $(date +%s) - t_annot ))
+timing_log "export_qwen_map=${TIMING_EXPORT_QWEN_MAP_S}s export_annotation=${TIMING_EXPORT_ANNOTATION_S}s"
 
-ROBOT_U="$(python3 -c "import json;print(json.load(open('$POSE_UV_JSON'))['robot_image_pose']['u'])")"
-ROBOT_V="$(python3 -c "import json;print(json.load(open('$POSE_UV_JSON'))['robot_image_pose']['v'])")"
-ROBOT_YAW="$(python3 -c "import json;print(json.load(open('$POSE_UV_JSON'))['robot_image_pose']['yaw_deg'])")"
+read -r ROBOT_U ROBOT_V ROBOT_YAW < <(
+python3 - "$POSE_UV_JSON" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+pose = data["robot_image_pose"]
+print(pose["u"], pose["v"], pose["yaw_deg"])
+PY
+)
 
 SESSION_SAVE_DONE=1
 log "标注地图: $ANNOTATED_PNG"
@@ -979,6 +1160,8 @@ QWEN_CMD=(
   --output-dir "$QWEN_OUT"
   --nav-goal-json "$NAV_GOAL_JSON"
   --session-id "$SESSION_ID"
+  --task "$TASK"
+  --candidate-bundle "$QWEN_OUT/candidate_bundle.json"
 )
 if [[ -f "$QWEN_MAP_YAML" ]]; then
   QWEN_CMD+=(--qwen-map-yaml "$QWEN_MAP_YAML")
@@ -990,19 +1173,35 @@ if [[ ${#QWEN_EXTRA_ARGS[@]} -gt 0 ]]; then
   QWEN_CMD+=("${QWEN_EXTRA_ARGS[@]}")
 fi
 
-log "预计算 v6 候选并写入 Foxglove JSON（candidates-only，不调用 Qwen API）..."
+t_cand="$(date +%s)"
+log "预计算 v6 候选（candidates-only，不调用 Qwen API）..."
 QWEN_PREVIEW=( "${QWEN_CMD[@]}" --candidates-only )
 if ! "${QWEN_PREVIEW[@]}" 2>&1 | tee "$SESSION_DIR/qwen_candidates_preview.log"; then
-  log "WARN: candidates-only 失败，将继续完整 Qwen 流程（见 qwen_candidates_preview.log）"
-else
-  log "Foxglove 候选点: runtime/qwen_session/live_candidates_foxglove.json"
-fi
-
-log "调用 qwen_live_session_planner.py（v6 程序候选 + Qwen 第二阶段）..."
-if ! "${QWEN_CMD[@]}" 2>&1 | tee "$SESSION_DIR/qwen_run.log"; then
-  log "FAIL: Qwen live session 规划失败"
+  log "FAIL: candidates-only 失败"
   exit 1
 fi
+TIMING_CANDIDATE_GENERATION_S=$(( $(date +%s) - t_cand ))
+timing_log "candidates=${TIMING_CANDIDATE_GENERATION_S}s"
+log "Foxglove 候选点: runtime/qwen_session/live_candidates_foxglove.json"
+
+if [[ "$DRY_RUN_QWEN" -eq 1 ]]; then
+  t_qwen="$(date +%s)"
+  log "dry-run：执行完整 planner（Python 选点，不调用 Qwen API）..."
+  if ! "${QWEN_CMD[@]}" 2>&1 | tee "$SESSION_DIR/qwen_run.log"; then
+    log "FAIL: Qwen dry-run 失败"
+    exit 1
+  fi
+  TIMING_QWEN_API_S=$(( $(date +%s) - t_qwen ))
+else
+  t_qwen="$(date +%s)"
+  log "调用 qwen_live_session_planner.py（复用 candidate_bundle + Qwen 第二阶段）..."
+  if ! "${QWEN_CMD[@]}" 2>&1 | tee "$SESSION_DIR/qwen_run.log"; then
+    log "FAIL: Qwen live session 规划失败"
+    exit 1
+  fi
+  TIMING_QWEN_API_S=$(( $(date +%s) - t_qwen ))
+fi
+timing_log "qwen=${TIMING_QWEN_API_S}s"
 
 if [[ -f "$NAV_GOAL_JSON" ]]; then
   cp -f "$NAV_GOAL_JSON" "$SESSION_DIR/navigation_goal_proposal.json"
@@ -1011,14 +1210,19 @@ if [[ -f "$NAV_GOAL_JSON" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Phase 5: Nav2 导航（Qwen 选点后默认自动执行）
+# Phase 5: Nav2 导航
 # ---------------------------------------------------------------------------
 if [[ "$AUTO_NAV" -eq 1 ]]; then
-  run_qwen_nav2_phase
+  if grep -q '"selected_by": "python_fallback_after_qwen_error"' "$NAV_GOAL_JSON" 2>/dev/null \
+    && [[ "$ALLOW_NAV_FALLBACK" -ne 1 ]]; then
+    log "[5/5] Qwen fallback 目标已生成，但未开启 --allow-nav-with-fallback，跳过自动导航"
+  else
+    run_qwen_nav2_phase
+  fi
 else
-  log "[5/5] 已跳过自动导航 (--no-auto-nav)。手动执行:"
-  log "  export POSE_STATE_FILE=$SESSION_DIR/last_pose_map.json"
-  log "  bash scripts/nav/run_qwen_session_nav2_goal.sh $MAP_YAML $NAV_GOAL_JSON"
+  log "[5/5] 已跳过自动导航 (--no-auto-nav)"
+  export_timing_env
+  write_pipeline_timing_json "no_auto_nav"
 fi
 
 QWEN_RUN_DIR="$QWEN_OUT"

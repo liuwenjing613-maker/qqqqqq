@@ -101,6 +101,10 @@ GOAL_PROMPT_TEMPLATE_ZH = """
 7. 优先选择远离浅绿色已扫区域的候选；同等条件下 visited_clearance_px 更大者优先；不要重复探索已扫过走廊附近。
 
 机器人：u={robot_u:.6f}, v={robot_v:.6f}, yaw_deg={yaw_deg:.2f}
+
+本次探索任务：
+{task}
+
 候选信息：
 {candidate_table}
 
@@ -674,6 +678,98 @@ def supplement_forward_candidates(
     return added
 
 
+def compute_candidate_visit_attributes(
+    candidate: FrontierCandidate,
+    *,
+    visited_mask: np.ndarray,
+    visited_dist_field: Optional[np.ndarray],
+    unknown: np.ndarray,
+    resolution: float,
+    min_obstacle_clearance_px: float,
+) -> Dict[str, Any]:
+    h, w = visited_mask.shape
+    x, y = candidate.x, candidate.y
+    inside = bool(visited_mask[y, x]) if 0 <= y < h and 0 <= x < w else False
+    dist_px = (
+        float(visited_dist_field[y, x])
+        if visited_dist_field is not None
+        else float("inf")
+    )
+    dist_m = dist_px * resolution
+    y0, y1 = max(0, y - 3), min(h, y + 4)
+    x0, x1 = max(0, x - 3), min(w, x + 4)
+    patch_unknown = unknown[y0:y1, x0:x1]
+    unexplored_gain = int(np.count_nonzero(patch_unknown))
+    frontier_area = int(candidate.unknown_area_px)
+    geometry_score = float(candidate.obstacle_clearance_px) + 0.5 * unexplored_gain
+    overlap_ratio = 0.0
+    if visited_mask.any():
+        ring = visited_mask[max(0, y - 2) : min(h, y + 3), max(0, x - 2) : min(w, x + 3)]
+        overlap_ratio = float(np.count_nonzero(ring)) / max(1, ring.size)
+    return {
+        "distance_to_visited_m": dist_m,
+        "inside_visited_corridor": inside,
+        "visited_overlap_ratio": overlap_ratio,
+        "unexplored_gain": unexplored_gain,
+        "frontier_area": frontier_area,
+        "geometry_score": geometry_score,
+        "obstacle_clearance_ok": candidate.obstacle_clearance_px >= min_obstacle_clearance_px,
+    }
+
+
+def apply_visited_candidate_policy(
+    pose: Pose,
+    candidates: Sequence[FrontierCandidate],
+    nav_labels: np.ndarray,
+    longest: int,
+    args: argparse.Namespace,
+    *,
+    visited_mask: np.ndarray,
+    visited_dist_field: Optional[np.ndarray],
+    unknown: np.ndarray,
+    blocked: np.ndarray,
+    resolution: float,
+) -> Tuple[List[FrontierCandidate], Dict[int, Dict[str, Any]]]:
+    """按已走区域策略过滤/重排候选（几何仍基于干净地图）。"""
+    min_clear = float(longest) * float(args.black_clearance_ratio)
+    attrs: Dict[int, Dict[str, Any]] = {}
+    kept: List[FrontierCandidate] = []
+    for candidate in candidates:
+        if int(nav_labels[candidate.y, candidate.x]) != int(nav_labels[pose.y, pose.x]):
+            continue
+        a = compute_candidate_visit_attributes(
+            candidate,
+            visited_mask=visited_mask,
+            visited_dist_field=visited_dist_field,
+            unknown=unknown,
+            resolution=resolution,
+            min_obstacle_clearance_px=min_clear,
+        )
+        if not a["obstacle_clearance_ok"]:
+            continue
+        if a["inside_visited_corridor"] and a["unexplored_gain"] < 3:
+            continue
+        attrs[candidate.global_id] = a
+        kept.append(candidate)
+
+    if not kept:
+        raise RuntimeError("已走区域策略过滤后无可用候选。")
+
+    def rank_key(c: FrontierCandidate) -> Tuple[float, float, float, float, float]:
+        m = candidate_metrics(pose, c, longest)
+        a = attrs[c.global_id]
+        path_clear = 0.0 if direct_path_is_clear(pose, c, nav_labels) else 1.0
+        front_bonus = 0.0 if abs(m["heading_delta_deg"]) <= args.front_cone_deg * 0.6 else 0.5
+        visited_penalty = 0.0
+        if visited_dist_field is not None:
+            visited_penalty = max(0.0, 1.5 - a["distance_to_visited_m"] / max(resolution, 0.05))
+        unknown_bonus = -min(1.0, a["unexplored_gain"] / 20.0)
+        return (path_clear, visited_penalty + front_bonus, -a["geometry_score"], m["distance_ratio"], unknown_bonus)
+
+    kept.sort(key=rank_key)
+    return kept, attrs
+
+
 def choose_case_candidates(
     pose: Pose,
     nav_labels: np.ndarray,
@@ -1049,10 +1145,23 @@ def image_to_data_url(image_bgr: np.ndarray) -> str:
     return f"data:image/png;base64,{data}"
 
 
+def image_to_jpeg_data_url(image_bgr: np.ndarray, quality: int = 85) -> str:
+    ok, encoded = cv2.imencode(".jpg", image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+    if not ok:
+        raise RuntimeError("无法编码 JPEG 输入图像。")
+    data = base64.b64encode(encoded.tobytes()).decode("ascii")
+    return f"data:image/jpeg;base64,{data}"
+
+
 def call_qwen(image_bgr: np.ndarray, prompt: str, api_key: str,
               args: argparse.Namespace, *, temperature: Optional[float] = None,
-              max_tokens: Optional[int] = None) -> Tuple[str, float]:
+              max_tokens: Optional[int] = None,
+              image_format: str = "png") -> Tuple[str, float]:
     endpoint = args.base_url.rstrip("/") + "/chat/completions"
+    if image_format == "jpeg":
+        image_url = image_to_jpeg_data_url(image_bgr, quality=int(getattr(args, "jpeg_quality", 85)))
+    else:
+        image_url = image_to_data_url(image_bgr)
     payload = {
         "model": args.model,
         "messages": [
@@ -1069,7 +1178,7 @@ def call_qwen(image_bgr: np.ndarray, prompt: str, api_key: str,
             {
                 "role": "user",
                 "content": [
-                    {"type": "image_url", "image_url": {"url": image_to_data_url(image_bgr)}},
+                    {"type": "image_url", "image_url": {"url": image_url}},
                     {"type": "text", "text": prompt},
                 ],
             },
@@ -1364,6 +1473,7 @@ def main() -> int:
             robot_u=robot_u,
             robot_v=robot_v,
             yaw_deg=pose.yaw_deg,
+            task="",
             min_distance_ratio=args.min_goal_distance_ratio,
             max_distance_ratio=args.max_goal_distance_ratio,
             preferred_min_ratio=args.preferred_min_distance_ratio,

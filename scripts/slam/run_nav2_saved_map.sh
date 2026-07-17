@@ -40,6 +40,12 @@ NAV2_PARAMS="${NAV2_PARAMS:-$PROJECT_DIR/configs/nav2_params.yaml}"
 MVP_TUNE="${MVP_TUNE:-$PROJECT_DIR/configs/mvp_tune.yaml}"
 NAV2_STOP_CONFLICTS="${NAV2_STOP_CONFLICTS:-0}"
 NAV2_REUSE_EXISTING="${NAV2_REUSE_EXISTING:-1}"
+NAV2_SKIP_DAEMON_REFRESH="${NAV2_SKIP_DAEMON_REFRESH:-0}"
+NAV2_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+REUSE_SCAN=0
+REUSE_SCAN_FILTERED=0
+REUSE_CHASSIS=0
+REUSE_STATIC_TF=0
 
 # 自动判断底盘串口（slam_calibrated_env 已设 CHASSIS_DEV 时优先沿用）
 if [ -n "${CHASSIS_DEV:-}" ] && [ -e "${CHASSIS_DEV}" ]; then
@@ -210,22 +216,30 @@ if [ "$NAV2_STOP_CONFLICTS" = "1" ]; then
   cleanup_stale_nav2_processes
   cleanup_lidar_slam_nav_processes
   cleanup_ros2_fastrtps_shm
-  timeout 5 ros2 daemon stop >/dev/null 2>&1 || true
-  sleep 1
-  ros2 daemon start >/dev/null 2>&1 || true
-  sleep 1
+  if [ "$NAV2_SKIP_DAEMON_REFRESH" != "1" ]; then
+    timeout 5 ros2 daemon stop >/dev/null 2>&1 || true
+    sleep 1
+    ros2 daemon start >/dev/null 2>&1 || true
+    sleep 1
+  else
+    log "NAV2_SKIP_DAEMON_REFRESH=1: skip ros2 daemon refresh"
+  fi
 else
   log "NAV2_STOP_CONFLICTS=0: skip external pkill; reuse sensors when already running"
+  if nav2_servers_running; then
+    stop_stale_nav2_servers_only
+  fi
 fi
 zero_cmd
 
 # 1. 启动雷达（若已有 /scan 则复用）
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && topic_is_publishing /scan; then
   log "reuse existing /scan publisher (skip lidar start)"
+  REUSE_SCAN=1
 elif [ -x "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh" ]; then
   start_bg lidar bash "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
   LIDAR_PID="${PIDS[-1]}"
-  sleep 6
+  wait_topic_publishing /scan 20 || exit 1
   ensure_bg_process_alive "lidar" "$LIDAR_PID" "$LOG_DIR/lidar.log" || exit 1
 else
   log "ERROR: lidar script not found or not executable: $PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
@@ -235,6 +249,7 @@ fi
 # 2. 启动 scan filter -> /scan_filtered
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && topic_is_publishing /scan_filtered; then
   log "reuse existing /scan_filtered publisher (skip scan_filter start)"
+  REUSE_SCAN_FILTERED=1
 else
   start_bg scan_filter python3 "${PROJECT_DIR}/ros2_bridge/simple_scan_filter.py" \
     --in-topic /scan \
@@ -246,13 +261,14 @@ else
     --min-support-neighbors "${SCAN_FILTER_MIN_SUPPORT:-1}" \
     --stats-every 50
   SCAN_FILTER_PID="${PIDS[-1]}"
-  sleep 6
+  wait_topic_publishing /scan_filtered 15 || exit 1
   ensure_bg_process_alive "scan_filter" "$SCAN_FILTER_PID" "$LOG_DIR/scan_filter.log" || exit 1
 fi
 
 # 3. 启动 base_link -> laser 静态 TF
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && laser_static_tf_ready "${LASER_FRAME}"; then
   log "reuse existing base_link->${LASER_FRAME} TF (skip static_tf start)"
+  REUSE_STATIC_TF=1
 else
   start_bg static_tf ros2 run tf2_ros static_transform_publisher \
     --x "${LASER_X}" --y "${LASER_Y}" --z "${LASER_Z}" \
@@ -279,13 +295,17 @@ export CHASSIS_REUSE_IF_RUNNING=0
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && odom_base_link_tf_ready; then
   export CHASSIS_REUSE_IF_RUNNING=1
   log "reuse existing chassis bridge (odom->base_link TF OK)"
+  REUSE_CHASSIS=1
 else
   log "start fresh chassis bridge (need odom->base_link TF)"
   pkill -f "m1_pwm_cmd_vel_bridge.py|cmd_vel_to_rosmaster.py" 2>/dev/null || true
   sleep 1
 fi
 run_chassis_bridge "$LOG_DIR/chassis_bridge.log"
-sleep 3
+if [ "$REUSE_CHASSIS" -eq 0 ]; then
+  wait_topic_publishing /odom 15 || exit 1
+  wait_odom_base_link_tf 15 || exit 1
+fi
 if grep -q "motor_trims=\[1.0, 1.0, 1.0, 1.0\]" "$LOG_DIR/chassis_bridge.log" 2>/dev/null; then
   log "WARN: chassis using default motor_trims 1.0; expected ${CHASSIS_MOTOR_TRIMS}"
 fi
@@ -322,17 +342,19 @@ start_bg nav2 ros2 launch "$NAV2_BRINGUP_LAUNCH" \
   params_file:="$NAV2_PARAMS" \
   use_composition:=False
 
-sleep 15
+sleep 1
 if ! wait_map_topic_data 120; then
-  log "WARN: /map 未收到，刷新 ros2 daemon 后重试 ..."
-  ros2 daemon stop 2>/dev/null || true
-  sleep 2
-  ros2 daemon start 2>/dev/null || true
-  sleep 2
+  if [ "$NAV2_SKIP_DAEMON_REFRESH" != "1" ]; then
+    log "WARN: /map 未收到，刷新 ros2 daemon 后重试 ..."
+    ros2 daemon stop 2>/dev/null || true
+    sleep 1
+    ros2 daemon start 2>/dev/null || true
+    sleep 1
+  fi
   wait_map_topic_data 120 || exit 1
 fi
-wait_lifecycle_active /amcl 90 || exit 1
-sleep 3
+wait_nav2_lifecycle_parallel 120 || exit 1
+sleep 0.5
 
 if ! wait_topic_publishing /scan_filtered 45; then
   log "WARN: /scan_filtered 未稳定发布，重启 scan_filter ..."
@@ -379,8 +401,9 @@ if ! wait_nav_actions_ready 180; then
 fi
 log "Nav2 navigation stack active"
 
-touch "$LOG_DIR/ready"
-log "READY file: $LOG_DIR/ready"
+ready_json="$(write_nav2_ready_json "$LOG_DIR" "$MAP_YAML" "$NAV2_STARTED_AT" \
+  "$REUSE_SCAN" "$REUSE_SCAN_FILTERED" "$REUSE_CHASSIS" "$REUSE_STATIC_TF")"
+log "READY json: $ready_json"
 
 start_bg pose_memory python3 "$PROJECT_DIR/scripts/slam/pose_memory_node.py" \
   --state-file "$POSE_STATE_FILE" \

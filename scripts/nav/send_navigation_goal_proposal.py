@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""读取 navigation_goal_proposal.json，向 Nav2 /navigate_to_pose 发送目标。"""
+"""读取 navigation_goal_proposal.json，经 ComputePathToPose 硬门禁后发送 Nav2 目标。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import json
 import math
 import time
 from pathlib import Path as FilePath
+from typing import Any, Dict, Optional, Tuple
 
 import rclpy
 from geometry_msgs.msg import PoseStamped, Quaternion
@@ -27,6 +28,16 @@ def yaw_to_quaternion(yaw_rad: float) -> Quaternion:
     return q
 
 
+def _path_length_m(path: NavPath) -> float:
+    total = 0.0
+    poses = path.poses
+    for i in range(1, len(poses)):
+        p0 = poses[i - 1].pose.position
+        p1 = poses[i].pose.position
+        total += math.hypot(p1.x - p0.x, p1.y - p0.y)
+    return total
+
+
 class NavGoalSender(Node):
     def __init__(
         self,
@@ -34,8 +45,12 @@ class NavGoalSender(Node):
         map_frame: str,
         timeout_s: float,
         wait_tf_s: float,
-        publish_planned_path: bool = True,
         compute_path_timeout_s: float = 45.0,
+        skip_path_validation: bool = False,
+        start_robot_tolerance_m: float = 0.45,
+        goal_tolerance_m: float = 0.35,
+        min_path_length_m: float = 0.05,
+        max_path_length_m: float = 80.0,
     ) -> None:
         super().__init__("qwen_nav_goal_sender")
         self._client = ActionClient(self, NavigateToPose, "/navigate_to_pose")
@@ -45,39 +60,49 @@ class NavGoalSender(Node):
         self._map_frame = map_frame
         self._timeout_s = timeout_s
         self._wait_tf_s = wait_tf_s
-        self._publish_planned_path = publish_planned_path
         self._compute_path_timeout_s = compute_path_timeout_s
+        self._skip_path_validation = skip_path_validation
+        self._start_tol = start_robot_tolerance_m
+        self._goal_tol = goal_tolerance_m
+        self._min_path_len = min_path_length_m
+        self._max_path_len = max_path_length_m
         self._tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
-    def _wait_map_tf(self) -> bool:
+    def _wait_map_tf(self) -> Optional[Tuple[float, float]]:
         deadline = time.time() + self._wait_tf_s
         while time.time() < deadline:
             rclpy.spin_once(self, timeout_sec=0.1)
             try:
-                self._tf_buffer.lookup_transform(
+                tf = self._tf_buffer.lookup_transform(
                     self._map_frame,
                     "base_link",
                     rclpy.time.Time(),
                     timeout=Duration(seconds=0.3),
                 )
+                t = tf.transform.translation
                 self.get_logger().info("TF map -> base_link 可用")
-                return True
+                return float(t.x), float(t.y)
             except Exception:
                 time.sleep(0.2)
         self.get_logger().error(
             f"等待 TF {self._map_frame} -> base_link 超时 ({self._wait_tf_s:.0f}s)"
         )
-        return False
+        return None
 
-    def _publish_planned_path_preview(self, pose: PoseStamped) -> None:
-        if not self._publish_planned_path:
-            return
+    def _validate_and_publish_path(
+        self,
+        pose: PoseStamped,
+        robot_xy: Tuple[float, float],
+        goal_xy: Tuple[float, float],
+    ) -> Optional[NavPath]:
+        if self._skip_path_validation:
+            self.get_logger().warn("跳过 ComputePathToPose 硬门禁（仅调试用）")
+            return None
+
         if not self._path_client.wait_for_server(timeout_sec=self._compute_path_timeout_s):
-            self.get_logger().warn(
-                "/compute_path_to_pose 不可用，跳过 /qwen_session/planned_path 预览（导航仍可继续）"
-            )
-            return
+            self.get_logger().error("/compute_path_to_pose 不可用，终止导航")
+            return None
 
         path_goal = ComputePathToPose.Goal()
         path_goal.goal = pose
@@ -91,35 +116,87 @@ class NavGoalSender(Node):
             self, send_future, timeout_sec=self._compute_path_timeout_s
         )
         if not send_future.done():
-            self.get_logger().warn("ComputePathToPose 发送超时，跳过路径预览")
-            return
+            self.get_logger().error("ComputePathToPose 发送超时，终止导航")
+            return None
 
         goal_handle = send_future.result()
         if goal_handle is None or not goal_handle.accepted:
-            self.get_logger().warn("ComputePathToPose 被拒绝，跳过路径预览")
-            return
+            self.get_logger().error("ComputePathToPose 被拒绝，终止导航")
+            return None
 
         result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(
             self, result_future, timeout_sec=self._compute_path_timeout_s
         )
         if not result_future.done():
-            self.get_logger().warn("ComputePathToPose 结果超时，跳过路径预览")
-            return
+            self.get_logger().error("ComputePathToPose 结果超时，终止导航")
+            return None
 
         try:
             path = result_future.result().result.path
         except Exception as exc:
-            self.get_logger().warn(f"ComputePathToPose 结果异常: {exc}")
-            return
+            self.get_logger().error(f"ComputePathToPose 结果异常: {exc}")
+            return None
 
         if len(path.poses) == 0:
-            self.get_logger().warn("规划器返回空路径，Foxglove 不显示 planned_path")
-            return
+            self.get_logger().error("规划器返回空路径，终止导航")
+            return None
+
+        path_len = _path_length_m(path)
+        if path_len < self._min_path_len:
+            self.get_logger().error(
+                f"路径过短 ({path_len:.3f}m < {self._min_path_len:.3f}m)，终止导航"
+            )
+            return None
+        if path_len > self._max_path_len:
+            self.get_logger().error(
+                f"路径过长 ({path_len:.3f}m > {self._max_path_len:.1f}m)，终止导航"
+            )
+            return None
+
+        start = path.poses[0].pose.position
+        end = path.poses[-1].pose.position
+        start_err = math.hypot(start.x - robot_xy[0], start.y - robot_xy[1])
+        goal_err = math.hypot(end.x - goal_xy[0], end.y - goal_xy[1])
+        if start_err > self._start_tol:
+            self.get_logger().error(
+                f"路径起点与机器人偏差过大 ({start_err:.2f}m > {self._start_tol:.2f}m)"
+            )
+            return None
+        if goal_err > self._goal_tol:
+            self.get_logger().error(
+                f"路径终点与目标偏差过大 ({goal_err:.2f}m > {self._goal_tol:.2f}m)"
+            )
+            return None
 
         self._path_pub.publish(path)
         self.get_logger().info(
-            f"已发布 /qwen_session/planned_path ({len(path.poses)} poses)"
+            f"ComputePathToPose OK: {len(path.poses)} poses, length={path_len:.2f}m"
+        )
+        return path
+
+    def _update_goal_json_path_ok(self, path: NavPath) -> None:
+        payload = json.loads(self._goal_json.read_text(encoding="utf-8"))
+        safety = payload.setdefault("safety", {})
+        safety["path_checked"] = True
+        safety["reachability_validated"] = True
+        safety["ready_for_nav2"] = True
+        safety["path_pose_count"] = len(path.poses)
+        safety["path_length_m"] = round(_path_length_m(path), 3)
+        safety["note"] = "ComputePathToPose 成功，已允许 NavigateToPose。"
+        self._goal_json.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _mark_goal_json_path_failed(self, reason: str) -> None:
+        payload = json.loads(self._goal_json.read_text(encoding="utf-8"))
+        safety = payload.setdefault("safety", {})
+        safety["path_checked"] = False
+        safety["reachability_validated"] = False
+        safety["ready_for_nav2"] = False
+        safety["note"] = reason
+        self._goal_json.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
     def run(self) -> int:
@@ -136,7 +213,8 @@ class NavGoalSender(Node):
             self.get_logger().error("/navigate_to_pose 不可用")
             return 3
 
-        if not self._wait_map_tf():
+        robot_xy = self._wait_map_tf()
+        if robot_xy is None:
             return 3
 
         msg = NavigateToPose.Goal()
@@ -147,7 +225,15 @@ class NavGoalSender(Node):
         msg.pose.pose.position.y = gy
         msg.pose.pose.orientation = yaw_to_quaternion(gyaw)
 
-        self._publish_planned_path_preview(msg.pose)
+        path = self._validate_and_publish_path(msg.pose, robot_xy, (gx, gy))
+        if path is None and not self._skip_path_validation:
+            self._mark_goal_json_path_failed(
+                "ComputePathToPose 失败或路径无效，未发送 NavigateToPose。"
+            )
+            return 6
+
+        if path is not None:
+            self._update_goal_json_path_ok(path)
 
         self.get_logger().info(
             f"发送 Nav2 目标 {self._map_frame} ({gx:.3f}, {gy:.3f}) yaw={math.degrees(gyaw):.1f}°"
@@ -160,12 +246,10 @@ class NavGoalSender(Node):
 
         goal_handle = send_future.result()
         if goal_handle is None:
-            self.get_logger().error("Nav2 未返回 goal handle（可能定位/代价地图未就绪）")
+            self.get_logger().error("Nav2 未返回 goal handle")
             return 4
         if not goal_handle.accepted:
-            self.get_logger().error(
-                "Nav2 拒绝目标：常见原因是 AMCL 未定位、目标在障碍区、或 planner 未激活"
-            )
+            self.get_logger().error("Nav2 拒绝目标")
             return 4
 
         self.get_logger().info("Nav2 已接受目标，等待导航结果...")
@@ -180,7 +264,7 @@ class NavGoalSender(Node):
             now = time.time()
             if now - last_report >= 15.0:
                 elapsed = int(now - nav_wait_start)
-                self.get_logger().info(f"导航进行中... 已等待 {elapsed}s（机器人应开始沿路径移动）")
+                self.get_logger().info(f"导航进行中... 已等待 {elapsed}s")
                 last_report = now
 
         if not result_future.done():
@@ -189,7 +273,6 @@ class NavGoalSender(Node):
 
         result = result_future.result()
         status = result.status if result is not None else -1
-        # rclpy action status: 4 = SUCCEEDED
         if status == 4:
             self.get_logger().info("导航成功")
             return 0
@@ -201,15 +284,15 @@ class NavGoalSender(Node):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--goal-json", required=True)
-    parser.add_argument("--pose-state-file", default="", help="仅 shell 传递，本脚本不直接使用")
+    parser.add_argument("--pose-state-file", default="")
     parser.add_argument("--map-frame", default="map")
     parser.add_argument("--timeout-s", type=float, default=180.0)
     parser.add_argument("--wait-tf-s", type=float, default=30.0)
     parser.add_argument("--compute-path-timeout-s", type=float, default=45.0)
     parser.add_argument(
-        "--no-planned-path",
+        "--skip-path-validation",
         action="store_true",
-        help="不调用 compute_path_to_pose，不发布 /qwen_session/planned_path",
+        help="跳过 ComputePathToPose 硬门禁（仅人工调试）",
     )
     args = parser.parse_args()
 
@@ -219,8 +302,8 @@ def main() -> int:
         args.map_frame,
         args.timeout_s,
         args.wait_tf_s,
-        publish_planned_path=not args.no_planned_path,
         compute_path_timeout_s=args.compute_path_timeout_s,
+        skip_path_validation=args.skip_path_validation,
     )
     try:
         return node.run()

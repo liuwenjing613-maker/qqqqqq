@@ -33,6 +33,7 @@ from qwen_map_goal_utils import (  # noqa: E402
     load_map_yaml_meta,
     load_visited_corridor_radius_m,
     paint_visited_on_bgr,
+    parse_trajectory_line_bgr,
     world_to_pixel,
 )
 
@@ -188,7 +189,7 @@ def main() -> int:
             px, py = world_to_pixel(vx, vy, meta)
             pts.append([int(np.clip(px, 0, w - 1)), int(np.clip(py, 0, h - 1))])
         cv2.polylines(
-            bgr, [np.array(pts, dtype=np.int32)], False, (0, 140, 255),
+            bgr, [np.array(pts, dtype=np.int32)], False, parse_trajectory_line_bgr(),
             max(2, int(round(max(h, w) * 0.003))), cv2.LINE_AA,
         )
 

@@ -22,7 +22,8 @@ check_file "$NAV_ROOT/scripts/qwen_servo/start_live_servo_voice.sh"
 check_file "$VOICE_ROOT/.env"
 check_file "$VOICE_ROOT/assets/i_am_here.wav"
 check_file "$NAV_ROOT/scripts/qwen_servo/start_live_servo.sh"
-check_file "$NAV_ROOT/scripts/start_debug_node.sh"
+check_file "$NAV_ROOT/scripts/lib/qwen_ready.sh"
+check_file "$NAV_ROOT/scripts/lib/nav_api_env.sh"
 check_file "$NAV_ROOT/src/apps/qwen_visual_servo_node.py"
 check_file "$TARGET_ROOT/scripts/control/cmd_vel_priority_mux.py"
 
@@ -54,6 +55,23 @@ if [[ -f "$VOICE_ROOT/.env" ]]; then
   else
     echo "[WARN] voice .env 中未发现 DASHSCOPE_API_KEY/QWEN_API_KEY"
   fi
+fi
+
+if [[ -f "$TARGET_ROOT/.env" ]]; then
+  if grep -Eq '^QWEN_MODEL=your_vision_model_name_here' "$TARGET_ROOT/.env"; then
+    echo "[WARN] $TARGET_ROOT/.env 中 QWEN_MODEL 仍是占位符，导航阶段会回退到 qwen3-vl-flash"
+  else
+    echo "[OK] QWEN_MODEL configured in project .env"
+  fi
+fi
+
+if [[ -f "$NAV_ROOT/scripts/lib/qwen_ready.sh" ]]; then
+  bash -n "$NAV_ROOT/scripts/lib/qwen_ready.sh"
+  echo "[OK] qwen_ready bash syntax"
+fi
+if [[ -f "$NAV_ROOT/scripts/lib/nav_api_env.sh" ]]; then
+  bash -n "$NAV_ROOT/scripts/lib/nav_api_env.sh"
+  echo "[OK] nav_api_env bash syntax"
 fi
 
 if [[ "$FAILED" == "1" ]]; then
