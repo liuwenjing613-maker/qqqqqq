@@ -729,13 +729,48 @@ def apply_visited_candidate_policy(
     unknown: np.ndarray,
     blocked: np.ndarray,
     resolution: float,
-) -> Tuple[List[FrontierCandidate], Dict[int, Dict[str, Any]]]:
-    """按已走区域策略过滤/重排候选（几何仍基于干净地图）。"""
+) -> Tuple[List[FrontierCandidate], Dict[int, Dict[str, Any]], Dict[str, int], int]:
+    """按已走区域策略分层过滤/重排候选（几何安全永不放宽）。
+
+    Tier 1：严格安全 + 严格未探索收益
+    Tier 2：保持障碍/连通安全，只放宽 visited 惩罚
+    Tier 3：保持几何安全，选择最优安全候选
+
+    返回 (kept, attrs, reject_reason_counts, tier_used)
+    """
     min_clear = float(longest) * float(args.black_clearance_ratio)
-    attrs: Dict[int, Dict[str, Any]] = {}
-    kept: List[FrontierCandidate] = []
+    # 将像素阈值换成与 resolution 相关的面积：约 0.0075 m^2 等价于 0.05m 栅格下 ~3 像素
+    min_unexplored_gain_px = max(
+        1,
+        int(round(float(os.environ.get("CANDIDATE_MIN_UNEXPLORED_AREA_M2", "0.0075")) / max(resolution ** 2, 1e-9))),
+    )
+    reject_counts: Dict[str, int] = {
+        "clearance": 0,
+        "disconnected": 0,
+        "inside_visited": 0,
+        "low_unknown_gain": 0,
+        "too_close": 0,
+        "too_far": 0,
+        "map_edge": 0,
+        "narrow_passage": 0,
+    }
+
+    robot_comp = int(nav_labels[pose.y, pose.x])
+    h, w = nav_labels.shape
+    edge_margin = max(2, int(round(0.15 / max(resolution, 1e-6))))
+
+    scored: List[Tuple[FrontierCandidate, Dict[str, Any]]] = []
     for candidate in candidates:
-        if int(nav_labels[candidate.y, candidate.x]) != int(nav_labels[pose.y, pose.x]):
+        if int(nav_labels[candidate.y, candidate.x]) != robot_comp:
+            reject_counts["disconnected"] += 1
+            continue
+        if (
+            candidate.x < edge_margin
+            or candidate.y < edge_margin
+            or candidate.x >= w - edge_margin
+            or candidate.y >= h - edge_margin
+        ):
+            reject_counts["map_edge"] += 1
             continue
         a = compute_candidate_visit_attributes(
             candidate,
@@ -746,14 +781,46 @@ def apply_visited_candidate_policy(
             min_obstacle_clearance_px=min_clear,
         )
         if not a["obstacle_clearance_ok"]:
+            reject_counts["clearance"] += 1
             continue
-        if a["inside_visited_corridor"] and a["unexplored_gain"] < 3:
-            continue
-        attrs[candidate.global_id] = a
-        kept.append(candidate)
+        # 窄通道：障碍 clearance 仅略高于阈值时记入统计，但仍允许进入后续几何层
+        if candidate.obstacle_clearance_px < min_clear * 1.15:
+            reject_counts["narrow_passage"] += 1
+        scored.append((candidate, a))
 
-    if not kept:
-        raise RuntimeError("已走区域策略过滤后无可用候选。")
+    def filter_tier(tier: int) -> List[Tuple[FrontierCandidate, Dict[str, Any]]]:
+        out: List[Tuple[FrontierCandidate, Dict[str, Any]]] = []
+        for candidate, a in scored:
+            if tier == 1:
+                if a["inside_visited_corridor"] and a["unexplored_gain"] < min_unexplored_gain_px:
+                    reject_counts["inside_visited"] += 1
+                    reject_counts["low_unknown_gain"] += 1
+                    continue
+                if a["unexplored_gain"] < min_unexplored_gain_px:
+                    reject_counts["low_unknown_gain"] += 1
+                    continue
+            elif tier == 2:
+                # 放宽 visited 惩罚：允许 inside_visited，但仍要求一定未知收益
+                if a["unexplored_gain"] < max(1, min_unexplored_gain_px // 3):
+                    reject_counts["low_unknown_gain"] += 1
+                    continue
+            # tier 3: 仅几何安全（已在 scored 中保证）
+            out.append((candidate, a))
+        return out
+
+    kept_pairs: List[Tuple[FrontierCandidate, Dict[str, Any]]] = []
+    tier_used = 1
+    for tier in (1, 2, 3):
+        kept_pairs = filter_tier(tier)
+        if kept_pairs:
+            tier_used = tier
+            break
+
+    if not kept_pairs:
+        raise RuntimeError("已走区域策略过滤后无可用候选（三层回退后仍为空）。")
+
+    attrs: Dict[int, Dict[str, Any]] = {c.global_id: a for c, a in kept_pairs}
+    kept: List[FrontierCandidate] = [c for c, _ in kept_pairs]
 
     def rank_key(c: FrontierCandidate) -> Tuple[float, float, float, float, float]:
         m = candidate_metrics(pose, c, longest)
@@ -761,13 +828,15 @@ def apply_visited_candidate_policy(
         path_clear = 0.0 if direct_path_is_clear(pose, c, nav_labels) else 1.0
         front_bonus = 0.0 if abs(m["heading_delta_deg"]) <= args.front_cone_deg * 0.6 else 0.5
         visited_penalty = 0.0
-        if visited_dist_field is not None:
+        if visited_dist_field is not None and tier_used == 1:
             visited_penalty = max(0.0, 1.5 - a["distance_to_visited_m"] / max(resolution, 0.05))
+        elif visited_dist_field is not None and tier_used == 2:
+            visited_penalty = 0.35 * max(0.0, 1.5 - a["distance_to_visited_m"] / max(resolution, 0.05))
         unknown_bonus = -min(1.0, a["unexplored_gain"] / 20.0)
         return (path_clear, visited_penalty + front_bonus, -a["geometry_score"], m["distance_ratio"], unknown_bonus)
 
     kept.sort(key=rank_key)
-    return kept, attrs
+    return kept, attrs, reject_counts, tier_used
 
 
 def choose_case_candidates(

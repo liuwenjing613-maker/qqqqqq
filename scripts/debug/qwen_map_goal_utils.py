@@ -187,9 +187,140 @@ def build_navigation_goal_proposal(
     return payload
 
 
-def write_navigation_goal_proposal(path: Path, payload: Dict[str, Any]) -> None:
+def atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    """Atomically write JSON so other processes never read a half-written file."""
+    path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp_path, path)
+
+
+def write_navigation_goal_proposal(path: Path, payload: Dict[str, Any]) -> None:
+    atomic_write_json(path, payload)
+
+
+def sha256_file(path: Path) -> str:
+    path = path.expanduser().resolve()
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def compute_bundle_fingerprint(bundle: Dict[str, Any]) -> str:
+    """Stable fingerprint over session inputs + candidate geometry (no timestamps)."""
+    material = {
+        "session_id": bundle.get("session_id"),
+        "map_yaml_sha256": bundle.get("map_yaml_sha256"),
+        "map_pgm_sha256": bundle.get("map_pgm_sha256"),
+        "pose_snapshot_sha256": bundle.get("pose_snapshot_sha256"),
+        "trajectory_snapshot_sha256": bundle.get("trajectory_snapshot_sha256"),
+        "candidates": [
+            {
+                "candidate_id": c.get("candidate_id", c.get("local_id")),
+                "pixel_x": c.get("pixel_x"),
+                "pixel_y": c.get("pixel_y"),
+                "map_x": c.get("map_x"),
+                "map_y": c.get("map_y"),
+            }
+            for c in (bundle.get("candidates") or [])
+        ],
+    }
+    blob = json.dumps(material, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
+
+
+def validate_proposal_against_bundle(
+    proposal: Dict[str, Any],
+    bundle: Dict[str, Any],
+    *,
+    expected_session_id: str = "",
+    allow_fallback: bool = False,
+    free_threshold: int = FREE_THRESHOLD,
+    safety_radius_m: float = 0.15,
+) -> Tuple[bool, str]:
+    """Re-validate proposal vs candidate bundle before Nav2 auto-nav."""
+    if expected_session_id and str(proposal.get("session_id", "")) != str(expected_session_id):
+        return False, "proposal session_id 与本次会话不一致"
+    if str(proposal.get("session_id", "")) != str(bundle.get("session_id", "")):
+        return False, "proposal session_id 与 candidate_bundle 不一致"
+
+    prop_fp = str(proposal.get("bundle_fingerprint", ""))
+    bundle_fp = str(bundle.get("bundle_fingerprint", ""))
+    if not prop_fp or not bundle_fp or prop_fp != bundle_fp:
+        return False, "bundle_fingerprint 不匹配"
+
+    sel = proposal.get("qwen_selection") or {}
+    selected_by = str(sel.get("selected_by", ""))
+    if selected_by == "python_fallback_after_qwen_error" and not allow_fallback:
+        return False, "fallback 目标未显式允许自动导航 (--allow-nav-with-fallback)"
+
+    cid = int(sel.get("selected_local_id") or proposal.get("selected_candidate_id") or 0)
+    candidates = bundle.get("candidates") or []
+    chosen = None
+    for c in candidates:
+        if int(c.get("candidate_id", c.get("local_id", -1))) == cid:
+            chosen = c
+            break
+    if chosen is None:
+        return False, f"selected_candidate_id={cid} 不存在于 candidate_bundle"
+
+    goal = proposal.get("goal_pose_map") or {}
+    sel_pix = proposal.get("selected_candidate_pixel") or {}
+    px = int(sel_pix.get("x", goal.get("pixel_x", -1)))
+    py = int(sel_pix.get("y", goal.get("pixel_y", -1)))
+    if px != int(chosen["pixel_x"]) or py != int(chosen["pixel_y"]):
+        return False, "proposal 像素坐标与候选不一致"
+
+    sel_map = proposal.get("selected_candidate_map") or {}
+    mx = float(sel_map.get("x", goal.get("x", float("nan"))))
+    my = float(sel_map.get("y", goal.get("y", float("nan"))))
+    if abs(mx - float(chosen["map_x"])) > 1e-4 or abs(my - float(chosen["map_y"])) > 1e-4:
+        return False, "proposal map 坐标与候选不一致"
+
+    map_yaml = Path(str(bundle.get("clean_map_yaml") or bundle.get("map_yaml", "")))
+    if not map_yaml.is_file():
+        return False, "bundle clean_map_yaml 不存在"
+    if bundle.get("map_yaml_sha256") and sha256_file(map_yaml) != bundle["map_yaml_sha256"]:
+        return False, "map YAML hash 与 bundle 不一致"
+    map_data = yaml.safe_load(map_yaml.read_text(encoding="utf-8"))
+    pgm = map_yaml.parent / str(map_data.get("image", ""))
+    if not pgm.is_file():
+        pgm = map_yaml.with_suffix(".pgm")
+    if bundle.get("map_pgm_sha256") and sha256_file(pgm) != bundle["map_pgm_sha256"]:
+        return False, "map PGM hash 与 bundle 不一致"
+
+    gray = cv2.imread(str(pgm), cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        return False, "无法读取干净 PGM"
+    h, w = gray.shape
+    if not (0 <= px < w and 0 <= py < h):
+        return False, "目标像素超出地图边界"
+    if int(gray[py, px]) < free_threshold:
+        return False, "目标栅格不是 free"
+
+    meta = load_map_yaml_meta(map_yaml)
+    radius_px = max(1, int(round(float(safety_radius_m) / max(meta.resolution, 1e-6))))
+    y0, y1 = max(0, py - radius_px), min(h, py + radius_px + 1)
+    x0, x1 = max(0, px - radius_px), min(w, px + radius_px + 1)
+    patch = gray[y0:y1, x0:x1]
+    if np.any(patch <= 70):
+        return False, "目标安全半径内存在 occupied"
+
+    free_mask = build_free_mask_from_gray(gray, free_threshold=free_threshold)
+    num, labels = cv2.connectedComponents(free_mask.astype(np.uint8), connectivity=8)
+    robot = bundle.get("robot_pose_pixel") or bundle.get("robot_pixel") or {}
+    rpx = int(robot.get("x", robot.get("pixel_x", -1)))
+    rpy = int(robot.get("y", robot.get("pixel_y", -1)))
+    if not (0 <= rpx < w and 0 <= rpy < h and free_mask[rpy, rpx]):
+        return False, "机器人位姿不在 free 区域"
+    if int(labels[rpy, rpx]) == 0 or int(labels[py, px]) == 0:
+        return False, "目标或机器人不在可通行连通域"
+    if int(labels[rpy, rpx]) != int(labels[py, px]):
+        return False, "目标与机器人不在同一安全连通域"
+    if num < 2:
+        return False, "地图无可通行连通域"
+    return True, "ok"
 
 
 def build_free_mask_from_gray(gray: np.ndarray, free_threshold: int = FREE_THRESHOLD) -> np.ndarray:
@@ -279,9 +410,7 @@ def write_foxglove_candidates_json(
         "selected_local_id": selected_local_id,
         "candidates": items,
     }
-    path = path.expanduser().resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, payload)
 
 
 def resolve_qwen_map_yaml(nav_map_yaml: Path) -> Path:
