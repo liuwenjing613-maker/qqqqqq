@@ -178,7 +178,8 @@ class OnlineMapQwenNavBackendV2(Node):
         self.tf_buffer = Buffer(cache_time=Duration(seconds=10.0))
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.nav_client: ActionClient = ActionClient(self, NavigateToPose, self.nav_action_name)
-        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="map_qwen_v2")
+        # Do not name this self.executor — that collides with rclpy.Node.executor.
+        self.api_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="map_qwen_v2")
 
         self.map_array: Optional[np.ndarray] = None
         self.map_meta: Optional[GridMeta] = None
@@ -363,7 +364,7 @@ class OnlineMapQwenNavBackendV2(Node):
         self.phase = "QWEN_SELECTING"
         self.phase_started = time.monotonic()
         self._status(request_id, "QWEN_SELECTING", candidate_ids=[c.candidate_id for c in resolved])
-        self.selection_future = self.executor.submit(
+        self.selection_future = self.api_pool.submit(
             self._select_candidate_worker,
             token,
             request_id,
@@ -809,7 +810,7 @@ class OnlineMapQwenNavBackendV2(Node):
         for _ in range(4):
             self._publish_zero()
             time.sleep(0.03)
-        self.executor.shutdown(wait=False, cancel_futures=True)
+        self.api_pool.shutdown(wait=False, cancel_futures=True)
 
 
 def main() -> int:
