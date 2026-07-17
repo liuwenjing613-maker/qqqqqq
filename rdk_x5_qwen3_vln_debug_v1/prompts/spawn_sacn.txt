@@ -1,18 +1,119 @@
+# Mode: SPAWN_SCAN
+# Task: $instruction_json
+# Startup panoramic scan. One stationary view. JSON only. Compact, no spaces.
+#
+# {"p":[0,0]|null,"t":0.00,"r":0.00,"q":0.00}
+#
+# - p: [x,y] integers on grid [0,1000] only if the exact requested target is clearly visible now; otherwise null. Never point at a related object, landmark, or guessed location.
+# - t: target evidence in [0,1]. If p!=null: match confidence. If p=null: how likely this view leads toward the target from visible cues. Low when no useful evidence.
+# - r: route traversability in [0,1] (free floor, width, depth, open passage). Low for walls, dead ends, clutter, blocked floor.
+# - q: exploration priority in [0,1] = useful target evidence + reachable route. Do not high-q a blocked direction.
+#
+# HARD rules for t,r,q:
+# - Each MUST be a number with EXACTLY 2 digits after the decimal point, like 0.00, 0.37, 0.91.
+# - NEVER write long floats such as 0.9375000000000001 or trailing zeros beyond 2 digits.
+# - NEVER omit the decimal part (write 1.00 not 1; write 0.00 not 0).
+# - Prefer short values so the JSON always closes with }.
+#
+# No Markdown, no extra keys, no s field, no motion/turn commands.
 Mode: SPAWN_SCAN
 Task: $instruction_json
-Startup panoramic scan. One stationary view. JSON only. Compact, no spaces.
 
-{"p":[0,0]|null,"t":0.00,"r":0.00,"q":0.00}
+This is one stationary view from the startup panoramic scan.
+Evaluate only the current image.
+The controller handles all rotation and motion.
+Return exactly one compact JSON object with no spaces.
 
-- p: [x,y] integers on grid [0,1000] only if the exact requested target is clearly visible now; otherwise null. Never point at a related object, landmark, or guessed location.
-- t: target evidence in [0,1]. If p!=null: match confidence. If p=null: how likely this view leads toward the target from visible cues. Low when no useful evidence.
-- r: route traversability in [0,1] (free floor, width, depth, open passage). Low for walls, dead ends, clutter, blocked floor.
-- q: exploration priority in [0,1] = useful target evidence + reachable route. Do not high-q a blocked direction.
+{"p":null,"t":0.00,"r":0.00,"q":0.00}
 
-HARD rules for t,r,q:
-- Each MUST be a number with EXACTLY 2 digits after the decimal point, like 0.00, 0.37, 0.91.
-- NEVER write long floats such as 0.9375000000000001 or trailing zeros beyond 2 digits.
-- NEVER omit the decimal part (write 1.00 not 1; write 0.00 not 0).
-- Prefer short values so the JSON always closes with }.
+* p:
+  Output [x,y] only if the exact requested target is clearly visible now.
+  x and y must be integers on the normalized grid [0,1000].
+  Point to the visual center of the exact target.
+  Otherwise output null.
+  Never point to a related object, landmark, doorway, floor region, or guessed target location.
 
-No Markdown, no extra keys, no s field, no motion/turn commands.
+* t:
+  Direct visual evidence for the exact requested target.
+  If p is not null, t is the confidence that the marked object exactly matches the target.
+  If p is null, t must remain low.
+  Do not raise t because the target might commonly exist near furniture, inside a room, behind a doorway, or in any guessed location.
+  t must not represent route quality or traversability.
+
+* r:
+  Route traversability of the current viewing direction.
+  Evaluate whether there is a continuous drivable corridor beginning near the bottom-center of the image and extending forward.
+
+Judge r mainly from:
+
+1. continuity of free floor from near the robot,
+2. usable corridor width,
+3. forward depth,
+4. clearance from obstacles,
+5. whether the route continues into an open area.
+
+Do not lower r merely because walls, furniture, or other objects are visible.
+Lower r only when they block, interrupt, or substantially narrow the continuous drivable corridor.
+
+Do not give high r merely because a distant doorway or open area is visible.
+The route from the bottom-center of the image to that area must be continuous and reachable.
+
+Use these scoring bands:
+
+Internally assess the following four factors from 0.00 to 1.00:
+
+C = continuity:
+Whether free floor remains continuously connected from the bottom-center toward the distance.
+
+W = usable width:
+Whether the continuous corridor is wide enough for the robot, not merely whether floor is visible.
+
+D = forward depth:
+How far the usable route continues before reaching a wall, cabinet, furniture, or dead end.
+
+O = openness:
+Whether the route continues into a wider or previously unseen area.
+
+Determine r approximately as:
+r = 0.35*C + 0.25*W + 0.25*D + 0.15*O
+
+Do not output C, W, D, or O.
+Output only the final r value with two decimal places.
+Do not round the result to a scoring-band boundary.
+Use the full score range.
+Clearly separate walls, blocked areas, short dead-end floor, ordinary passages, and wide deep corridors.
+Do not cluster visibly different routes around similar middle scores.
+
+* q:
+  Overall exploration priority for this direction.
+
+If p is not null:
+q should be high only when the exact target is clearly visible and the route toward it is reachable.
+
+If p is null:
+q must be determined primarily by route traversability, forward depth, openness, and ability to reach a new area.
+Do not use guessed target likelihood or semantic associations.
+q should normally remain close to r, with only a small adjustment:
+
+* increase q slightly for greater depth, open passages, or access to a new area;
+* decrease q slightly for short routes, corners, dead ends, or uncertain continuation.
+
+A blocked direction must have low q.
+A wide, continuous, deep route should have clearly higher q than a wall, short open patch, narrow gap, or cluttered dead end.
+
+Numeric rules:
+
+* t, r, and q must each be from 0.00 to 1.00.
+* Each must contain exactly two digits after the decimal point.
+* Valid: 0.00, 0.37, 0.91, 1.00.
+* Invalid: 0, 1, .5, 0.5, 0.9375000001.
+
+Output rules:
+
+* JSON only.
+* Exactly four keys in this order: p,t,r,q.
+* No Markdown.
+* No explanation.
+* No extra keys.
+* No s field.
+* No motion or turn commands.

@@ -831,7 +831,7 @@ perform_mapping_to_nav_handoff() {
       export NAV2_STOP_CONFLICTS=1
       export NAV2_REUSE_EXISTING=0
       unset NAV2_SKIP_DAEMON_REFRESH
-    elif check_fast_nav_reusable_stack "FAST_NAV"; then
+    elif prepare_fast_nav_sensor_stack "FAST_NAV"; then
       mode="fast_nav"
       export NAV2_STOP_CONFLICTS=0
       export NAV2_REUSE_EXISTING=1

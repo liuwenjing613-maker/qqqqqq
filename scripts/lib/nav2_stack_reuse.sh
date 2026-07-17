@@ -91,17 +91,14 @@ restart_lidar_driver() {
   local project_dir="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
   echo "[NAV2] restart ydlidar driver (stale DDS publisher recovery) ..."
   pkill -f "ydlidar_ros2_driver_node|start_lidar_only.sh" 2>/dev/null || true
-  sleep 4
-  if [ -x "$project_dir/scripts/lidar/start_lidar_only.sh" ]; then
-    bash "$project_dir/scripts/lidar/start_lidar_only.sh" &
-    local pid=$!
-    sleep 4
-    wait_lidar_driver_scanning 90 "$project_dir/logs/lidar_driver.log" || true
-    if kill -0 "$pid" 2>/dev/null || scan_driver_alive; then
-      return 0
-    fi
+  sleep 2
+  if [ ! -x "$project_dir/scripts/lidar/start_lidar_only.sh" ]; then
+    return 1
   fi
-  return 1
+  bash "$project_dir/scripts/lidar/start_lidar_only.sh" --foreground &
+  local launcher_pid=$!
+  sleep 2
+  verify_lidar_startup "$launcher_pid" "$project_dir/logs/lidar_driver.log"
 }
 
 ensure_scan_publishing() {
@@ -118,10 +115,95 @@ ensure_scan_publishing() {
   return 1
 }
 
+lidar_driver_pid() {
+  local pid=""
+  local pid_file="${PROJECT_DIR:-/root/rdk_x5_vln_robot}/runtime/ydlidar_driver.pid"
+  if [[ -f "$pid_file" ]]; then
+    pid="$(tr -d '[:space:]' < "$pid_file" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      echo "$pid"
+      return 0
+    fi
+  fi
+  pgrep -f "ydlidar_ros2_driver_node" | head -1 || true
+}
+
 laser_static_tf_ready() {
   local laser_frame="$1"
-  timeout 2 ros2 run tf2_ros tf2_echo base_link "$laser_frame" 2>/dev/null \
-    | head -5 | grep -q "Translation"
+  timeout 3 ros2 run tf2_ros tf2_echo base_link "$laser_frame" 2>&1 \
+    | grep -m1 -q "Translation:"
+}
+
+wait_laser_static_tf() {
+  local laser_frame="${1:-${LASER_FRAME:-laser}}"
+  local timeout_sec="${2:-10}"
+  local start
+  start="$(date +%s)"
+  while (( $(date +%s) - start < timeout_sec )); do
+    if laser_static_tf_ready "$laser_frame"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+ensure_laser_static_tf() {
+  local laser_frame="${1:-${LASER_FRAME:-laser}}"
+  if wait_laser_static_tf "$laser_frame" 2; then
+    return 0
+  fi
+  echo "[FAST_NAV] base_link_laser_tf missing"
+  echo "[FAST_NAV] repairing static TF"
+  local project_dir="${PROJECT_DIR:-/root/rdk_x5_vln_robot}"
+  # shellcheck source=/dev/null
+  source "${project_dir}/scripts/lib/lidar_frame_config.sh" 2>/dev/null || true
+  if ! pgrep -f "static_transform_publisher.*base_link.*${laser_frame}" >/dev/null 2>&1; then
+    ros2 run tf2_ros static_transform_publisher \
+      --x "${LASER_X}" --y "${LASER_Y}" --z "${LASER_Z}" \
+      --roll "${LASER_ROLL}" --pitch "${LASER_PITCH}" --yaw "${LASER_YAW}" \
+      --frame-id base_link \
+      --child-frame-id "${laser_frame}" \
+      >/dev/null 2>&1 &
+  fi
+  if wait_laser_static_tf "$laser_frame" 12; then
+    echo "[FAST_NAV] base_link_laser_tf repaired"
+    return 0
+  fi
+  return 1
+}
+
+verify_lidar_startup() {
+  local launcher_pid="${1:-}"
+  local logfile="${2:-$_LIDAR_DRIVER_LOG}"
+  local driver_pid
+  driver_pid="$(lidar_driver_pid)"
+
+  echo "[LIDAR] launcher pid=${launcher_pid:-none}"
+  echo "[LIDAR] driver pid=${driver_pid:-none}"
+
+  if [[ -n "$launcher_pid" ]] && ! kill -0 "$launcher_pid" 2>/dev/null; then
+    echo "[LIDAR] ERROR: launcher process not alive (pid=$launcher_pid)"
+    return 1
+  fi
+
+  if ! scan_driver_alive; then
+    echo "[LIDAR] ERROR: driver process missing"
+    return 1
+  fi
+  echo "[LIDAR] driver process PASS"
+
+  if ! wait_lidar_driver_scanning 30 "$logfile"; then
+    echo "[LIDAR] ERROR: driver not scanning"
+    return 1
+  fi
+
+  if ! wait_topic_publishing /scan 20 2 2; then
+    echo "[LIDAR] ERROR: /scan fresh samples failed"
+    return 1
+  fi
+  echo "[LIDAR] /scan fresh samples PASS"
+  return 0
 }
 
 chassis_stack_ready() {
@@ -220,6 +302,43 @@ _cmd_vel_unexpected_publishers() {
   done
 }
 
+check_fast_nav_core_sensors() {
+  local label="${1:-FAST_NAV}"
+  local fail=0
+
+  _pass() { echo "[$label] PASS $1"; }
+  _fail() { echo "[$label] FAIL $1"; fail=1; }
+
+  if topic_is_publishing /scan 1 8; then _pass "scan"; else _fail "scan"; fi
+  if topic_is_publishing /scan_filtered 1 8; then _pass "scan_filtered"; else _fail "scan_filtered"; fi
+  if topic_is_publishing /odom 1 8; then _pass "odom"; else _fail "odom"; fi
+  if odom_base_link_tf_ready; then _pass "odom_base_link_tf"; else _fail "odom_base_link_tf"; fi
+
+  if chassis_stack_ready; then
+    _pass "chassis_stack_ready"
+  else
+    _fail "chassis_stack_ready"
+  fi
+
+  return "$fail"
+}
+
+prepare_fast_nav_sensor_stack() {
+  local label="${1:-FAST_NAV}"
+  # shellcheck source=/dev/null
+  source "${PROJECT_DIR:-/root/rdk_x5_vln_robot}/scripts/lib/lidar_frame_config.sh" 2>/dev/null || true
+
+  if ! check_fast_nav_core_sensors "$label"; then
+    return 1
+  fi
+
+  if ! wait_laser_static_tf "${LASER_FRAME:-laser}" 2; then
+    ensure_laser_static_tf "${LASER_FRAME:-laser}" || return 1
+  fi
+
+  check_fast_nav_reusable_stack "$label"
+}
+
 check_fast_nav_reusable_stack() {
   local label="${1:-FAST_NAV}"
   local fail=0
@@ -232,7 +351,11 @@ check_fast_nav_reusable_stack() {
   if topic_is_publishing /scan_filtered 1 8; then _pass "scan_filtered"; else _fail "scan_filtered"; fi
   if topic_is_publishing /odom 1 8; then _pass "odom"; else _fail "odom"; fi
   if odom_base_link_tf_ready; then _pass "odom_base_link_tf"; else _fail "odom_base_link_tf"; fi
-  if laser_static_tf_ready "${LASER_FRAME:-laser}"; then _pass "base_link_laser_tf"; else _fail "base_link_laser_tf"; fi
+  if wait_laser_static_tf "${LASER_FRAME:-laser}" 2; then
+    _pass "base_link_laser_tf"
+  else
+    _fail "base_link_laser_tf"
+  fi
 
   if chassis_stack_ready; then
     _pass "chassis_stack_ready"

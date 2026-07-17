@@ -62,7 +62,7 @@ else
   exit 1
 fi
 
-LOG_DIR="$PROJECT_DIR/logs/nav2_$(date +%Y%m%d_%H%M%S)"
+LOG_DIR="${LOG_DIR:-$PROJECT_DIR/logs/nav2_$(date +%Y%m%d_%H%M%S)}"
 STATE_DIR="$PROJECT_DIR/state"
 POSE_STATE_FILE="${POSE_STATE_FILE:-$STATE_DIR/last_pose_map.json}"
 AMCL_SETTLE_METRICS_FILE="$LOG_DIR/amcl_settle_metrics.json"
@@ -152,6 +152,10 @@ ensure_bg_process_alive() {
   local name="$1"
   local pid="$2"
   local logfile="$3"
+  if [[ "$name" == "lidar" ]]; then
+    verify_lidar_startup "$pid" "$logfile"
+    return $?
+  fi
   if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
     log "ERROR: $name exited during startup (pid=${pid:-none})"
     if [[ -f "$logfile" ]]; then
@@ -241,11 +245,11 @@ zero_cmd
 if [ "$NAV2_REUSE_EXISTING" = "1" ] && topic_is_publishing /scan; then
   log "reuse existing /scan publisher (skip lidar start)"
   REUSE_SCAN=1
+  verify_lidar_startup "$(lidar_driver_pid)" "$LOG_DIR/lidar.log" || exit 1
 elif [ -x "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh" ]; then
-  start_bg lidar bash "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
+  start_bg lidar bash "$PROJECT_DIR/scripts/lidar/start_lidar_only.sh" --foreground
   LIDAR_PID="${PIDS[-1]}"
-  wait_topic_publishing /scan 20 || exit 1
-  ensure_bg_process_alive "lidar" "$LIDAR_PID" "$LOG_DIR/lidar.log" || exit 1
+  verify_lidar_startup "$LIDAR_PID" "$LOG_DIR/lidar.log" || exit 1
 else
   log "ERROR: lidar script not found or not executable: $PROJECT_DIR/scripts/lidar/start_lidar_only.sh"
   exit 1
@@ -271,8 +275,11 @@ else
 fi
 
 # 3. 启动 base_link -> laser 静态 TF
-if [ "$NAV2_REUSE_EXISTING" = "1" ] && laser_static_tf_ready "${LASER_FRAME}"; then
+if [ "$NAV2_REUSE_EXISTING" = "1" ] && wait_laser_static_tf "${LASER_FRAME}" 2; then
   log "reuse existing base_link->${LASER_FRAME} TF (skip static_tf start)"
+  REUSE_STATIC_TF=1
+elif wait_laser_static_tf "${LASER_FRAME}" 2; then
+  log "reuse existing base_link->${LASER_FRAME} TF"
   REUSE_STATIC_TF=1
 else
   start_bg static_tf ros2 run tf2_ros static_transform_publisher \
@@ -280,6 +287,13 @@ else
     --roll "${LASER_ROLL}" --pitch "${LASER_PITCH}" --yaw "${LASER_YAW}" \
     --frame-id base_link \
     --child-frame-id "${LASER_FRAME}"
+  STATIC_TF_PID="${PIDS[-1]}"
+  if ! wait_laser_static_tf "${LASER_FRAME}" 15; then
+    log "ERROR: base_link->${LASER_FRAME} TF not ready after static_tf start"
+    exit 1
+  fi
+  ensure_bg_process_alive "static_tf" "$STATIC_TF_PID" "$LOG_DIR/static_tf.log" || exit 1
+  log "base_link->${LASER_FRAME} TF OK"
 fi
 
 # 4. 启动 PWM 底盘桥：必须能发布 odom->base_link TF

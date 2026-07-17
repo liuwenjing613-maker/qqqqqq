@@ -298,7 +298,7 @@ main() {
   sleep 1
 
   log "[1/6] LiDAR -> /scan"
-  start_background lidar bash "${PROJECT_DIR}/scripts/lidar/start_lidar_only.sh"
+  start_background lidar bash "${PROJECT_DIR}/scripts/lidar/start_lidar_only.sh" --foreground
   sleep 6
 
   wait_topic_exists /scan 30 || {
