@@ -924,6 +924,9 @@ PY
     "${nav_args[@]}" \
     2>&1 | tee "$SESSION_DIR/nav2_run.log"; then
     log "✓ Nav2 reuse 阶段完成"
+    # Detach JOY_PID from session EXIT cleanup list; ownership.json gates sensor retention.
+    JOY_PID=""
+    STARTED_JOY=0
   else
     log "✗ Nav2 reuse 阶段失败，详见 $SESSION_DIR/nav2_run.log"
     if [[ -f "$SESSION_DIR/nav2_runtime/nav2_state.json" ]]; then
@@ -1014,6 +1017,23 @@ session_cleanup_and_exit() {
   fi
   CLEANUP_DONE=1
   trap - EXIT INT TERM HUP
+
+  local own_json="${SESSION_DIR}/nav2_runtime/ownership.json"
+  if [[ -f "$own_json" ]] && python3 - "$own_json" "${PROJECT_DIR}/scripts/nav" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[2])
+from qwen_nav2_common import ownership_protects_sensors
+raise SystemExit(0 if ownership_protects_sensors(Path(sys.argv[1])) else 1)
+PY
+  then
+    log "ownership protects sensors — skip JOY/sensor full cleanup (exit=$rc)"
+    # Still cancel Nav2 best-effort; never kill lidar/filter/chassis/static_tf/foxglove
+    timeout 0.8 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+      "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" -r 10 \
+      >/dev/null 2>&1 || true
+    exit "$rc"
+  fi
 
   if [[ "${SESSION_SAVE_DONE:-0}" != "1" ]]; then
     log "会话未保存即退出 (exit=$rc)，正在清理 ..."
@@ -1278,6 +1298,69 @@ if [[ ! -f "$SESSION_POSE" ]]; then
   log "FAIL: 会话位姿快照不存在: $SESSION_POSE"
   exit 1
 fi
+
+# OK handoff snapshot: frozen map + odom poses (used by Nav2 odom hard gate)
+python3 - "$SESSION_DIR/handoff_snapshot.json" "$SESSION_ID" "$SESSION_POSE" "$MAP_YAML" <<'PY'
+import json, math, os, sys, time
+from pathlib import Path
+out, sid, pose_path, map_yaml = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]), sys.argv[4]
+pose = json.loads(pose_path.read_text(encoding="utf-8"))
+map_pose = {
+    "x": float(pose["x"]),
+    "y": float(pose["y"]),
+    "yaw": float(pose.get("yaw", 0.0)),
+}
+odom_pose = None
+pose_source = str(pose.get("source", "last_pose_map"))
+try:
+    import rclpy
+    from nav_msgs.msg import Odometry
+    from rclpy.node import Node
+    from rclpy.qos import qos_profile_sensor_data
+    rclpy.init()
+    node = Node("jqs_handoff_odom_snap")
+    box = {"m": None}
+    node.create_subscription(Odometry, "/odom", lambda m: box.__setitem__("m", m), qos_profile_sensor_data)
+    t0 = time.time()
+    while time.time() - t0 < 2.0 and box["m"] is None:
+        rclpy.spin_once(node, timeout_sec=0.1)
+    if box["m"] is not None:
+        p = box["m"].pose.pose.position
+        q = box["m"].pose.pose.orientation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        odom_pose = {"x": float(p.x), "y": float(p.y), "yaw": float(yaw)}
+    node.destroy_node()
+    if rclpy.ok():
+        rclpy.shutdown()
+except Exception as exc:
+    pose_source = pose_source + f"|odom_snap_err:{exc}"
+payload = {
+    "session_id": sid,
+    "snapshot_epoch": time.time(),
+    "map_pose": map_pose,
+    "odom_pose": odom_pose,
+    "map_yaml": map_yaml,
+    "pose_source": pose_source,
+}
+tmp = out.with_suffix(".tmp")
+with open(tmp, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps(payload, indent=2) + "\n")
+    fh.flush(); os.fsync(fh.fileno())
+os.replace(tmp, out)
+if odom_pose is None:
+    print("WARN: handoff_snapshot missing odom_pose — continue without odom gate", file=sys.stderr)
+print("handoff_snapshot written")
+PY
+
+mkdir -p "$SESSION_DIR/nav2_runtime"
+python3 - "$SESSION_DIR/nav2_runtime/ownership.json" "$SESSION_ID" "${PROJECT_DIR}/scripts/nav" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[3])
+from qwen_nav2_common import write_ownership
+write_ownership(Path(sys.argv[1]), sys.argv[2], "MAPPING_OWNS_SENSOR")
+PY
+
 if [[ ! -f "$SESSION_TRAJECTORY" ]] && [[ -f "$TRAJ_FILE" ]]; then
   cp -f "$TRAJ_FILE" "$SESSION_TRAJECTORY"
 fi

@@ -28,6 +28,7 @@ from control.qwen_visual_servo import (
     CommandRateLimiter,
     EmergencyReverseConfig,
     EmergencyReverseController,
+    GoalSuccessConfig,
     QwenVisualServo,
     RateLimitConfig,
     ServoConfig,
@@ -40,6 +41,9 @@ from control.qwen_visual_servo import (
     ViewAdjustConfig,
     ViewAdjustController,
     ViewAdjustPhase,
+    evaluate_goal_success,
+    point_horizontal_error,
+    point_source_age_sec,
 )
 
 
@@ -154,11 +158,20 @@ class QwenVisualServoNode(Node):
         self.qwen_pause_owned = False
 
         goal_cfg = self.config.get("goal", {})
-        self.goal_enabled = bool(goal_cfg.get("enabled", True))
-        self.success_distance = float(goal_cfg.get("success_distance", 0.50))
-        if self.success_distance <= 0.0:
-            raise ValueError("goal.success_distance must be positive")
+        self.goal_success_cfg = GoalSuccessConfig(
+            enabled=bool(goal_cfg.get("enabled", True)),
+            success_distance=float(goal_cfg.get("success_distance", 0.50)),
+            max_source_age_sec=float(goal_cfg.get("max_source_age_sec", 1.2)),
+            required_consecutive_ticks=int(
+                goal_cfg.get("required_consecutive_ticks", 5)
+            ),
+        )
+        self.goal_success_cfg.validate()
+        self.goal_enabled = self.goal_success_cfg.enabled
+        self.success_distance = self.goal_success_cfg.success_distance
         self.mission_success = False
+        self.success_streak = 0
+        self.last_success_gate_reason = "idle"
 
         spawn_cfg = self.config.get("spawn_scan", {})
         self.spawn_scan = SpawnScanController(
@@ -349,11 +362,22 @@ class QwenVisualServoNode(Node):
             f"pulse={self.view_adjust.cfg.turn_pulse_sec:.2f}s "
             f"settle={self.view_adjust.cfg.settle_sec:.2f}s "
             f"goal_success={self.success_distance:.2f}m "
+            f"age<={self.goal_success_cfg.max_source_age_sec:.2f}s "
+            f"center|e|<={self.servo.cfg.center_deadband:.2f} "
+            f"ticks={self.goal_success_cfg.required_consecutive_ticks} "
             f"spawn_scan=({self.spawn_scan.cfg.sectors}x"
             f"{self.spawn_scan.cfg.sector_deg:.0f}deg,"
             f" wz={self.spawn_scan.cfg.wz:.3f},"
             f" odom={self.odom_topic})"
         )
+        if self.success_distance > float(self.servo.cfg.stop_distance):
+            self.get_logger().warning(
+                "goal.success_distance "
+                f"({self.success_distance:.2f}m) > safety.stop_distance "
+                f"({self.servo.cfg.stop_distance:.2f}m); "
+                "false wall arrivals are still possible if a centered target "
+                "is visible while lidar sees a nearby obstacle"
+            )
         if not self.motion_enabled:
             self.get_logger().warning(
                 "DRY RUN: raw desired commands are visible, chassis output stays zero"
@@ -409,6 +433,15 @@ class QwenVisualServoNode(Node):
                     self.get_logger().warning(
                         "spawn scan aborted: target visible -> TRACK"
                     )
+
+            # TURN pulse ends in WAITING_FRESH_RESULT with wz=0 until a new
+            # model result arrives. Previously only POINT/STOP cleared that
+            # phase, so a stream of TURN_* left the robot frozen while the
+            # pending turn gate could never start the next pulse.
+            if self.view_adjust.phase == ViewAdjustPhase.WAITING_FRESH_RESULT:
+                self.view_adjust.cancel()
+                if self.qwen_pause_owned:
+                    self.qwen_pause_owned = False
 
             if self.action == "POINT" and self.point_x is not None:
                 self.point_streak += 1
@@ -485,6 +518,8 @@ class QwenVisualServoNode(Node):
         if command in {"enable", "start", "run"}:
             self.motion_enabled = True
             self.mission_success = False
+            self.success_streak = 0
+            self.last_success_gate_reason = "idle"
             self.get_logger().warning("motion ENABLED by servo command")
         elif command in {"disable", "stop", "pause"}:
             self.motion_enabled = False
@@ -495,6 +530,8 @@ class QwenVisualServoNode(Node):
         elif command == "reset":
             self.point_streak = 0
             self.mission_success = False
+            self.success_streak = 0
+            self.last_success_gate_reason = "idle"
             self.spawn_scan.cancel()
             self._cancel_turn_and_resume_qwen()
             self._publish_zero()
@@ -513,7 +550,14 @@ class QwenVisualServoNode(Node):
             and (result == "TARGET_VISIBLE" or role == "target")
         )
 
-    def _declare_mission_success(self, front_distance: float) -> None:
+    def _declare_mission_success(
+        self,
+        front_distance: float,
+        *,
+        horizontal_error: float,
+        source_age_sec: float,
+        streak: int,
+    ) -> None:
         if self.mission_success:
             return
         self.mission_success = True
@@ -527,9 +571,13 @@ class QwenVisualServoNode(Node):
         self._send_qwen_command("success")
         self._publish_zero()
         self.get_logger().warning(
-            "MISSION SUCCESS: target visible and "
+            "MISSION SUCCESS: target centered and fresh, "
             f"front_distance={front_distance:.3f}m "
-            f"<= success_distance={self.success_distance:.3f}m; "
+            f"<= success_distance={self.success_distance:.3f}m, "
+            f"|e|={abs(horizontal_error):.3f}<={self.servo.cfg.center_deadband:.3f}, "
+            f"source_age={source_age_sec:.3f}s"
+            f"<={self.goal_success_cfg.max_source_age_sec:.3f}s, "
+            f"streak={streak}/{self.goal_success_cfg.required_consecutive_ticks}; "
             "stopped and exited navigation"
         )
 
@@ -580,16 +628,35 @@ class QwenVisualServoNode(Node):
             and now - self.scan_received_sec <= self.servo.cfg.scan_timeout_sec
         )
 
-        # Simple arrive-and-exit: visible target + close enough lidar reading.
-        if (
-            self.goal_enabled
-            and not self.mission_success
-            and self._target_visible_in_fov()
-            and scan_fresh
-            and self.front_distance is not None
-            and self.front_distance <= self.success_distance
-        ):
-            self._declare_mission_success(self.front_distance)
+        # Pre-compute tracking freshness/error so SUCCESS uses the same clock
+        # model as the POINT servo (receive_gap + API latency).
+        horizontal_error_pre = point_horizontal_error(
+            self.point_x, self.image_width
+        )
+        source_age_pre = point_source_age_sec(
+            now, self.result_received_sec, self.latency_ms
+        )
+        if not self.mission_success:
+            goal_eval = evaluate_goal_success(
+                cfg=self.goal_success_cfg,
+                center_deadband=float(self.servo.cfg.center_deadband),
+                streak=self.success_streak,
+                target_visible=self._target_visible_in_fov(),
+                scan_fresh=scan_fresh,
+                front_distance=self.front_distance,
+                horizontal_error=horizontal_error_pre,
+                source_age_sec=source_age_pre,
+            )
+            self.success_streak = goal_eval.streak
+            self.last_success_gate_reason = goal_eval.reason
+            if goal_eval.declare and self.front_distance is not None:
+                assert horizontal_error_pre is not None
+                self._declare_mission_success(
+                    self.front_distance,
+                    horizontal_error=float(horizontal_error_pre),
+                    source_age_sec=float(source_age_pre),
+                    streak=int(goal_eval.streak),
+                )
 
         if self.mission_success:
             desired_vx = desired_wz = 0.0
@@ -675,14 +742,58 @@ class QwenVisualServoNode(Node):
                         f"-> {spawn.finish_command}"
                     )
             elif self.view_adjust.active:
-                view = self.view_adjust.update(now)
-                desired_vx, desired_wz = view.vx, view.wz
-                hard_stop = view.hard_stop
-                reason = view.reason
-                view_phase = view.phase.value
-                bypass_rate_limit = view.phase == ViewAdjustPhase.TURNING
-                if view.request_fresh_observation:
-                    self._release_qwen_pause(send_resume=True)
+                # If a new TURN is already lidar-ready while we are only waiting
+                # for a fresh look, drop the wait and start the next pulse.
+                if (
+                    self.view_adjust.phase
+                    == ViewAdjustPhase.WAITING_FRESH_RESULT
+                    and self.turn_gate.active
+                    and self.turn_gate.ready
+                ):
+                    self.view_adjust.cancel()
+                    if self.qwen_pause_owned:
+                        self.qwen_pause_owned = False
+                    # Fall through to turn_gate handling below by not returning
+                    # early: re-enter via a second branch. Simplest: start now.
+                    turn_action = self.turn_gate.action
+                    turn_request_id = self.turn_gate.request_id
+                    self.turn_gate.cancel()
+                    started = self.view_adjust.start(
+                        turn_action,
+                        turn_request_id,
+                        now,
+                    )
+                    if started:
+                        self.limiter.reset()
+                        if self.pause_qwen_during_turn:
+                            self._send_qwen_command("pause")
+                            self.qwen_pause_owned = True
+                        self.get_logger().warning(
+                            f"start {turn_action} after fresh-wait "
+                            f"request_id={turn_request_id}"
+                        )
+                        view = self.view_adjust.update(now)
+                        desired_vx, desired_wz = view.vx, view.wz
+                        hard_stop = view.hard_stop
+                        reason = view.reason
+                        view_phase = view.phase.value
+                        bypass_rate_limit = (
+                            view.phase == ViewAdjustPhase.TURNING
+                        )
+                    else:
+                        desired_vx = desired_wz = 0.0
+                        hard_stop = True
+                        reason = "turn_request_already_used"
+                        view_phase = self.view_adjust.phase.value
+                else:
+                    view = self.view_adjust.update(now)
+                    desired_vx, desired_wz = view.vx, view.wz
+                    hard_stop = view.hard_stop
+                    reason = view.reason
+                    view_phase = view.phase.value
+                    bypass_rate_limit = view.phase == ViewAdjustPhase.TURNING
+                    if view.request_fresh_observation:
+                        self._release_qwen_pause(send_resume=True)
             elif self.turn_gate.active:
                 view_phase = (
                     f"TURN_PENDING_{self.turn_gate.action.removeprefix('TURN_')}"
@@ -828,6 +939,14 @@ class QwenVisualServoNode(Node):
             "view_adjust_phase": view_phase,
             "mission_success": self.mission_success,
             "success_distance": round(self.success_distance, 3),
+            "success_streak": int(self.success_streak),
+            "success_required_ticks": int(
+                self.goal_success_cfg.required_consecutive_ticks
+            ),
+            "success_max_source_age_sec": round(
+                self.goal_success_cfg.max_source_age_sec, 3
+            ),
+            "success_gate_reason": self.last_success_gate_reason,
             "spawn_scan_phase": self.spawn_scan.phase.value,
             "spawn_scan_sector": self.spawn_scan.sector_index,
             "spawn_scan_scores": self.spawn_scan.scores,

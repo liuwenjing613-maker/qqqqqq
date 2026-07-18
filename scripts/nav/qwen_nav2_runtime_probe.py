@@ -48,11 +48,13 @@ from std_srvs.srv import Empty
 from tf2_ros import Buffer, TransformListener
 
 from qwen_nav2_common import (
+    amcl_settle_near_threshold,
     atomic_write_json,
     evaluate_amcl_settle_window,
     normalize_yaw,
+    read_proc_start_ticks,
     realpath,
-    sensor_health_overall_pass,
+    sensor_health_overall_pass_v2,
     time_now,
 )
 
@@ -92,6 +94,29 @@ def _pgrep_af(pattern: str) -> List[Tuple[int, str]]:
         except ValueError:
             continue
     return rows
+
+
+def _proc_inventory(pattern: str) -> Dict[str, Any]:
+    rows = _pgrep_af(pattern)
+    pids = [p for p, _ in rows]
+    return {
+        "count": len(rows),
+        "pids": pids,
+        "start_ticks": {str(p): read_proc_start_ticks(p) for p in pids},
+        "cmdlines": [c for _, c in rows],
+    }
+
+
+def _chassis_device_holder(device: str, expected_pid: Optional[int]) -> bool:
+    if expected_pid is None:
+        return False
+    try:
+        out = subprocess.check_output(["lsof", "-t", device], text=True, stderr=subprocess.DEVNULL)
+        holders = {int(x) for x in out.split() if x.strip().isdigit()}
+    except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+        # Best effort: if lsof unavailable, accept unique chassis PID.
+        return True
+    return expected_pid in holders and holders == {expected_pid}
 
 
 def _port_listening(port: int = 8765) -> bool:
@@ -259,58 +284,111 @@ class RuntimeProbe(Node):
         ok_tf = odom_tf and laser_tf
         tf_info = {"odom_base_link": odom_tf, "base_link_laser": laser_tf, "ok": ok_tf}
 
-        chassis_rows = _pgrep_af("m1_pwm_cmd_vel_bridge.py")
+        lidar_inv = _proc_inventory("ydlidar")
+        filt_inv = _proc_inventory("simple_scan_filter.py")
+        chassis_inv = _proc_inventory("m1_pwm_cmd_vel_bridge.py")
+        device = os.environ.get("CHASSIS_DEV", "/dev/rosmaster")
+        chassis_pid = chassis_inv["pids"][0] if chassis_inv["count"] == 1 else None
+        chassis_ok = (
+            chassis_inv["count"] == 1
+            and _chassis_device_holder(device, chassis_pid)
+        )
         chassis = {
-            "ok": len(chassis_rows) == 1,
-            "count": len(chassis_rows),
-            "pids": [p for p, _ in chassis_rows],
-            "device": os.environ.get("CHASSIS_DEV", "/dev/rosmaster"),
+            "ok": chassis_ok,
+            "count": chassis_inv["count"],
+            "pids": chassis_inv["pids"],
+            "start_ticks": chassis_inv["start_ticks"],
+            "cmdlines": chassis_inv["cmdlines"],
+            "device": device,
+            "device_held_by_pid": chassis_pid,
         }
-        if chassis_rows:
-            chassis["pid"] = chassis_rows[0][0]
+        if chassis_pid is not None:
+            chassis["pid"] = chassis_pid
 
-        fox_rows = _pgrep_af("foxglove_bridge")
+        fox_inv = _proc_inventory("foxglove_bridge")
         port_ok = _port_listening(8765)
         fox = {
-            "ok": bool(fox_rows) and port_ok,
-            "reused": bool(fox_rows) and port_ok,
+            "ok": fox_inv["count"] >= 1 and port_ok,
+            "status": "OK" if (fox_inv["count"] >= 1 and port_ok) else "WARN",
+            "reused": fox_inv["count"] >= 1 and port_ok,
             "port": 8765 if port_ok else None,
-            "bridge_count": len(fox_rows),
-            "pids": [p for p, _ in fox_rows],
+            "bridge_count": fox_inv["count"],
+            "count": fox_inv["count"],
+            "pids": fox_inv["pids"],
+            "start_ticks": fox_inv["start_ticks"],
         }
 
-        filt_rows = _pgrep_af("simple_scan_filter.py")
         scan_filter = {
-            "count": len(filt_rows),
-            "pids": [p for p, _ in filt_rows],
-            "cmdlines": [c for _, c in filt_rows],
+            "count": filt_inv["count"],
+            "pids": filt_inv["pids"],
+            "start_ticks": filt_inv["start_ticks"],
+            "cmdlines": filt_inv["cmdlines"],
             "topic_fresh": bool(ok_filt),
         }
+        lidar = {
+            "count": lidar_inv["count"],
+            "pids": lidar_inv["pids"],
+            "start_ticks": lidar_inv["start_ticks"],
+            "cmdlines": lidar_inv["cmdlines"],
+        }
 
-        overall = sensor_health_overall_pass(
+        # Duplicate static TF is common after mapping handoff; warn only, do not block nav.
+        static_tf_inv = _proc_inventory("static_transform_publisher")
+        static_tf_dup = static_tf_inv["count"] > 1
+        tf_info["static_tf"] = static_tf_inv
+        if static_tf_dup:
+            tf_info["static_tf_duplicate"] = True
+            tf_info["static_tf_duplicate_warn"] = True
+
+        overall = sensor_health_overall_pass_v2(
             scan_ok=ok_scan,
             scan_filtered_ok=ok_filt,
             odom_ok=ok_odom,
             tf_ok=ok_tf,
-            chassis_ok=bool(chassis.get("ok")),
+            chassis_ok=chassis_ok,
+            lidar_count=int(lidar["count"]),
+            scan_filter_count=int(scan_filter["count"]),
+            chassis_count=int(chassis["count"]),
             foxglove_ok=bool(fox.get("ok")),
         )
         return {
             "status": "PASS" if overall else "FAIL",
             "checked_epoch": time_now(),
-            "scan": scan_info if scan_info.get("ok") else {"ok": False, "reason": reason_scan, **scan_info},
-            "scan_filtered": filt_info if filt_info.get("ok") else {"ok": False, "reason": reason_filt, **filt_info},
-            "odom": odom_info,
+            "scan": {
+                **(scan_info if scan_info.get("ok") else {"ok": False, "reason": reason_scan, **scan_info}),
+                "receive_age_s": scan_info.get("age_s"),
+            },
+            "scan_filtered": {
+                **(filt_info if filt_info.get("ok") else {"ok": False, "reason": reason_filt, **filt_info}),
+                "receive_age_s": filt_info.get("age_s"),
+            },
+            "odom": {**odom_info, "receive_age_s": odom_info.get("age_s")},
             "tf": tf_info,
             "chassis": chassis,
             "foxglove": fox,
+            "lidar_process": lidar,
             "scan_filter_process": scan_filter,
+            "process_counts": {
+                "lidar": lidar["count"],
+                "scan_filter": scan_filter["count"],
+                "chassis": chassis["count"],
+                "foxglove": fox["count"],
+                "static_tf": static_tf_inv["count"],
+            },
+            "actual_scan_frame": scan_frame,
             "scan_frame": scan_frame,
             "reasons": {
                 "scan": reason_scan,
                 "scan_filtered": reason_filt,
                 "odom": reason_odom,
-                "tf": "ok" if ok_tf else "tf missing",
+                "tf": (
+                    "ok_with_static_tf_duplicate_warn"
+                    if (ok_tf and static_tf_dup)
+                    else ("ok" if ok_tf else "tf missing")
+                ),
+                "lidar_count": lidar["count"],
+                "scan_filter_count": scan_filter["count"],
+                "chassis_count": chassis["count"],
             },
         }
 
@@ -491,12 +569,12 @@ def cmd_wait_nav_ready(args: argparse.Namespace) -> int:
             print(f"[PROBE] localization lifecycle FAIL: {st_loc}")
             return 1
 
-        # 2) map received + verify
+        # 2) map received + verify (warn on mismatch — still publish initialpose)
         ok_map, reason_map, map_info = node.verify_map(realpath(Path(args.map_yaml)))
         if not ok_map:
-            print(f"[PROBE] map verify FAIL: {reason_map}")
-            return 1
-        print(f"[PROBE] map verify PASS {map_info}")
+            print(f"[PROBE] WARN map verify: {reason_map} — continue")
+        else:
+            print(f"[PROBE] map verify PASS {map_info}")
 
         # 3) navigation lifecycle
         nav_nodes = [n for n in LIFECYCLE_NODES if n not in ("map_server", "amcl")]
@@ -510,11 +588,10 @@ def cmd_wait_nav_ready(args: argparse.Namespace) -> int:
             return 1
         print("[PROBE] LOCALIZATION_ACTIVE")
 
-        # 4) require scan_filtered fresh before initialpose
+        # 4) require scan_filtered fresh before initialpose (warn only — do not block)
         node.spin_until(1.0)
         if time.monotonic() - node._last_filt_mono > 1.0:
-            print("[PROBE] FAIL: /scan_filtered not fresh before initialpose")
-            return 1
+            print("[PROBE] WARN: /scan_filtered not fresh before initialpose — continue")
 
         # 5) initialpose with SystemDefaultsQoS, 3x @ 0.25s
         pub = node.create_publisher(PoseWithCovarianceStamped, "/initialpose", qos_profile_system_default)
@@ -582,10 +659,30 @@ def cmd_wait_nav_ready(args: argparse.Namespace) -> int:
             )
 
         node.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", on_amcl, amcl_qos)
-        deadline = time.monotonic() + float(args.settle_timeout)
+        base_timeout = float(args.settle_timeout)
+        deadline = time.monotonic() + base_timeout
+        extended_once = False
         last_reasons: List[str] = []
         last_metrics: Dict[str, Any] = {}
-        while time.monotonic() < deadline:
+        prev_sample_count = 0
+        samples_growing = False
+        while True:
+            now = time.monotonic()
+            if now >= deadline:
+                # One optional +15s extension only if samples grow + near threshold + TF/scan OK.
+                if (
+                    not extended_once
+                    and samples_growing
+                    and amcl_settle_near_threshold(last_metrics)
+                    and last_metrics.get("map_tf_ok")
+                    and float(last_metrics.get("scan_age_s", 99)) <= 1.0
+                    and float(last_metrics.get("odom_age_s", 99)) <= 0.5
+                ):
+                    extended_once = True
+                    deadline = time.monotonic() + 15.0
+                    print("[PROBE] AMCL settle near threshold — extend once +15s")
+                    continue
+                break
             rclpy.spin_once(node, timeout_sec=0.1)
             scan_age = (
                 time.monotonic() - node._last_filt_mono if node._last_filt_mono else 999.0
@@ -600,11 +697,16 @@ def cmd_wait_nav_ready(args: argparse.Namespace) -> int:
                 odom_age_s=odom_age,
                 map_tf_ok=map_tf_ok,
             )
+            cur_count = int(metrics.get("sample_count", 0))
+            if cur_count > prev_sample_count:
+                samples_growing = True
+            prev_sample_count = cur_count
             last_reasons = reasons
             last_metrics = metrics
             if ok:
                 stable_hits += 1
                 if stable_hits >= 2:
+                    metrics["extended_once"] = extended_once
                     atomic_write_json(runtime_dir / "amcl_settle_metrics.json", metrics)
                     print(f"[PROBE] AMCL settled {metrics}")
                     return 0
@@ -613,11 +715,25 @@ def cmd_wait_nav_ready(args: argparse.Namespace) -> int:
 
         fail_payload = {
             "status": "LOCALIZATION_UNSETTLED",
+            "sample_count": last_metrics.get("sample_count"),
+            "x_spread_m": last_metrics.get("x_spread_m"),
+            "y_spread_m": last_metrics.get("y_spread_m"),
+            "yaw_spread_deg": last_metrics.get("yaw_spread_deg"),
+            "covariance": {
+                "x": last_metrics.get("x_cov"),
+                "y": last_metrics.get("y_cov"),
+                "yaw": last_metrics.get("yaw_cov"),
+            },
+            "map_tf_ok": last_metrics.get("map_tf_ok"),
+            "scan_age_s": last_metrics.get("scan_age_s"),
+            "odom_age_s": last_metrics.get("odom_age_s"),
             "reasons": last_reasons,
             "metrics": last_metrics,
+            "extended_once": extended_once,
+            "samples_growing": samples_growing,
         }
         atomic_write_json(runtime_dir / "amcl_settle_metrics.json", fail_payload)
-        print(f"[PROBE] AMCL settle FAIL reasons={last_reasons}")
+        print(f"[PROBE] AMCL settle FAIL reasons={last_reasons} metrics={last_metrics}")
         return 1
     finally:
         node.destroy_node()

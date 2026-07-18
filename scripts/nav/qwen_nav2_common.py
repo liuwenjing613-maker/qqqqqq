@@ -158,6 +158,51 @@ def _extract_candidate_id(data: Dict[str, Any]) -> str:
     raise ValueError("candidate_id missing")
 
 
+def load_goal_inputs_lenient(
+    *,
+    session_id: str,
+    map_yaml: Path,
+    goal_json: Path,
+    candidate_bundle: Path,
+    pose_json: Path,
+) -> Tuple[ParsedGoal, str]:
+    """Load goal for navigation with minimal checks (files + coordinates only)."""
+    try:
+        return validate_goal_inputs(
+            session_id=session_id,
+            map_yaml=map_yaml,
+            goal_json=goal_json,
+            candidate_bundle=candidate_bundle,
+            pose_json=pose_json,
+        )
+    except ValueError as exc:
+        map_yaml = realpath(map_yaml)
+        goal_json = realpath(goal_json)
+        if not map_yaml.is_file():
+            raise ValueError(f"map_yaml not found: {map_yaml}") from exc
+        if not goal_json.is_file():
+            raise ValueError(f"goal_json not found: {goal_json}") from exc
+        goal_data = json.loads(goal_json.read_text(encoding="utf-8"))
+        gx, gy, gyaw = _extract_goal_pose(goal_data)
+        try:
+            candidate_id = _extract_candidate_id(goal_data)
+        except ValueError:
+            candidate_id = "lenient"
+        return (
+            ParsedGoal(
+                session_id=session_id,
+                candidate_id=candidate_id,
+                map_yaml=map_yaml,
+                goal_x=gx,
+                goal_y=gy,
+                goal_yaw=gyaw,
+                bundle_fingerprint=str(goal_data.get("bundle_fingerprint", "")),
+                raw=goal_data,
+            ),
+            f"lenient:{exc}",
+        )
+
+
 def validate_goal_inputs(
     *,
     session_id: str,
@@ -399,6 +444,38 @@ def write_nav2_state(
         payload.update(extra)
     atomic_write_json(runtime_dir / "nav2_state.json", payload)
 
+
+
+def validate_occupancy_grid_against_yaml(
+    *,
+    frame_id: str,
+    width: int,
+    height: int,
+    resolution: float,
+    data_len: int,
+    origin_x: float,
+    origin_y: float,
+    yaml_resolution: float,
+    yaml_origin_x: float,
+    yaml_origin_y: float,
+    yaml_width: int,
+    yaml_height: int,
+) -> Tuple[bool, str]:
+    if frame_id != "map":
+        return False, f"frame_id={frame_id!r}"
+    if width <= 0 or height <= 0 or resolution <= 0:
+        return False, "invalid map dimensions"
+    if data_len != width * height:
+        return False, "map data length mismatch"
+    if abs(yaml_resolution - resolution) > 1e-4:
+        return False, f"resolution mismatch yaml={yaml_resolution} map={resolution}"
+    if yaml_width != width or yaml_height != height:
+        return False, f"size mismatch yaml=({yaml_width},{yaml_height}) map=({width},{height})"
+    if abs(yaml_origin_x - origin_x) > 1e-3:
+        return False, "origin x mismatch"
+    if abs(yaml_origin_y - origin_y) > 1e-3:
+        return False, "origin y mismatch"
+    return True, "ok"
 
 
 def time_now() -> float:

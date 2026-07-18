@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Handoff session ack validation tests."""
+"""Handoff session ack validation tests (compat suite)."""
 
 from __future__ import annotations
 
@@ -14,18 +14,38 @@ sys.path.insert(0, str(ROOT / "scripts" / "nav"))
 from qwen_nav2_common import validate_handoff_ack  # noqa: E402
 
 
+def _ident(role: str, pid: int) -> dict:
+    scripts = {
+        "lidar": ("", "ydlidar_ros2_driver_node --ros-args"),
+        "scan_filter": ("simple_scan_filter.py", "python3 simple_scan_filter.py"),
+        "chassis": ("m1_pwm_cmd_vel_bridge.py", "python3 m1_pwm_cmd_vel_bridge.py"),
+        "static_tf": ("", "static_transform_publisher --frame-id base_link"),
+    }
+    base, cmd = scripts[role]
+    return {
+        "role": role,
+        "pid": pid,
+        "start_ticks": "7",
+        "exe": "/usr/bin/python3",
+        "script_basename": base,
+        "cmdline": cmd,
+    }
+
+
 class TestHandoffSession(unittest.TestCase):
     def _base(self):
-        req = {"session_id": "JQS_A", "requested_epoch": 100.0, "expected_cmdlines": {}}
+        req = {"session_id": "JQS_A", "requested_epoch": 100.0}
         ack = {
             "session_id": "JQS_A",
             "state": "SENSOR_BASE_HELD",
             "completed_epoch": 101.0,
-            "lidar_pid": None,
-            "scan_filter_pid": None,
-            "chassis_pid": None,
-            "static_tf_pid": None,
-            "foxglove_pid": None,
+            "processes": {
+                "lidar": _ident("lidar", 1),
+                "scan_filter": _ident("scan_filter", 2),
+                "chassis": _ident("chassis", 3),
+            },
+            "stopped": {"joy": True, "teleop": True, "slam": True, "frontier": True},
+            "static_tf_present_via_tf": True,
         }
         return req, ack
 
@@ -43,20 +63,23 @@ class TestHandoffSession(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("completed_epoch", reason)
 
-    def test_pid_cmdline_mismatch_rejected(self) -> None:
+    def test_pid_identity_mismatch_rejected(self) -> None:
         req, ack = self._base()
-        req["expected_cmdlines"] = {"lidar_pid": "ydlidar"}
-        ack["lidar_pid"] = 12345
+        ack["processes"]["lidar"]["cmdline"] = "python other_thing"
+        ack["processes"]["lidar"]["script_basename"] = "other.py"
         with mock.patch("qwen_nav2_common.pid_alive", return_value=True), mock.patch(
-            "qwen_nav2_common.read_proc_cmdline", return_value="python other_thing"
+            "qwen_nav2_common.read_proc_start_ticks", return_value=7
         ):
             ok, reason = validate_handoff_ack(req, ack, expected_session_id="JQS_A")
         self.assertFalse(ok)
-        self.assertIn("cmdline", reason)
+        self.assertIn("identity", reason)
 
     def test_valid_ack_passes(self) -> None:
         req, ack = self._base()
-        ok, reason = validate_handoff_ack(req, ack, expected_session_id="JQS_A")
+        with mock.patch("qwen_nav2_common.pid_alive", return_value=True), mock.patch(
+            "qwen_nav2_common.read_proc_start_ticks", return_value=7
+        ):
+            ok, reason = validate_handoff_ack(req, ack, expected_session_id="JQS_A")
         self.assertTrue(ok, reason)
 
 

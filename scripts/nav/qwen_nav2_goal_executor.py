@@ -44,14 +44,15 @@ from qwen_nav2_common import (
     ProgressWatchState,
     atomic_write_json,
     compute_max_path_length_m,
+    load_goal_inputs_lenient,
     normalize_yaw,
     path_length_m,
     progress_timed_out,
     realpath,
     time_now,
     update_progress_watch,
-    validate_goal_inputs,
     validate_goal_on_map,
+    validate_occupancy_grid_against_yaml,
     validate_planned_path,
     write_nav2_state,
 )
@@ -229,6 +230,44 @@ class QwenNav2GoalExecutor(Node):
         pose.pose.orientation = yaw_to_quaternion(yaw)
         return pose
 
+    def wait_for_map(self, timeout_s: float = 8.0) -> Tuple[Optional[OccupancyGrid], str]:
+        import yaml
+        from PIL import Image
+
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=0.1)
+            if self._map_grid is not None:
+                break
+        if self._map_grid is None:
+            return None, "MAP_NOT_RECEIVED"
+        grid = self._map_grid
+        meta = yaml.safe_load(self.goal.map_yaml.read_text(encoding="utf-8")) or {}
+        image_name = str(meta.get("image", ""))
+        pgm_path = self.goal.map_yaml.parent / image_name
+        if not pgm_path.is_file():
+            pgm_path = self.goal.map_yaml.with_suffix(".pgm")
+        with Image.open(pgm_path) as img:
+            pw, ph = img.size
+        origin = meta.get("origin") or [0, 0, 0]
+        ok, reason = validate_occupancy_grid_against_yaml(
+            frame_id=str(grid.header.frame_id),
+            width=int(grid.info.width),
+            height=int(grid.info.height),
+            resolution=float(grid.info.resolution),
+            data_len=len(grid.data),
+            origin_x=float(grid.info.origin.position.x),
+            origin_y=float(grid.info.origin.position.y),
+            yaml_resolution=float(meta.get("resolution", 0)),
+            yaml_origin_x=float(origin[0]),
+            yaml_origin_y=float(origin[1]),
+            yaml_width=int(pw),
+            yaml_height=int(ph),
+        )
+        if not ok:
+            self.log(f"WARN map metadata mismatch ({reason}) — continue with live /map")
+        return grid, "ok"
+
     def wait_action_servers(self) -> bool:
         if not self.path_client.wait_for_server(timeout_sec=15.0):
             self.log("ComputePathToPose unavailable")
@@ -258,6 +297,9 @@ class QwenNav2GoalExecutor(Node):
             self.log("ComputePathToPose result timeout")
             return None
         path = result_fut.result().result.path
+        if path is None or len(path.poses) < 2:
+            self.log("ComputePathToPose returned empty path")
+            return None
         max_len = compute_max_path_length_m(
             robot_xy[0], robot_xy[1], self.effective_goal_x, self.effective_goal_y
         )
@@ -271,13 +313,11 @@ class QwenNav2GoalExecutor(Node):
             path_frame=path.header.frame_id,
         )
         if not ok:
-            self.log(f"path validation FAIL: {reason}")
-            return None
+            self.log(f"WARN path validation ({reason}) — still navigate")
         if self._map_grid is not None:
             safe, why = path_stays_in_known_free(self._map_grid, path)
             if not safe:
-                self.log(f"path safety FAIL: {why}")
-                return None
+                self.log(f"WARN path safety ({why}) — still navigate")
         return path
 
     def _publish_path_viz(self, path: Path, robot_xy: Tuple[float, float]) -> None:
@@ -435,6 +475,16 @@ class QwenNav2GoalExecutor(Node):
                 self.publish_status(NavPhase.FAILED)
                 return 3
 
+            map_grid, map_reason = self.wait_for_map(timeout_s=8.0)
+            if map_grid is None:
+                if map_reason.startswith("MAP_METADATA"):
+                    self.log(f"map metadata FAIL: {map_reason}")
+                    self.publish_status(NavPhase.MAP_METADATA_MISMATCH)
+                else:
+                    self.log("map not received within 8s — refuse ComputePath")
+                    self.publish_status(NavPhase.MAP_NOT_RECEIVED)
+                return 4
+
             robot = None
             deadline = time.monotonic() + 10.0
             while time.monotonic() < deadline:
@@ -448,22 +498,22 @@ class QwenNav2GoalExecutor(Node):
                 return 3
 
             gx, gy = self.raw_goal_x, self.raw_goal_y
-            if self._map_grid is not None:
-                try:
-                    gx, gy, why = validate_goal_on_map(
-                        self._map_grid, gx, gy, robot[0], robot[1], map_yaml=self.goal.map_yaml
-                    )
-                    if why != "ok":
-                        self.log(f"goal projection: {why}")
-                except ValueError as exc:
-                    self.log(f"goal map validation FAIL: {exc}")
-                    self.publish_status(NavPhase.FAILED)
-                    return 2
+            try:
+                gx, gy, why = validate_goal_on_map(
+                    map_grid, gx, gy, robot[0], robot[1], map_yaml=self.goal.map_yaml
+                )
+                if why != "ok":
+                    self.log(f"goal projection: {why}")
+            except ValueError as exc:
+                self.log(f"WARN goal map validation ({exc}) — use raw goal")
+                gx, gy = self.raw_goal_x, self.raw_goal_y
+            projection_distance_m = math.hypot(gx - self.raw_goal_x, gy - self.raw_goal_y)
             self.effective_goal_x = gx
             self.effective_goal_y = gy
             self.log(
                 f"effective_goal=({self.effective_goal_x:.3f},{self.effective_goal_y:.3f}) "
-                f"raw=({self.raw_goal_x:.3f},{self.raw_goal_y:.3f})"
+                f"raw=({self.raw_goal_x:.3f},{self.raw_goal_y:.3f}) "
+                f"projection_distance_m={projection_distance_m:.3f}"
             )
 
             target = self.build_target_pose(
@@ -481,11 +531,19 @@ class QwenNav2GoalExecutor(Node):
                 "path_length_m": path_length_m(path.poses),
                 "pose_count": len(path.poses),
                 "raw_goal": {"x": self.raw_goal_x, "y": self.raw_goal_y},
+                "raw_goal_x": self.raw_goal_x,
+                "raw_goal_y": self.raw_goal_y,
                 "effective_goal": {
                     "x": self.effective_goal_x,
                     "y": self.effective_goal_y,
                     "yaw_deg": math.degrees(self.effective_goal_yaw),
                 },
+                "effective_goal_x": self.effective_goal_x,
+                "effective_goal_y": self.effective_goal_y,
+                "projection_distance_m": math.hypot(
+                    self.effective_goal_x - self.raw_goal_x,
+                    self.effective_goal_y - self.raw_goal_y,
+                ),
             }
             atomic_write_json(self.runtime_dir / "planned_path.json", planned)
             self.publish_status(NavPhase.PATH_VALIDATED)
@@ -555,15 +613,16 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        goal, _ = validate_goal_inputs(
+        goal, how = load_goal_inputs_lenient(
             session_id=args.session_id,
             map_yaml=realpath(Path(args.map_yaml)),
             goal_json=realpath(Path(args.goal_json)),
             candidate_bundle=realpath(Path(args.candidate_bundle)),
             pose_json=realpath(Path(args.pose_json)),
         )
+        print(f"[QWEN_NAV] goal load={how}")
     except ValueError as exc:
-        print(f"[QWEN_NAV] validation FAIL: {exc}", file=sys.stderr)
+        print(f"[QWEN_NAV] goal load FAIL: {exc}", file=sys.stderr)
         return 2
 
     rclpy.init()

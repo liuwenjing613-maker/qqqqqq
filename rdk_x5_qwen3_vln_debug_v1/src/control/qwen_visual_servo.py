@@ -113,6 +113,99 @@ class ServoDecision:
     obstacle_scale: float = 0.0
 
 
+@dataclass
+class GoalSuccessConfig:
+    """Arrive-and-exit gates for mission SUCCESS.
+
+    Front lidar distance alone is not enough: the target must be centered,
+    the detection must be fresh, and conditions must hold for N control ticks.
+    """
+
+    enabled: bool = True
+    success_distance: float = 0.50
+    max_source_age_sec: float = 1.2
+    required_consecutive_ticks: int = 5
+
+    def validate(self) -> None:
+        if self.success_distance <= 0.0:
+            raise ValueError("goal.success_distance must be positive")
+        if self.max_source_age_sec <= 0.0:
+            raise ValueError("goal.max_source_age_sec must be positive")
+        if self.required_consecutive_ticks < 1:
+            raise ValueError("goal.required_consecutive_ticks must be >= 1")
+
+
+@dataclass(frozen=True)
+class GoalSuccessEvaluation:
+    streak: int
+    ready: bool
+    declare: bool
+    reason: str
+
+
+def point_horizontal_error(
+    point_x: Optional[float], image_width: int
+) -> Optional[float]:
+    if point_x is None or image_width <= 1:
+        return None
+    half_width = 0.5 * float(image_width - 1)
+    error = (float(point_x) - half_width) / max(1.0, half_width)
+    return clamp(error, -1.0, 1.0)
+
+
+def point_source_age_sec(
+    now_sec: float, result_received_sec: Optional[float], latency_ms: float
+) -> float:
+    if result_received_sec is None:
+        return float("inf")
+    receive_gap = max(0.0, float(now_sec) - float(result_received_sec))
+    return receive_gap + max(0.0, float(latency_ms)) / 1000.0
+
+
+def evaluate_goal_success(
+    *,
+    cfg: GoalSuccessConfig,
+    center_deadband: float,
+    streak: int,
+    target_visible: bool,
+    scan_fresh: bool,
+    front_distance: Optional[float],
+    horizontal_error: Optional[float],
+    source_age_sec: float,
+) -> GoalSuccessEvaluation:
+    """Advance the success streak; declare only after N consecutive ready ticks."""
+    if not cfg.enabled:
+        return GoalSuccessEvaluation(0, False, False, "goal_disabled")
+
+    if not target_visible:
+        return GoalSuccessEvaluation(0, False, False, "target_not_visible")
+    if not scan_fresh or front_distance is None:
+        return GoalSuccessEvaluation(0, False, False, "lidar_not_fresh")
+    if front_distance > cfg.success_distance:
+        return GoalSuccessEvaluation(
+            0, False, False, "front_beyond_success_distance"
+        )
+    if horizontal_error is None:
+        return GoalSuccessEvaluation(0, False, False, "no_horizontal_error")
+    if abs(float(horizontal_error)) > float(center_deadband):
+        return GoalSuccessEvaluation(0, False, False, "not_centered")
+    if not math.isfinite(source_age_sec) or source_age_sec > cfg.max_source_age_sec:
+        return GoalSuccessEvaluation(0, False, False, "source_age_stale")
+
+    new_streak = max(0, int(streak)) + 1
+    declare = new_streak >= int(cfg.required_consecutive_ticks)
+    return GoalSuccessEvaluation(
+        new_streak,
+        True,
+        declare,
+        (
+            "success_gates_met"
+            if declare
+            else f"success_streak_{new_streak}/{cfg.required_consecutive_ticks}"
+        ),
+    )
+
+
 class QwenVisualServo:
     """Existing any-point servo, now explicitly gated by a=POINT."""
 
@@ -478,11 +571,14 @@ class TurnPendingGate:
             self.near_count = 0
 
     def desired_vx(self, current_vx: float, max_vx: float) -> float:
+        """Command the configured pending speed; the rate limiter does accel.
+
+        Do not clamp to the current limited vx when it is already positive but
+        below the cap — that locked the robot at one accel step (~0.004 m/s
+        with max_linear_accel=0.08 @ 20 Hz) forever.
+        """
+        _ = current_vx
         cap = min(max(0.0, self.cfg.pending_vx), max(0.0, max_vx))
-        if cap <= 0.0:
-            return 0.0
-        if current_vx > 0.0:
-            return min(current_vx, cap)
         return cap
 
 

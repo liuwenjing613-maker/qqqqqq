@@ -299,13 +299,10 @@ def validate_proposal_against_bundle(
     if int(gray[py, px]) < free_threshold:
         return False, "目标栅格不是 free"
 
-    meta = load_map_yaml_meta(map_yaml)
-    radius_px = max(1, int(round(float(safety_radius_m) / max(meta.resolution, 1e-6))))
-    y0, y1 = max(0, py - radius_px), min(h, py + radius_px + 1)
-    x0, x1 = max(0, px - radius_px), min(w, px + radius_px + 1)
-    patch = gray[y0:y1, x0:x1]
-    if np.any(patch <= 70):
-        return False, "目标安全半径内存在 occupied"
+    # Occupied safety-radius recheck removed: candidate generation already enforces
+    # circular black clearance; the old axis-aligned square (<=70) falsely rejected
+    # valid candidates near diagonal walls.
+    del safety_radius_m  # retained in signature for call-site compatibility
 
     free_mask = build_free_mask_from_gray(gray, free_threshold=free_threshold)
     num, labels = cv2.connectedComponents(free_mask.astype(np.uint8), connectivity=8)

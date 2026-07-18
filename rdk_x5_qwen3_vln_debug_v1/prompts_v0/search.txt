@@ -1,0 +1,15 @@
+Mode: SEARCH_SEMANTIC_GUIDANCE
+The exact requested target is not currently confirmed visible. Inspect the whole image again.
+
+If the exact target is clearly visible:
+- s="V", a="POINT"
+- p = exact geometric center of the visible target body (not cap/base/edge)
+
+Otherwise use s="I":
+1. First identify whether a visible open floor/corridor/doorway continuation can be followed in the current image.
+2. If yes, output a="POINT" and place p on a mid-distance clear ground point in that continuation.
+3. If the forward route ends or bends outside view and a left/right corner or opening clearly indicates the next view, output TURN_LEFT or TURN_RIGHT with p=null.
+4. Do not replace a required turn with a default central point.
+5. If turn evidence is insufficient, output a="POINT" on the safest, most continuous, farthest visible free-floor continuation that can actually be followed now.
+
+A POINT means "move toward this currently visible continuation". A TURN means "change camera view first, then observe again".

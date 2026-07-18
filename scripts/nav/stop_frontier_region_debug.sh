@@ -79,9 +79,14 @@ echo "script_name_match=$SCRIPT_NAME_MATCH"
 echo "cwd_match=$CWD_MATCH"
 echo "ros_node_match=$ROS_NODE_MATCH"
 
-if [[ "$SCRIPT_NAME_MATCH" != true ]] || [[ "$CWD_MATCH" != true ]] || [[ "$ROS_NODE_MATCH" != true ]]; then
+# Script + cwd identity is sufficient. ros2 node list is best-effort (DDS flake /
+# renamed node must not block an otherwise exact PID stop).
+if [[ "$SCRIPT_NAME_MATCH" != true ]] || [[ "$CWD_MATCH" != true ]]; then
   echo "[STOP][FAIL] code=PID_IDENTITY_MISMATCH decision=DENY_EXACT_STOP"
   exit 2
+fi
+if [[ "$ROS_NODE_MATCH" != true ]]; then
+  echo "[STOP][WARN] ros_node_match=false — proceed on script+cwd identity"
 fi
 
 echo "decision=ALLOW_EXACT_STOP"

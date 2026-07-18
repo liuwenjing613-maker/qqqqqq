@@ -231,14 +231,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="地图分辨率 m/px；提供后启用米制硬约束（硬离黑 / 硬离车）。",
     )
-    parser.add_argument("--min-goal-distance-ratio", type=float, default=0.05,
-                        help="目标距离硬下限/地图最长边，默认 0.05。")
-    parser.add_argument("--max-goal-distance-ratio", type=float, default=0.22,
-                        help="目标距离硬上限/地图最长边，默认 0.22。")
-    parser.add_argument("--preferred-min-distance-ratio", type=float, default=0.07,
-                        help="优选距离下限，默认 0.07。")
-    parser.add_argument("--preferred-max-distance-ratio", type=float, default=0.14,
-                        help="优选距离上限，默认 0.14。")
+    parser.add_argument("--min-goal-distance-ratio", type=float, default=0.1,
+                        help="目标距离硬下限/地图最长边，默认 0.1。")
+    parser.add_argument("--max-goal-distance-ratio", type=float, default=0.35,
+                        help="目标距离硬上限/地图最长边，默认 0.35。")
+    parser.add_argument("--preferred-min-distance-ratio", type=float, default=0.2,
+                        help="优选距离下限，默认 0.2。")
+    parser.add_argument("--preferred-max-distance-ratio", type=float, default=0.3,
+                        help="优选距离上限，默认 0.3。")
     parser.add_argument("--near-candidate-slack-ratio", type=float, default=0.05,
                         help="候选最远距离最多比最近候选多出的比例，默认 0.05。")
     parser.add_argument("--front-cone-deg", type=float, default=90.0,

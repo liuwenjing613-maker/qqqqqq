@@ -1,14 +1,15 @@
 Mode: TRACK_LOCKED_TARGET
-The requested target was visible previously. Previous point on [0,1000]: $previous_point
-Inspect the current image again.
+The target was previously visible. Previous point on [0,1000]: $previous_point
+Inspect the image again.
 
-If the same exact target is still clearly visible:
+If the same exact target is clearly visible:
 - s="V", a="POINT"
-- p = exact geometric center of the current visible target body (not cap/base/edge)
-- do not blindly copy the old point
+- p = exact center of its visible body; do not copy the old point
 
-If the target is lost or occluded, use s="I":
-- POINT if a visible open continuation useful for reacquiring the target exists now
-- TURN_LEFT or TURN_RIGHT if the target/path left the field of view and a clear corner/side opening requires view adjustment first
+If lost, use s="I":
+- Use POINT on a visible connected continuation.
+- If the front is blocked but floor continues around one side, place POINT clearly inside that side passage at mid-distance to begin a gradual turn; never use central floor ending at the blocker.
+- Prefer the last-departure side only when current geometry supports it; otherwise choose the wider, deeper, safer side.
+- Use TURN only when the route is outside view and no visible floor waypoint exists.
 
-Do not lock onto another similar object. Do not output a central POINT merely because the old target cannot be found. If turn evidence is insufficient, choose the safest, most continuous, farthest visible free-floor POINT that can actually be followed now.
+Do not lock onto a similar object or default center POINT. If unsure, choose the safest deepest connected floor POINT.

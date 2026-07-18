@@ -1,0 +1,261 @@
+# =============================================================================
+# ARCHIVED SPAWN_SCAN prompt (p,t,r,q — model computed r/q).
+# Kept for recovery. PromptManager strips lines starting with '#' before send.
+# To restore: uncomment this block and comment out the active prompt below.
+# =============================================================================
+# # Mode: SPAWN_SCAN
+# # Task: $instruction_json
+# # Startup panoramic scan. One stationary view. JSON only. Compact, no spaces.
+# #
+# # {"p":[0,0]|null,"t":0.00,"r":0.00,"q":0.00}
+# #
+# # - p: [x,y] integers on grid [0,1000] only if the exact requested target is clearly visible now; otherwise null. Never point at a related object, landmark, or guessed location.
+# # - t: target evidence in [0,1]. If p!=null: match confidence. If p=null: how likely this view leads toward the target from visible cues. Low when no useful evidence.
+# # - r: route traversability in [0,1] (free floor, width, depth, open passage). Low for walls, dead ends, clutter, blocked floor.
+# # - q: exploration priority in [0,1] = useful target evidence + reachable route. Do not high-q a blocked direction.
+# #
+# # HARD rules for t,r,q:
+# # - Each MUST be a number with EXACTLY 2 digits after the decimal point, like 0.00, 0.37, 0.91.
+# # - NEVER write long floats such as 0.9375000000000001 or trailing zeros beyond 2 digits.
+# # - NEVER omit the decimal part (write 1.00 not 1; write 0.00 not 0).
+# # - Prefer short values so the JSON always closes with }.
+# #
+# # No Markdown, no extra keys, no s field, no motion/turn commands.
+# Mode: SPAWN_SCAN
+# Task: $instruction_json
+#
+# This is one stationary view from the startup panoramic scan.
+# Evaluate only the current image.
+# The controller handles all rotation and motion.
+# Return exactly one compact JSON object with no spaces.
+#
+# {"p":null,"t":0.00,"r":0.00,"q":0.00}
+#
+# * p:
+#   Output [x,y] only if the exact requested target is clearly visible now.
+#   x and y must be integers on the normalized grid [0,1000].
+#   Point to the visual center of the exact target.
+#   Otherwise output null.
+#   Never point to a related object, landmark, doorway, floor region, or guessed target location.
+#
+# * t:
+#   Direct visual evidence for the exact requested target.
+#   If p is not null, t is the confidence that the marked object exactly matches the target.
+#   If p is null, t must remain low.
+#   Do not raise t because the target might commonly exist near furniture, inside a room, behind a doorway, or in any guessed location.
+#   t must not represent route quality or traversability.
+#
+# * r:
+#   Route traversability of the current viewing direction.
+#   Evaluate whether there is a continuous drivable corridor beginning near the bottom-center of the image and extending forward.
+#
+# Judge r mainly from:
+#
+# 1. continuity of free floor from near the robot,
+# 2. usable corridor width,
+# 3. forward depth,
+# 4. clearance from obstacles,
+# 5. whether the route continues into an open area.
+#
+# Do not lower r merely because walls, furniture, or other objects are visible.
+# Lower r only when they block, interrupt, or substantially narrow the continuous drivable corridor.
+#
+# Do not give high r merely because a distant doorway or open area is visible.
+# The route from the bottom-center of the image to that area must be continuous and reachable.
+#
+# Use these scoring bands:
+#
+# Internally assess the following four factors from 0.00 to 1.00:
+#
+# C = continuity:
+# Whether free floor remains continuously connected from the bottom-center toward the distance.
+#
+# W = usable width:
+# Whether the continuous corridor is wide enough for the robot, not merely whether floor is visible.
+#
+# D = forward depth:
+# How far the usable route continues before reaching a wall, cabinet, furniture, or dead end.
+#
+# O = openness:
+# Whether the route continues into a wider or previously unseen area.
+#
+# Determine r approximately as:
+# r = 0.35*C + 0.25*W + 0.25*D + 0.15*O
+#
+# Do not output C, W, D, or O.
+# Output only the final r value with two decimal places.
+# Do not round the result to a scoring-band boundary.
+# Use the full score range.
+# Clearly separate walls, blocked areas, short dead-end floor, ordinary passages, and wide deep corridors.
+# Do not cluster visibly different routes around similar middle scores.
+#
+# * q:
+#   Overall exploration priority for this direction.
+#
+# If p is not null:
+# q should be high only when the exact target is clearly visible and the route toward it is reachable.
+#
+# If p is null:
+# q must be determined primarily by route traversability, forward depth, openness, and ability to reach a new area.
+# Do not use guessed target likelihood or semantic associations.
+# q should normally remain close to r, with only a small adjustment:
+#
+# * increase q slightly for greater depth, open passages, or access to a new area;
+# * decrease q slightly for short routes, corners, dead ends, or uncertain continuation.
+#
+# A blocked direction must have low q.
+# A wide, continuous, deep route should have clearly higher q than a wall, short open patch, narrow gap, or cluttered dead end.
+#
+# Numeric rules:
+#
+# * t, r, and q must each be from 0.00 to 1.00.
+# * Each must contain exactly two digits after the decimal point.
+# * Valid: 0.00, 0.37, 0.91, 1.00.
+# * Invalid: 0, 1, .5, 0.5, 0.9375000001.
+#
+# Output rules:
+#
+# * JSON only.
+# * Exactly four keys in this order: p,t,r,q.
+# * No Markdown.
+# * No explanation.
+# * No extra keys.
+# * No s field.
+# * No motion or turn commands.
+# =============================================================================
+# ACTIVE SPAWN_SCAN prompt (p,t,c,w,d,o,b — local program computes r/q).
+# =============================================================================
+Mode: SPAWN_SCAN
+Task: $instruction_json
+
+This is one stationary view from a startup panoramic scan.
+Evaluate only the current image using the same absolute criteria for every request.
+The controller handles all rotation and motion.
+
+Return exactly one compact JSON object:
+{"p":null,"t":0.00,"c":0,"w":0,"d":0,"o":0,"b":0}
+
+p:
+Output [x,y] only when the exact requested target is clearly visible in the current image.
+x and y must be integers on the normalized grid [0,1000].
+Point to the visual center of the exact target.
+Otherwise output null.
+Never point to a related object, doorway, landmark, floor area, or guessed target location.
+
+t:
+Direct visual evidence for the exact requested target only.
+If p is not null, t is the confidence that the marked object exactly matches the requested target.
+If p is null, t must remain low.
+Do not use room type, furniture, doorways, or guessed locations as target evidence.
+t must not represent route quality.
+
+Evaluate only the central forward drivable corridor.
+
+The corridor must:
+1. begin near the bottom-center of the image;
+2. remain connected through the middle of the image;
+3. provide enough width and side clearance for the robot;
+4. continue forward before reaching a wall, cabinet, furniture, corner, or dead end;
+5. preferably continue into additional open space.
+
+A large amount of visible foreground floor alone does not mean that the route is good.
+Judge where the central forward corridor ends.
+Clear floor near the camera must not receive a high score if the route ends shortly ahead.
+
+Visible furniture or objects matter only when they block, interrupt, or substantially narrow the actual central corridor.
+Do not reduce the score merely because objects are visible outside the drivable route.
+
+c:
+Corridor continuity as an integer from 0 to 10.
+
+0 means no connected forward route begins at the bottom-center.
+2 means only a very short connected floor region is visible.
+5 means the route is partly connected but limited or uncertain.
+8 means the route is clearly connected through most of the image.
+10 means the route remains continuously open into the distance.
+
+w:
+Usable robot-width clearance as an integer from 0 to 10.
+
+0 means there is no usable robot-width passage.
+2 means the passage is extremely narrow.
+5 means it may be passable but clearance is limited.
+8 means it is clearly wide enough for the robot.
+10 means it is very wide with large side clearance.
+
+d:
+Forward route depth as an integer from 0 to 10.
+
+0 means the route ends immediately at a wall, cabinet, or obstacle.
+2 means it ends after a very short distance.
+5 means moderate forward depth is visible.
+8 means the route has clear long depth.
+10 means it extends very far without meaningful interruption.
+
+o:
+Openness into additional space as an integer from 0 to 10.
+
+0 means a closed wall, corner, or dead end.
+2 means the direction is mostly closed.
+5 means it reaches an ordinary local area.
+8 means it clearly continues into an open area.
+10 means it clearly enters a large new open space.
+
+b:
+Central blockage severity as an integer from 0 to 10.
+
+0 means no meaningful blockage in the central corridor.
+2 means minor blockage with ample remaining clearance.
+5 means moderate narrowing or interruption.
+8 means severe blockage with little usable continuation.
+10 means the central forward direction is fully blocked.
+
+Important geometric rules:
+
+- Directly facing a solid wall, cabinet front, or closed panel:
+  c and d must be very low, o must be low, and b must be very high.
+
+- Clear foreground floor that ends shortly at a wall, cabinet, corner, or furniture:
+  d must be low even when much of the lower image is floor.
+
+- Multiple table legs, chair legs, boxes, or furniture inside the central route:
+  w must decrease and b must increase.
+
+- Objects located only at the sides of a wide central route:
+  they must not strongly reduce w or increase b.
+
+- A wide route with clear continuous depth:
+  c, w, and d should all be high.
+
+Judge c,w,d,o,b independently.
+Use the full integer range from 0 to 10.
+Do not reduce the factors to only low and high categories.
+Do not copy the same factor pattern for visibly different corridor geometries.
+Equal values are allowed when two scenes are genuinely equivalent.
+
+Do not output r or q.
+Do not perform weighted arithmetic.
+The local program will calculate r and q.
+
+HARD rules for c,w,d,o,b:
+- Each MUST be a bare integer: 0,1,2,3,4,5,6,7,8,9, or 10.
+- NEVER write floats such as 0.5, 0.50, 2.0, or long decimals.
+- NEVER write unit-interval scores for these five fields.
+- Valid: "b":0  "b":5  "b":10
+- Invalid: "b":0.5  "b":0.5000000001  "b":5.0  "c":0.80
+
+Output rules:
+- JSON only.
+- Exactly seven keys in this order:p,t,c,w,d,o,b.
+- p must be null or [x,y].
+- t must contain exactly two digits after the decimal point.
+- c,w,d,o,b must be integers from 0 to 10.
+- Prefer short values so the JSON always closes with }.
+- No Markdown.
+- No explanation.
+- No extra keys.
+- No r field.
+- No q field.
+- No s field.
+- No action,motion,direction,or turn command.
+- Always close the JSON object with }.

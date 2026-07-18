@@ -23,15 +23,15 @@ control:
   # These are also drawn on /qwen_vln/annotated_image via visualization.servo_overlay_config.
   max_vx: 0.07
   # Floor forward speed when POINT servo commands motion (intentional zeros stay 0).
-  min_vx: 0.02
+  min_vx: 0.035
   max_wz: 0.06
   # Cyan fine-steer gain (user-tuned). Keep at 0.01; do not raise to "beat"
   # cmd_wz_deadband — cyan no longer applies that deadband (see below).
   kp_wz: 0.01
   # Orange rotate-only band (|error|>=turn_only_threshold): fixed wz, not kp*error.
-  rotate_only_wz: 0.06
+  rotate_only_wz: 0.025
   angular_sign: -1.0
-  center_deadband: 0.20
+  center_deadband: 0.30
   turn_only_threshold: 0.7
   # Drops near-zero rotate-only cmds only. Cyan uses center_deadband for zeroing.
   cmd_wz_deadband: 0.006
@@ -60,7 +60,7 @@ view_adjust:
   turn_entry_frames: 3
   turn_pending_vx: 0.04
   pre_turn_stop_sec: 0.15
-  turn_pulse_sec: 1.50
+  turn_pulse_sec: 3.0
   settle_sec: 0.30
 
   # Pause Qwen requests while moving, then send "search" after the camera settles.
@@ -70,7 +70,7 @@ view_adjust:
 
 freshness:
   full_speed_source_age_sec: 1.7
-  stop_source_age_sec: 2.70
+  stop_source_age_sec: 1.8
   max_receive_gap_sec: 2.20
 
 rate_limit:
@@ -92,17 +92,22 @@ safety:
   # front_distance >= stop_distance + emergency_reverse_clearance
   # (default 0.42 + 0.18 = 0.60m). Keep reverse_vx large enough for M1 deadband.
   emergency_reverse_enabled: true
-  emergency_reverse_clearance: 0.18
+  emergency_reverse_clearance: 0.12
   emergency_reverse_vx: -0.055
-  stop_distance: 0.42
+  stop_distance: 0.35
   slow_distance: 0.65
   allow_turn_inside_stop_distance: true
 
-# Simple arrive-and-exit: target visible in FOV + fresh front lidar <= success_distance.
+# Arrive-and-exit: visible target + centered + fresh detection + front lidar
+# within success_distance, held for N consecutive control ticks.
+# Note: success_distance (0.50) is currently > stop_distance (0.42). Prefer
+# success_distance <= stop_distance when retuning to reduce wall false-arrivals.
 goal:
   enabled: true
   success_distance: 0.50
-
+  max_source_age_sec: 1.2
+  # At rate_hz=20, 5 ticks ~= 0.25s of sustained gates.
+  required_consecutive_ticks: 5
 # Birth panoramic scan before SEARCH. Left turns use /odom yaw, not wz*time.
 spawn_scan:
   enabled: true

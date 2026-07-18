@@ -81,7 +81,7 @@ simple_handoff_v2:
 
     # Prefer a real first-person recovery completion (emergency reverse true->false).
     require_local_recovery: true
-    recovery_lookback_s: 20.0
+    recovery_lookback_s: 8.0
 
     # Conservative fallback for scenes where the local controller never emits a
     # recovery edge. Two distinct no-progress windows are required.

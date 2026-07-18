@@ -259,10 +259,24 @@ handle_nav_handoff() {
   CONTROLLED_NAV_HANDOFF=1
   log "controlled Nav2 handoff (USR1): stop teleop/slam/debug, keep sensors"
   stop_joystick_nodes
+  # Prefer exact slam PIDs when known; fallback TERM/KILL only slam_toolbox nodes.
   pkill -TERM -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
-  sleep 1
+  sleep 0.4
   pkill -KILL -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
-  pkill -TERM -f "frontier_region_debug_node.py" 2>/dev/null || true
+  # Frontier: prefer exact PID stop script when available
+  if [[ -x "${PWD}/scripts/nav/stop_frontier_region_debug.sh" ]]; then
+    bash "${PWD}/scripts/nav/stop_frontier_region_debug.sh" >/dev/null 2>&1 || true
+  fi
+  local fpid fcwd fcmd
+  for fpid in $(pgrep -f "frontier_region_debug_node.py" 2>/dev/null || true); do
+    fcwd="$(readlink -f "/proc/${fpid}/cwd" 2>/dev/null || true)"
+    fcmd="$(tr '\0' ' ' < "/proc/${fpid}/cmdline" 2>/dev/null || true)"
+    if [[ "$fcwd" == "${PWD}" || "$fcwd" == "$(readlink -f "${PWD}")" || "$fcmd" == *"$(readlink -f "${PWD}")/"* ]]; then
+      kill -TERM "$fpid" 2>/dev/null || true
+      sleep 0.15
+      kill -KILL "$fpid" 2>/dev/null || true
+    fi
+  done
   # Propagate session id to corridor wrapper for ack.json
   if [[ -f "${PWD}/runtime/nav_handoff_active_session" ]]; then
     export QWEN_NAV_HANDOFF_SESSION_ID="$(tr -d '[:space:]' < "${PWD}/runtime/nav_handoff_active_session" || true)"
@@ -274,6 +288,8 @@ handle_nav_handoff() {
   corridor_pid="$(pgrep -f "run_corridor_mapping_live_foxglove.sh" 2>/dev/null | head -1 || true)"
   if [[ -n "$corridor_pid" ]]; then
     kill -USR1 "$corridor_pid" 2>/dev/null || true
+  else
+    log "WARN: no corridor wrapper — cannot write formal handoff ack from joy_mapping alone"
   fi
 }
 

@@ -331,8 +331,8 @@ fi
 # with post-voice USB settle and aborted the whole stack before SLAM).
 export ROBOT_PROJECT_DIR="${ROBOT_PROJECT_DIR:-$REPO_ROOT}"
 export CAMERA_BACKEND="${CAMERA_BACKEND:-opencv}"
-export CAMERA_WIDTH="${CAMERA_WIDTH:-640}"
-export CAMERA_HEIGHT="${CAMERA_HEIGHT:-480}"
+export CAMERA_WIDTH="${CAMERA_WIDTH:-1280}"
+export CAMERA_HEIGHT="${CAMERA_HEIGHT:-720}"
 export CAMERA_FPS="${CAMERA_FPS:-15}"
 export CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
 # shellcheck source=/dev/null
@@ -433,8 +433,8 @@ setsid env \
   FOXGLOVE_TOPIC_WHITELIST="$FOXGLOVE_TOPIC_WHITELIST" \
   ROBOT_PROJECT_DIR="${ROBOT_PROJECT_DIR:-$REPO_ROOT}" \
   CAMERA_BACKEND="${CAMERA_BACKEND:-opencv}" \
-  CAMERA_WIDTH="${CAMERA_WIDTH:-640}" \
-  CAMERA_HEIGHT="${CAMERA_HEIGHT:-480}" \
+  CAMERA_WIDTH="${CAMERA_WIDTH:-1280}" \
+  CAMERA_HEIGHT="${CAMERA_HEIGHT:-720}" \
   CAMERA_FPS="${CAMERA_FPS:-15}" \
   CAMERA_DEV="${CAMERA_DEV:-/dev/video0}" \
   bash "$V1_ROOT/scripts/qwen_servo/start_live_servo_voice.sh" \

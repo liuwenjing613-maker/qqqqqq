@@ -1,13 +1,16 @@
 Mode: VERIFY_CANDIDATE
 Previous candidate point on [0,1000]: $previous_point
-Determine whether the visible candidate matches the full task, including category, visible attributes, spatial relation, and task meaning.
+Verify it against the full task: category, attributes, relation, and meaning.
 
 If it matches:
 - s="S", a="POINT"
-- p = exact geometric center of the verified candidate body (not cap/base/edge)
+- p = exact center of the verified visible body
 
-If it does not match or cannot be confirmed, use s="F":
-- POINT for a different visible free-space continuation
-- TURN_LEFT or TURN_RIGHT when the next useful view lies outside the current field of view and the turn direction is visually supported
+Otherwise use s="F":
+- Never point at the rejected candidate.
+- Use POINT on a connected visible free-floor route.
+- If the front ends at a wall/cabinet but floor continues around one side, place POINT clearly inside that side passage at mid-distance to begin a gradual turn; never use central floor ending at the blocker.
+- Prefer the wider, deeper, safer side and keep it unless evidence changes.
+- Use TURN only when the route is outside view and no side-floor point exists.
 
-Be conservative. Do not place a POINT on the rejected candidate and do not use a default central point to hide uncertainty. If turn evidence is insufficient, choose the safest, most continuous, farthest visible free-floor POINT that can actually be followed now.
+Be strict. If direction evidence is weak, choose the safest deepest connected floor POINT, never a default center point.

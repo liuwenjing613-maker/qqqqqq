@@ -194,12 +194,13 @@ ensure_compressed_camera() {
       stop_camera_tree "" || true
     fi
 
-    # Default 640x480@15. Prefer OpenCV backend: hobot_usb_cam often advertises
-    # /image under a busy Nav2 graph but never delivers frames.
-    local width="${CAMERA_WIDTH:-640}" height="${CAMERA_HEIGHT:-480}" fps="${CAMERA_FPS:-15}"
+    # Default 1280x720@15 (camera native 16:9). Prefer OpenCV backend:
+    # hobot_usb_cam often advertises /image under a busy Nav2 graph but never
+    # delivers frames.
+    local width="${CAMERA_WIDTH:-1280}" height="${CAMERA_HEIGHT:-720}" fps="${CAMERA_FPS:-15}"
     start_project_usb_camera_profile "$package_root" "$log_file" "$width" "$height" "$fps" || return 1
     if ! wait_topic_publisher "$compressed_topic" 25 "$log_file" "$CAMERA_PID"; then
-      echo "[camera] WARN: primary camera backend not ready; falling back to OpenCV 640x480@15"
+      echo "[camera] WARN: primary camera backend not ready; falling back to OpenCV 1280x720@15"
       stop_camera_tree "$CAMERA_PID" || true
       sleep 1
       if video_device_busy "$dev"; then
@@ -210,7 +211,7 @@ ensure_compressed_camera() {
       if [ -f "$log_file" ]; then
         cp -f "$log_file" "${log_file}.prev" 2>/dev/null || true
       fi
-      CAMERA_BACKEND=opencv start_opencv_usb_camera "$package_root" "$log_file" 640 480 15 || return 1
+      CAMERA_BACKEND=opencv start_opencv_usb_camera "$package_root" "$log_file" 1280 720 15 || return 1
       wait_topic_publisher "$compressed_topic" 25 "$log_file" "$CAMERA_PID" || {
         echo "[camera] ERROR: $compressed_topic did not start; tail $log_file" >&2
         tail -n 60 "$log_file" 2>/dev/null || true

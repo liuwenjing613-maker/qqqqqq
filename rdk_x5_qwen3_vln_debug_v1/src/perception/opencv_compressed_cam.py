@@ -5,7 +5,7 @@ Fallback for hobot_usb_cam which often advertises a publisher under a busy
 DDS graph but never delivers frames (FastDDS SHM / buffer queue issues).
 
 Stable profile (same as start_live_servo_voice / camera_stack):
-  /dev/video0, MJPG, 640x480@15.
+  /dev/video0, MJPG, 1280x720@15.
 """
 
 from __future__ import annotations
@@ -130,8 +130,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="/dev/video0")
     parser.add_argument("--topic", default="/image")
-    parser.add_argument("--width", type=int, default=640)
-    parser.add_argument("--height", type=int, default=480)
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--fps", type=float, default=15.0)
     parser.add_argument("--jpeg-quality", type=int, default=80)
     parser.add_argument("--frame-id", default="usb_camera")

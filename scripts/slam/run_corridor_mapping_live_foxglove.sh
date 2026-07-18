@@ -92,7 +92,7 @@ PY
 }
 
 write_nav_handoff_ack_json() {
-  # Session-scoped ack for Qwen Nav2 reuse pipeline.
+  # Session-scoped ack for Qwen Nav2 reuse pipeline (process identity, atomic write).
   local session_id="${QWEN_NAV_HANDOFF_SESSION_ID:-}"
   if [[ -z "$session_id" && -f "${PROJECT_DIR}/runtime/nav_handoff_active_session" ]]; then
     session_id="$(tr -d '[:space:]' < "${PROJECT_DIR}/runtime/nav_handoff_active_session" || true)"
@@ -108,31 +108,64 @@ write_nav_handoff_ack_json() {
   mkdir -p "$ack_dir"
   local chassis_pid=""
   chassis_pid="$(pgrep -f 'm1_pwm_cmd_vel_bridge.py' 2>/dev/null | head -1 || true)"
+  local joy_gone=0 teleop_gone=0 slam_gone=0 frontier_gone=0
+  pgrep -f 'joy_node' >/dev/null 2>&1 || joy_gone=1
+  pgrep -f 'teleop_twist_joy' >/dev/null 2>&1 || teleop_gone=1
+  pgrep -f 'slam_toolbox' >/dev/null 2>&1 || slam_gone=1
+  pgrep -f 'frontier_region_debug' >/dev/null 2>&1 || frontier_gone=1
   python3 - "${ack_dir}/ack.json" "$session_id" \
     "${NAMED_PIDS[lidar]:-}" \
     "${NAMED_PIDS[scan_filter]:-}" \
     "${chassis_pid:-}" \
     "${NAMED_PIDS[static_tf]:-}" \
-    "${NAMED_PIDS[foxglove_bridge]:-}" <<'PY'
-import json, os, sys, time
+    "${NAMED_PIDS[foxglove_bridge]:-}" \
+    "$joy_gone" "$teleop_gone" "$slam_gone" "$frontier_gone" \
+    "${PROJECT_DIR}/scripts/nav" <<'PY'
+import json, os, sys
 from pathlib import Path
+sys.path.insert(0, sys.argv[12])
+from qwen_nav2_common import build_process_identity, time_now
+
 out, sid = Path(sys.argv[1]), sys.argv[2]
+
 def maybe_int(s):
     return int(s) if s else None
+
+roles = {
+    "lidar": maybe_int(sys.argv[3]),
+    "scan_filter": maybe_int(sys.argv[4]),
+    "chassis": maybe_int(sys.argv[5]),
+    "static_tf": maybe_int(sys.argv[6]),
+    "foxglove": maybe_int(sys.argv[7]),
+}
+processes = {}
+for role, pid in roles.items():
+    ident = build_process_identity(role, pid)
+    if ident is not None:
+        processes[role] = ident
+
 payload = {
     "session_id": sid,
     "state": "SENSOR_BASE_HELD",
-    "completed_epoch": time.time(),
-    "lidar_pid": maybe_int(sys.argv[3]),
-    "scan_filter_pid": maybe_int(sys.argv[4]),
-    "chassis_pid": maybe_int(sys.argv[5]),
-    "static_tf_pid": maybe_int(sys.argv[6]),
-    "foxglove_pid": maybe_int(sys.argv[7]),
-    "stopped": {"joy": True, "teleop": True, "slam": True, "frontier": True},
+    "completed_epoch": time_now(),
+    "processes": processes,
+    "stopped": {
+        "joy": bool(int(sys.argv[8])),
+        "teleop": bool(int(sys.argv[9])),
+        "slam": bool(int(sys.argv[10])),
+        "frontier": bool(int(sys.argv[11])),
+    },
+    "static_tf_present_via_tf": "static_tf" in processes,
+    "foxglove_optional": True,
     "source": "run_corridor_mapping_live_foxglove",
 }
+# Legacy flat fields kept only for diagnostics — not used by validate_handoff_ack.
+payload["_legacy_diagnostic_pids"] = {k: v for k, v in roles.items()}
 tmp = out.with_suffix(".tmp")
-tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+with open(tmp, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps(payload, indent=2) + "\n")
+    fh.flush()
+    os.fsync(fh.fileno())
 os.replace(tmp, out)
 print(out)
 PY
@@ -147,16 +180,28 @@ perform_nav_handoff() {
   publish_zero_cmd
 
   pkill -TERM -f "joy_node|teleop_twist_joy" 2>/dev/null || true
-  pkill -TERM -f "frontier_region_debug_node.py" 2>/dev/null || true
+  if [[ -x "${PROJECT_DIR}/scripts/nav/stop_frontier_region_debug.sh" ]]; then
+    bash "${PROJECT_DIR}/scripts/nav/stop_frontier_region_debug.sh" >/dev/null 2>&1 || true
+  fi
+  # Exact-PID stop for any remaining frontier_region_debug_node.py in this project.
+  local fpid fcwd fcmd
+  for fpid in $(pgrep -f "frontier_region_debug_node.py" 2>/dev/null || true); do
+    fcwd="$(readlink -f "/proc/${fpid}/cwd" 2>/dev/null || true)"
+    fcmd="$(tr '\0' ' ' < "/proc/${fpid}/cmdline" 2>/dev/null || true)"
+    if [[ "$fcwd" == "$PROJECT_DIR" || "$fcmd" == *"${PROJECT_DIR}/"* ]]; then
+      kill -TERM "$fpid" 2>/dev/null || true
+    fi
+  done
 
   local slam_pid="${NAMED_PIDS[slam_toolbox]:-}"
   if [[ -n "$slam_pid" ]] && kill -0 "$slam_pid" 2>/dev/null; then
     kill -TERM "$slam_pid" 2>/dev/null || true
-    sleep 1
+    sleep 0.4
     kill -KILL "$slam_pid" 2>/dev/null || true
   fi
+  # Narrow slam_toolbox node kill only (not fuzzy python).
   pkill -TERM -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
-  sleep 1
+  sleep 0.4
   pkill -KILL -f "async_slam_toolbox_node|sync_slam_toolbox_node" 2>/dev/null || true
 
   # Drop slam from PIDS so EXIT cleanup won't kill sensors via full list semantics
@@ -170,6 +215,25 @@ perform_nav_handoff() {
   done
   PIDS=("${filtered[@]:-}")
   unset 'NAMED_PIDS[slam_toolbox]'
+
+  # Wait briefly until stopped roles are actually gone before writing ack.
+  local w still_f
+  for w in $(seq 1 20); do
+    pgrep -f "joy_node" >/dev/null 2>&1 && { sleep 0.2; continue; }
+    pgrep -f "teleop_twist_joy" >/dev/null 2>&1 && { sleep 0.2; continue; }
+    pgrep -f "async_slam_toolbox_node|sync_slam_toolbox_node" >/dev/null 2>&1 && { sleep 0.2; continue; }
+    still_f=0
+    for fpid in $(pgrep -f "frontier_region_debug_node.py" 2>/dev/null || true); do
+      fcwd="$(readlink -f "/proc/${fpid}/cwd" 2>/dev/null || true)"
+      fcmd="$(tr '\0' ' ' < "/proc/${fpid}/cmdline" 2>/dev/null || true)"
+      if [[ "$fcwd" == "$PROJECT_DIR" || "$fcmd" == *"${PROJECT_DIR}/"* ]]; then
+        kill -KILL "$fpid" 2>/dev/null || true
+        still_f=1
+      fi
+    done
+    [[ "$still_f" -eq 1 ]] && { sleep 0.2; continue; }
+    break
+  done
 
   write_sensor_base_stack_json || true
   write_nav_handoff_ack_json || true

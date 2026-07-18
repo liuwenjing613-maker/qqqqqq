@@ -11,6 +11,7 @@ from control.qwen_visual_servo import (  # noqa: E402
     CommandRateLimiter,
     EmergencyReverseConfig,
     EmergencyReverseController,
+    GoalSuccessConfig,
     QwenVisualServo,
     RateLimitConfig,
     ServoConfig,
@@ -20,6 +21,9 @@ from control.qwen_visual_servo import (  # noqa: E402
     ViewAdjustConfig,
     ViewAdjustController,
     ViewAdjustPhase,
+    evaluate_goal_success,
+    point_horizontal_error,
+    point_source_age_sec,
 )
 
 
@@ -268,6 +272,10 @@ class ServoTests(unittest.TestCase):
         )
         self.assertTrue(gate.start("TURN_RIGHT", 9))
         self.assertAlmostEqual(gate.desired_vx(0.07, 0.07), 0.04)
+        # Must keep commanding the pending cap while ramping up from a tiny
+        # limited speed; otherwise accel steps lock forever at ~one tick.
+        self.assertAlmostEqual(gate.desired_vx(0.004, 0.07), 0.04)
+        self.assertAlmostEqual(gate.desired_vx(0.0, 0.07), 0.04)
         gate.update_scan(0.9)
         self.assertFalse(gate.ready)
         gate.update_scan(0.44)
@@ -299,6 +307,107 @@ class ServoTests(unittest.TestCase):
             limiter.step(0.0, 0.0, 0.1, hard_stop=True),
             (0.0, 0.0),
         )
+
+    def test_point_horizontal_error_and_source_age(self) -> None:
+        self.assertAlmostEqual(
+            point_horizontal_error(479.5, 960), 0.0, places=6
+        )
+        self.assertIsNone(point_horizontal_error(None, 960))
+        age = point_source_age_sec(10.0, 9.8, 800.0)
+        self.assertAlmostEqual(age, 1.0, places=4)
+
+    def test_goal_success_rejects_wall_with_off_center_target(self) -> None:
+        cfg = GoalSuccessConfig(
+            enabled=True,
+            success_distance=0.50,
+            max_source_age_sec=1.2,
+            required_consecutive_ticks=5,
+        )
+        # Reproduces the false-success pattern: close lidar + visible but not centered.
+        ev = evaluate_goal_success(
+            cfg=cfg,
+            center_deadband=0.28,
+            streak=0,
+            target_visible=True,
+            scan_fresh=True,
+            front_distance=0.499,
+            horizontal_error=0.35,
+            source_age_sec=0.9,
+        )
+        self.assertFalse(ev.ready)
+        self.assertFalse(ev.declare)
+        self.assertEqual(ev.streak, 0)
+        self.assertEqual(ev.reason, "not_centered")
+
+    def test_goal_success_rejects_stale_source_age(self) -> None:
+        cfg = GoalSuccessConfig(
+            success_distance=0.50,
+            max_source_age_sec=1.2,
+            required_consecutive_ticks=3,
+        )
+        ev = evaluate_goal_success(
+            cfg=cfg,
+            center_deadband=0.28,
+            streak=2,
+            target_visible=True,
+            scan_fresh=True,
+            front_distance=0.40,
+            horizontal_error=0.05,
+            source_age_sec=1.21,
+        )
+        self.assertEqual(ev.streak, 0)
+        self.assertEqual(ev.reason, "source_age_stale")
+
+    def test_goal_success_requires_consecutive_ticks(self) -> None:
+        cfg = GoalSuccessConfig(
+            success_distance=0.50,
+            max_source_age_sec=1.2,
+            required_consecutive_ticks=5,
+        )
+        streak = 0
+        for i in range(4):
+            ev = evaluate_goal_success(
+                cfg=cfg,
+                center_deadband=0.28,
+                streak=streak,
+                target_visible=True,
+                scan_fresh=True,
+                front_distance=0.45,
+                horizontal_error=0.10,
+                source_age_sec=0.95,
+            )
+            streak = ev.streak
+            self.assertTrue(ev.ready)
+            self.assertFalse(ev.declare)
+            self.assertEqual(streak, i + 1)
+        ev = evaluate_goal_success(
+            cfg=cfg,
+            center_deadband=0.28,
+            streak=streak,
+            target_visible=True,
+            scan_fresh=True,
+            front_distance=0.45,
+            horizontal_error=0.10,
+            source_age_sec=0.95,
+        )
+        self.assertTrue(ev.declare)
+        self.assertEqual(ev.streak, 5)
+        self.assertEqual(ev.reason, "success_gates_met")
+
+    def test_goal_success_resets_streak_when_gate_breaks(self) -> None:
+        cfg = GoalSuccessConfig(required_consecutive_ticks=5)
+        ev = evaluate_goal_success(
+            cfg=cfg,
+            center_deadband=0.28,
+            streak=3,
+            target_visible=True,
+            scan_fresh=True,
+            front_distance=0.60,
+            horizontal_error=0.05,
+            source_age_sec=0.9,
+        )
+        self.assertEqual(ev.streak, 0)
+        self.assertEqual(ev.reason, "front_beyond_success_distance")
 
 
 if __name__ == "__main__":
