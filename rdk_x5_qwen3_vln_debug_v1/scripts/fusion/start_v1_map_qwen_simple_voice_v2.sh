@@ -23,6 +23,7 @@ TF_WAIT_SEC="${SIMPLE_HANDOFF_TF_WAIT_SEC:-60}"
 TOPIC_WAIT_SEC="${SIMPLE_HANDOFF_TOPIC_WAIT_SEC:-60}"
 NAV2_WAIT_SEC="${SIMPLE_HANDOFF_NAV2_WAIT_SEC:-90}"
 START_FOXGLOVE="${START_FOXGLOVE:-1}"
+START_VISITED_CORRIDOR_DEBUG="${START_VISITED_CORRIDOR_DEBUG:-1}"
 
 usage() {
   cat <<'EOF'
@@ -36,6 +37,7 @@ Options:
   --no-slam                 Require an already-running /map,/odom,/scan_filtered stack.
   --no-reuse-slam           Refuse an already-running SLAM stack.
   --no-foxglove             Do not start Foxglove from the first-person script.
+  --no-visited-corridor     Skip persistent visited-corridor map overlay node.
   --keep-raw-logs           Keep transient compatibility component logs after exit.
   --config PATH             Override simple_handoff_v2.yaml.
   -h, --help                Show this help.
@@ -54,6 +56,7 @@ while [[ $# -gt 0 ]]; do
     --no-slam) START_SLAM=0; shift ;;
     --no-reuse-slam) REUSE_SLAM=0; shift ;;
     --no-foxglove) START_FOXGLOVE=0; shift ;;
+    --no-visited-corridor) START_VISITED_CORRIDOR_DEBUG=0; shift ;;
     --keep-raw-logs) KEEP_RAW_LOGS=1; shift ;;
     --config) SIMPLE_CFG="${2:?missing --config value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -122,6 +125,9 @@ for required in \
   "$V1_ROOT/src/apps/cmd_vel_intervention_mux.py" \
   "$V1_ROOT/scripts/fusion/make_simple_handoff_runtime_config_v2.py" \
   "$V1_ROOT/scripts/fusion/make_nav2_online_params_v2.py" \
+  "$V1_ROOT/scripts/fusion/make_simple_handoff_visited_debug_config_v2.py" \
+  "$REPO_ROOT/configs/qwen_region_explore_debug.yaml" \
+  "$REPO_ROOT/src/planning/frontier_region_debug_node.py" \
   "$V1_ROOT/scripts/qwen_servo/start_live_servo_voice.sh" \
   "$REPO_ROOT/scripts/slam/run_slam_calibrated.sh" \
   "$REPO_ROOT/configs/nav2_params.yaml" \
@@ -184,7 +190,8 @@ for pattern in \
   online_map_plan_bridge_node.py \
   online_map_qwen_nav_backend_v2.py \
   cmd_vel_intervention_mux.py \
-  qwen_visual_servo_node.py; do
+  qwen_visual_servo_node.py \
+  frontier_region_debug_node.py; do
   if pgrep -f "$pattern" >/dev/null 2>&1; then
     fatal "检测到旧进程 $pattern；请先停止旧流程，避免双重发布控制命令"
     exit 3
@@ -256,6 +263,7 @@ wait_action() {
 
 SLAM_PID=""; NAV2_PID=""; BACKEND_PID=""; BRIDGE_PID=""; MUX_PID=""
 SUPERVISOR_PID=""; EVENT_PID=""; FANIN_PID=""; VOICE_STACK_PID=""
+VISITED_DEBUG_PID=""
 STARTED_SLAM=0; CLEANED=0
 
 start_logged() {
@@ -302,6 +310,7 @@ cleanup() {
   kill_group "$MUX_PID"
   kill_group "$BRIDGE_PID"
   kill_group "$BACKEND_PID"
+  kill_group "$VISITED_DEBUG_PID"
   kill_group "$NAV2_PID"
   [[ "$STARTED_SLAM" == "1" ]] && kill_group "$SLAM_PID"
   kill_group "$FANIN_PID"
@@ -359,6 +368,28 @@ wait_topic /map "$TOPIC_WAIT_SEC"
 wait_topic /odom "$TOPIC_WAIT_SEC"
 wait_topic /scan_filtered "$TOPIC_WAIT_SEC"
 wait_tf
+
+VISITED_DEBUG_CFG="$RUNTIME_DIR/qwen_region_explore_simple_handoff_v2.yaml"
+VISITED_DEBUG_LOG="$RUN_DIR/visited_corridor_debug"
+if [[ "$START_VISITED_CORRIDOR_DEBUG" == "1" ]]; then
+  mkdir -p "$VISITED_DEBUG_LOG"
+  python3 "$V1_ROOT/scripts/fusion/make_simple_handoff_visited_debug_config_v2.py" \
+    --base "$REPO_ROOT/configs/qwen_region_explore_debug.yaml" \
+    --simple-config "$SIMPLE_CFG" \
+    --output "$VISITED_DEBUG_CFG" \
+    --trajectory-file "$RUNTIME_DIR/trajectory_session.json" \
+    --log-root "$VISITED_DEBUG_LOG" >>"$THIRD_LOG" 2>&1
+  start_logged VISITED_DEBUG_PID VISITED \
+    python3 -u "$REPO_ROOT/src/planning/frontier_region_debug_node.py" \
+    --config "$VISITED_DEBUG_CFG" \
+    --run-dir "$VISITED_DEBUG_LOG"
+  sleep 2
+  kill -0 "$VISITED_DEBUG_PID" 2>/dev/null || { fatal "visited corridor debug node exited"; exit 5; }
+  wait_topic /qwen_explore_debug/map_with_visited 20
+  log "已扫走廊图层：/qwen_explore_debug/map_with_visited（固定在 map 坐标系，随轨迹累积）"
+else
+  log "跳过 visited corridor debug（--no-visited-corridor）"
+fi
 
 NAV2_RUNTIME="$RUNTIME_DIR/nav2_params_online_v2.yaml"
 SERVO_RUNTIME="$RUNTIME_DIR/qwen3_vln_servo_simple_handoff_v2.yaml"
@@ -421,7 +452,7 @@ FANIN_ARGS+=(--source "SERVO=$V1_ROOT/logs/qwen_visual_servo.log")
 setsid python3 -u "$V1_ROOT/scripts/fusion/log_fan_in_v2.py" "${FANIN_ARGS[@]}" &
 FANIN_PID=$!
 
-export FOXGLOVE_TOPIC_WHITELIST="${FOXGLOVE_TOPIC_WHITELIST:-['^/image$','^/camera_info$','^/qwen_vln/annotated_image/compressed$','^/qwen_vln/servo/.*','^/qwen_vln/(command|state|result_json|latency_ms|pixel_point|prompt_text)$','^/third_view/.*','^/map_qwen_plan/(backend_debug|bridge_status|status|candidate_summary)$','^/tf$','^/tf_static$','^/scan_filtered$','^/odom$','^/map$','^/map_metadata$']}"
+export FOXGLOVE_TOPIC_WHITELIST="${FOXGLOVE_TOPIC_WHITELIST:-['^/image$','^/camera_info$','^/qwen_vln/annotated_image/compressed$','^/qwen_vln/servo/.*','^/qwen_vln/(command|state|result_json|latency_ms|pixel_point|prompt_text)$','^/third_view/.*','^/map_qwen_plan/(backend_debug|bridge_status|status|candidate_summary|candidate_markers|selected_goal_markers)$','^/qwen_explore_debug/map_with_visited$','^/tf$','^/tf_static$','^/scan_filtered$','^/odom$','^/map$','^/map_metadata$','^/plan$']}"
 
 log "所有第三视角组件就绪，启动稳定第一视角"
 # Same camera env as a direct start_live_servo_voice.sh run.
@@ -443,6 +474,8 @@ setsid env \
   2>&1 &
 VOICE_STACK_PID=$!
 log "第一视角 pid=$VOICE_STACK_PID；中转站只显示关键转换事件"
+log "Foxglove 3D：Fixed frame=map；已扫走廊 /qwen_explore_debug/map_with_visited"
+log "Foxglove MAP：/map_qwen_plan/candidate_markers（黄点）+ /map_qwen_plan/selected_goal_markers（红目标）"
 log "Foxglove：/third_view/simple_handoff/{status,event,markers,recent_path,history_path}"
 
 health_tick=0
@@ -455,8 +488,10 @@ while true; do
   fi
   for item in \
     "NAV2_PID:$NAV2_PID" "BACKEND_PID:$BACKEND_PID" "BRIDGE_PID:$BRIDGE_PID" \
-    "MUX_PID:$MUX_PID" "SUPERVISOR_PID:$SUPERVISOR_PID"; do
+    "MUX_PID:$MUX_PID" "SUPERVISOR_PID:$SUPERVISOR_PID" \
+    "VISITED_DEBUG_PID:$VISITED_DEBUG_PID"; do
     name="${item%%:*}"; pid="${item#*:}"
+    [[ -z "$pid" ]] && continue
     if ! kill -0 "$pid" 2>/dev/null; then
       fatal "$name exited unexpectedly (pid=$pid)"
       exit 7

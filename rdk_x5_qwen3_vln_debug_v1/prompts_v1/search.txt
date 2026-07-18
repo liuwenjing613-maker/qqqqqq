@@ -1,0 +1,52 @@
+Mode: SEARCH_SEMANTIC_GUIDANCE
+
+In SEARCH mode, use the following geometric definitions to apply the POINT/TURN rules above.
+
+The exact requested target is not currently confirmed visible. Inspect the entire image again before making a navigation decision.
+
+If the exact target is clearly visible:
+- s="V", a="POINT"
+- p = exact geometric center of the visible target body, not its cap, base, label edge, shadow, or nearby background
+
+Otherwise use s="I" and apply the following decision order strictly.
+
+1. NEAR FULL-BLOCK OVERRIDE — CHECK BEFORE POINT
+
+Before searching for a waypoint, check whether the current forward route is already blocked at close range.
+
+TURN_LEFT or TURN_RIGHT is mandatory when ALL of the following are visually clear:
+
+- a solid wall, partition, furniture surface, or obstacle blocks most of the central forward corridor, approximately x=250 to x=750
+- its floor-contact boundary has reached approximately the lower third of the image, roughly y>=700
+- no continuous reachable floor bypass is already visible on the left-front or right-front side
+
+When these conditions are satisfied:
+- TURN must be used
+- POINT is forbidden
+- the short residual floor immediately before the blocking surface is not a valid waypoint
+
+Use the side with the clearer reachable opening or greater connected floor space to choose LEFT or RIGHT.
+
+2. POINT GATE
+
+If the near full-block conditions above are not satisfied, search for a visible reachable floor passage.
+
+Use POINT when:
+- free floor is continuously connected from the lower-center of the image into the middle region, approximately reaching y<=650, or
+- a visible continuous bypass around a local obstacle already exists
+
+A distant wall, future corner, or partition endpoint does not prevent POINT while this connected floor passage still exists.
+
+Place p on a clear mid-distance floor point inside the connected passage.
+
+Before returning POINT, verify:
+- p is visibly on floor texture
+- p is not on a wall, furniture surface, partition, obstacle, or their boundary
+- if a wall-floor contact edge is visible, p must lie on the floor side of that edge
+- reaching p must not merely place the robot immediately against a blocking surface
+
+3. TURN FALLBACK
+
+If no connected floor passage reaches the middle region because the route is blocked, use TURN_LEFT or TURN_RIGHT.
+
+After a small turn, return to POINT as soon as a reachable floor passage becomes visible.

@@ -91,7 +91,30 @@ def test_single_connected_frontier_splits_by_heading():
     assert headings[-1] - headings[0] >= 80.0, headings
 
 
+def test_nearest_gray_white_fallback_when_filters_empty():
+    grid = np.full((80, 80), -1, dtype=np.int16)
+    grid[30:50, 30:50] = 0
+    grid[30:50, 50:60] = -1
+    meta = GridMeta(80, 80, 0.05, -2.0, -2.0)
+    robot = RobotPose2D(0.0, 0.0, 0.0)
+    cfg = FrontierConfig(
+        obstacle_inflation_m=0.10,
+        min_frontier_cells=8,
+        min_goal_distance_m=5.0,
+        max_goal_distance_m=6.0,
+        max_abs_relative_heading_deg=10.0,
+        min_heading_separation_deg=30.0,
+        max_candidates=8,
+    )
+    candidates, diag = extract_frontier_candidates(grid, meta, robot, cfg)
+    assert candidates, diag
+    assert diag.get("nearest_gray_white_fallback") is True
+    assert diag.get("fallback_reason") == "no_candidate_after_geometry_filters"
+    assert min(c.distance_m for c in candidates) == min(c.distance_m for c in candidates)
+
+
 if __name__ == "__main__":
     test_extract_and_summary()
     test_single_connected_frontier_splits_by_heading()
+    test_nearest_gray_white_fallback_when_filters_empty()
     print("test_live_frontier_backend_core_v2: PASS")

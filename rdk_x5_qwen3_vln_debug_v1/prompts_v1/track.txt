@@ -1,0 +1,15 @@
+Mode: TRACK_LOCKED_TARGET
+The target was previously visible. Previous point on [0,1000]: $previous_point
+Inspect the image again.
+
+If the same exact target is clearly visible:
+- s="V", a="POINT"
+- p = exact center of its visible body; do not copy the old point
+
+If lost, use s="I":
+- Use POINT on a visible connected continuation.
+- If the front is blocked but floor continues around one side, place POINT clearly inside that side passage at mid-distance to begin a gradual turn; never use central floor ending at the blocker.
+- Prefer the last-departure side only when current geometry supports it; otherwise choose the wider, deeper, safer side.
+- Use TURN only when the route is outside view and no visible floor waypoint exists.
+
+Do not lock onto a similar object or default center POINT. If unsure, choose the safest deepest connected floor POINT.

@@ -189,6 +189,74 @@ def _angle_difference_deg(a: float, b: float) -> float:
     return abs(math.degrees(wrap_angle(math.radians(a - b))))
 
 
+def _build_nearest_gray_white_fallback_item(
+    robot: RobotPose2D,
+    meta: GridMeta,
+    *,
+    safe_free: np.ndarray,
+    unknown: np.ndarray,
+    free_labels: np.ndarray,
+    robot_component: int,
+    clearance_cells: np.ndarray,
+    info_radius_cells: int,
+) -> Optional[Dict[str, Any]]:
+    """Pick the nearest gray/white-boundary cell when strict geometry filters find none.
+
+    Gray-white means known-free (white) cells adjacent to unknown (gray). Distance and
+    heading limits are intentionally not applied for this emergency fallback.
+    """
+    component_mask = (free_labels == robot_component) & safe_free
+    unknown_near = cv2.dilate(
+        unknown.astype(np.uint8), np.ones((3, 3), dtype=np.uint8), iterations=1
+    ).astype(bool)
+    gray_white_mask = component_mask & unknown_near
+    search_mask = gray_white_mask if np.any(gray_white_mask) else component_mask
+    if not np.any(search_mask):
+        search_mask = safe_free
+    if not np.any(search_mask):
+        return None
+
+    ys, xs = np.nonzero(search_mask)
+    best_idx = int(
+        np.argmin(
+            [
+                math.hypot(
+                    grid_to_world(int(x), int(y), meta)[0] - robot.x,
+                    grid_to_world(int(x), int(y), meta)[1] - robot.y,
+                )
+                for x, y in zip(xs, ys)
+            ]
+        )
+    )
+    gx, gy = int(xs[best_idx]), int(ys[best_idx])
+    wx, wy = grid_to_world(gx, gy, meta)
+    dx, dy = wx - robot.x, wy - robot.y
+    distance_m = math.hypot(dx, dy)
+    absolute_heading = math.atan2(dy, dx)
+    relative_heading_deg = math.degrees(wrap_angle(absolute_heading - robot.yaw))
+    gain = _unknown_gain(unknown, gx, gy, info_radius_cells)
+    yaw = _unknown_facing_yaw(
+        unknown,
+        gx,
+        gy,
+        meta,
+        fallback_yaw=absolute_heading,
+        radius_cells=info_radius_cells,
+    )
+    return {
+        "gx": gx,
+        "gy": gy,
+        "wx": wx,
+        "wy": wy,
+        "yaw": yaw,
+        "distance": distance_m,
+        "heading": relative_heading_deg,
+        "gain": gain,
+        "clearance": float(clearance_cells[gy, gx] * meta.resolution),
+        "count": 1,
+    }
+
+
 def extract_frontier_candidates(
     occupancy: np.ndarray,
     meta: GridMeta,
@@ -338,8 +406,22 @@ def extract_frontier_candidates(
             )
 
     if not raw:
-        diagnostics["failure"] = "no_candidate_after_geometry_filters"
-        return [], diagnostics
+        fallback = _build_nearest_gray_white_fallback_item(
+            robot,
+            meta,
+            safe_free=safe_free,
+            unknown=unknown,
+            free_labels=free_labels,
+            robot_component=robot_component,
+            clearance_cells=clearance_cells,
+            info_radius_cells=info_radius_cells,
+        )
+        if fallback is None:
+            diagnostics["failure"] = "no_candidate_after_geometry_filters"
+            return [], diagnostics
+        raw = [fallback]
+        diagnostics["nearest_gray_white_fallback"] = True
+        diagnostics["fallback_reason"] = "no_candidate_after_geometry_filters"
 
     max_gain = max(1, max(int(item["gain"]) for item in raw))
     max_clearance = max(0.05, max(float(item["clearance"]) for item in raw))
