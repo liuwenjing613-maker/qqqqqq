@@ -60,7 +60,7 @@ view_adjust:
   turn_entry_frames: 3
   turn_pending_vx: 0.04
   pre_turn_stop_sec: 0.15
-  turn_pulse_sec: 3.0
+  turn_pulse_sec: 1.5
   settle_sec: 0.30
 
   # Pause Qwen requests while moving, then send "search" after the camera settles.
@@ -94,6 +94,13 @@ safety:
   emergency_reverse_enabled: true
   emergency_reverse_clearance: 0.12
   emergency_reverse_vx: -0.055
+  # After two completed reverse->clear cycles, yaw left once (odom), then resume.
+  emergency_reverse_escape_after_consecutive: 2
+  emergency_reverse_escape_left_enabled: true
+  emergency_reverse_escape_left_yaw_deg: 45.0
+  emergency_reverse_escape_wz: 0.12
+  emergency_reverse_escape_yaw_tolerance_deg: 5.0
+  emergency_reverse_escape_odom_stale_sec: 0.5
   stop_distance: 0.35
   slow_distance: 0.65
   allow_turn_inside_stop_distance: true

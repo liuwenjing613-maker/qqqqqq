@@ -28,6 +28,8 @@ from control.qwen_visual_servo import (
     CommandRateLimiter,
     EmergencyReverseConfig,
     EmergencyReverseController,
+    EscapeLeftTurnConfig,
+    EscapeLeftTurnController,
     GoalSuccessConfig,
     QwenVisualServo,
     RateLimitConfig,
@@ -127,6 +129,30 @@ class QwenVisualServoNode(Node):
                     safety.get("emergency_reverse_clearance", 0.18)
                 ),
                 reverse_vx=float(safety.get("emergency_reverse_vx", -0.055)),
+                escape_after_consecutive=int(
+                    safety.get("emergency_reverse_escape_after_consecutive", 2)
+                ),
+            )
+        )
+        self.escape_left = EscapeLeftTurnController(
+            EscapeLeftTurnConfig(
+                enabled=bool(
+                    safety.get("emergency_reverse_escape_left_enabled", True)
+                ),
+                yaw_deg=float(
+                    safety.get("emergency_reverse_escape_left_yaw_deg", 90.0)
+                ),
+                wz=float(safety.get("emergency_reverse_escape_wz", 0.12)),
+                yaw_tolerance_deg=float(
+                    safety.get(
+                        "emergency_reverse_escape_yaw_tolerance_deg", 5.0
+                    )
+                ),
+                odom_stale_sec=float(
+                    safety.get(
+                        "emergency_reverse_escape_odom_stale_sec", 0.5
+                    )
+                ),
             )
         )
         self.view_adjust = ViewAdjustController(
@@ -352,7 +378,9 @@ class QwenVisualServoNode(Node):
             f"point_max=({servo_cfg.max_vx:.3f},{servo_cfg.max_wz:.3f}) "
             f"emergency_reverse=({self.emergency_reverse.cfg.trigger_distance:.2f}"
             f"->{self.emergency_reverse.cfg.release_distance:.2f}m,"
-            f" vx={self.emergency_reverse.cfg.reverse_vx:.3f}) "
+            f" vx={self.emergency_reverse.cfg.reverse_vx:.3f},"
+            f" escape_after={self.emergency_reverse.cfg.escape_after_consecutive}"
+            f"+left{self.escape_left.cfg.yaw_deg:.0f}deg) "
             f"turn_wz=({self.view_adjust.cfg.turn_left_wz:.3f},"
             f"{self.view_adjust.cfg.turn_right_wz:.3f}) "
             f"turn_entry=({self.turn_gate.cfg.entry_distance:.2f}m x"
@@ -563,6 +591,7 @@ class QwenVisualServoNode(Node):
         self.mission_success = True
         self.motion_enabled = False
         self.emergency_reverse.reset()
+        self.escape_left.reset()
         self.turn_gate.cancel()
         self.view_adjust.cancel()
         self.spawn_scan.cancel()
@@ -664,6 +693,7 @@ class QwenVisualServoNode(Node):
             reason = "mission_success"
             view_phase = "MISSION_SUCCESS"
             self.emergency_reverse.reset()
+            self.escape_left.reset()
             self.turn_gate.cancel()
             self.view_adjust.cancel()
             self.spawn_scan.cancel()
@@ -675,9 +705,33 @@ class QwenVisualServoNode(Node):
                 if scan_fresh
                 else self.emergency_reverse.active
             )
+            odom_fresh = (
+                self.odom_yaw is not None
+                and self.odom_received_sec is not None
+                and now - self.odom_received_sec
+                <= self.spawn_scan.cfg.odom_stale_sec
+            )
             if was_emergency_reversing and not emergency_reversing:
                 self.limiter.reset()
-                if self.spawn_scan.active or self.spawn_scan.done:
+                if self.emergency_reverse.consume_escape_request():
+                    self.turn_gate.cancel()
+                    self.view_adjust.cancel()
+                    if self.spawn_scan.active or self.spawn_scan.done:
+                        self.spawn_scan.cancel()
+                    if self.escape_left.start(self.odom_yaw):
+                        if self.pause_qwen_during_turn:
+                            self._send_qwen_command("pause")
+                            self.qwen_pause_owned = True
+                        self.get_logger().warning(
+                            "emergency reverse x2 -> escape left "
+                            f"{self.escape_left.cfg.yaw_deg:.0f}deg"
+                        )
+                    else:
+                        self._send_qwen_command(self.resume_command)
+                        self.get_logger().warning(
+                            "escape left disabled; requested fresh observation"
+                        )
+                elif self.spawn_scan.active or self.spawn_scan.done:
                     self.get_logger().warning(
                         "emergency reverse cleared during spawn scan; "
                         "continuing panorama"
@@ -688,14 +742,8 @@ class QwenVisualServoNode(Node):
                         "emergency reverse cleared; requested fresh observation"
                     )
 
-            odom_fresh = (
-                self.odom_yaw is not None
-                and self.odom_received_sec is not None
-                and now - self.odom_received_sec
-                <= self.spawn_scan.cfg.odom_stale_sec
-            )
-
             if emergency_reversing:
+                self.escape_left.reset()
                 self.turn_gate.cancel()
                 self.view_adjust.cancel()
                 self._release_qwen_pause(send_resume=False)
@@ -709,6 +757,22 @@ class QwenVisualServoNode(Node):
                     desired_vx = 0.0
                     hard_stop = True
                     reason = "emergency_reverse_wait_lidar"
+            elif self.escape_left.active:
+                esc = self.escape_left.update(self.odom_yaw, odom_fresh)
+                desired_vx, desired_wz = esc.vx, esc.wz
+                hard_stop = esc.hard_stop
+                reason = esc.reason
+                view_phase = "ESCAPE_LEFT"
+                bypass_rate_limit = reason == "escape_left_turning"
+                if esc.pause_qwen and not self.qwen_pause_owned:
+                    self._send_qwen_command("pause")
+                    self.qwen_pause_owned = True
+                if esc.done:
+                    self.qwen_pause_owned = False
+                    self._send_qwen_command(self.resume_command)
+                    self.get_logger().warning(
+                        "escape left done; resume navigation observation"
+                    )
             elif self.spawn_scan.active or self.spawn_scan.done:
                 spawn = self.spawn_scan.update(
                     now,
@@ -960,6 +1024,10 @@ class QwenVisualServoNode(Node):
                 else round(math.degrees(self.odom_yaw), 2)
             ),
             "emergency_reverse_active": self.emergency_reverse.active,
+            "emergency_reverse_streak": int(
+                self.emergency_reverse.completed_streak
+            ),
+            "escape_left_active": self.escape_left.active,
             "emergency_release_distance": round(
                 self.emergency_reverse.cfg.release_distance,
                 3,
@@ -1005,6 +1073,7 @@ class QwenVisualServoNode(Node):
 
     def _cancel_turn_and_resume_qwen(self) -> None:
         self.emergency_reverse.reset()
+        self.escape_left.reset()
         self.turn_gate.cancel()
         self.view_adjust.cancel()
         self.spawn_scan.cancel()

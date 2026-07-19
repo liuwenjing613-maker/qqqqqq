@@ -4,25 +4,44 @@ Task: $instruction_json
 Return exactly one compact JSON object:
 $json_template
 
-Fields:
-- s: "V" exact target visible; "I" not confirmed; "S" verification success; "F" verification failed
-- a: "POINT", "TURN_LEFT", or "TURN_RIGHT"
-- p: [x,y] integers on Qwen3-VL grid [0,1000] for POINT; null for TURN
+Field definitions:
+- s: status code
+  - "V" = exact target is clearly visible
+  - "I" = exact target is not confirmed visible
+  - "S" = verification success
+  - "F" = verification failed
+- a: execution action
+  - "POINT" = follow one visible target or a real visible traversable continuation in THIS image
+  - "TURN_LEFT" = the current visible path has ended and a left corner/opening is clearly supported
+  - "TURN_RIGHT" = the current visible path has ended and a right corner/opening is clearly supported
+- p:
+  - when a="POINT", p=[x,y] integers on the Qwen3-VL relative grid [0,1000]
+  - when a is TURN_LEFT or TURN_RIGHT, p=null
 
-Choose POINT versus TURN by visible geometry:
-1. If the exact target is clearly visible, use POINT at its exact visible-body center.
-2. Otherwise trace drivable floor continuously from the bottom-center. A broad foreground floor patch that soon ends at a wall, cabinet, closed panel, furniture, or dead end is NOT a forward continuation.
-3. When the front is blocked, inspect both sides before deciding. If connected free floor is visibly followable around the left or right edge, use POINT on the centerline of that side passage, clearly off-center and at mid-distance, so following it starts a gradual turn. Prefer the side with greater connected width, depth, and clearance.
-4. Never put an exploration POINT in the image center or directly before a blocking wall merely because nearby floor is visible or the side choice is uncertain.
-5. Use TURN_LEFT or TURN_RIGHT only when the useful route continues outside the current field of view and no reliable visible floor point can represent it yet. A wall edge, corner, side opening, or corridor boundary must support the direction.
-6. If both side continuations are visible, choose deterministically: wider, deeper, then safer; if still tied, choose left. Do not alternate without changed visual evidence.
-7. If no turn is supported, choose the safest, deepest currently connected free-floor POINT, not a guessed hidden-target location. Do not stop only because uncertain.
+POINT versus TURN is the most important decision:
+1. If a currently followable visible path exists, output POINT.
+2. Use POINT when the next useful target or traversable continuation is visibly present in the current image and can be grounded at one concrete point.
+3. If the current visible path has ended and the left or right side has clear corner/opening evidence, output TURN_LEFT or TURN_RIGHT.
+4. Use TURN_LEFT or TURN_RIGHT only when the route/next useful view continues outside the current camera field of view, such as an L-corner or side opening, and no reliable visible ground point represents that continuation yet.
+5. A side opening, corridor edge, wall termination, or corner must provide visual evidence for TURN. Do not choose TURN only because the target is semantically likely to be left or right.
+6. Never use a central POINT merely because the decision is uncertain. Do not avoid a visually supported turn by choosing a default center point.
+7. If a visible open passage can already be followed, use POINT on that passage even when it is left or right of center.
+8. If left/right turn evidence is insufficient, choose the safest, most continuous, farthest visible free-floor POINT that can actually be followed now.
+9. Do not stop merely because the decision is uncertain.
 
-Coordinate rules:
-- (0,0)=top-left and (1000,1000)=bottom-right; never use pixels or 0-1 coordinates.
-- Ground p on THIS image; never reuse placeholders.
-- For targets, use the center of the visible body, not cap, base, edge, label, contact point, or background.
-- For exploration, place p on clear floor inside the chosen passage, beyond the immediate foreground when possible; never on wall, furniture, object, person, reflection, ceiling, or obstacle.
-- Avoid the bottom 8 percent and outer 6 percent unless that is the only valid passage.
+Coordinate rules for POINT:
+- (0,0)=top-left and (1000,1000)=bottom-right on the relative grid only.
+- Never use absolute pixel coordinates or 0-1 normalized coordinates.
+- p must be grounded on THIS image; never reuse placeholder coordinates.
+- Prefer precise integers at the true visual center; do not round to coarse 50-step values unless they are truly correct.
 
-Output JSON only: no Markdown, explanation, extra keys, velocity, steering magnitude, path length, angle, or metric distance.
+Point semantics:
+- If s="V": p must be the exact geometric center of the visible target silhouette/body in THIS image.
+- For a visible target, estimate the center of its visible extent; do not place p on the cap, base, label edge, contact point with a table, or nearby background.
+- If s="I" or s="F" with a="POINT": p is one visible free-space exploration waypoint, not an imagined hidden-target location.
+- Never place an exploration POINT on wall, furniture surface, object, person, reflection, ceiling, or obstacle.
+- Prefer a mid-distance point on clear floor/open passage; avoid the bottom 8 percent and outer 6 percent unless that is the only passage.
+
+Output rules:
+- JSON only, no Markdown, no explanation, no extra keys.
+- Never output velocity, steering magnitude, path length, angle, or metric distance.

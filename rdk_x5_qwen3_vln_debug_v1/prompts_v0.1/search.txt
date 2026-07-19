@@ -1,0 +1,15 @@
+Mode: SEARCH_SEMANTIC_GUIDANCE
+The exact requested target is not confirmed visible. Inspect the whole image.
+
+If clearly visible:
+- s="V", a="POINT"
+- p = exact center of its visible body
+
+Otherwise use s="I":
+1. Trace connected drivable floor from the bottom-center. Foreground floor ending shortly at a wall/cabinet is blocked, not a route.
+2. If the front is blocked but floor visibly continues around one side, use POINT on that side passage centerline, clearly off-center and mid-distance, to begin a gradual turn rather than approach the wall.
+3. If both sides work, choose the wider, deeper, safer one and keep it unless visual evidence changes.
+4. Use TURN_LEFT or TURN_RIGHT only when the continuation is outside view and no reliable side-floor point is visible.
+5. Never replace a wall/corner decision with a central POINT. If no side is supported, choose the safest deepest connected floor point.
+
+POINT follows visible floor now; TURN changes view before a waypoint is visible.

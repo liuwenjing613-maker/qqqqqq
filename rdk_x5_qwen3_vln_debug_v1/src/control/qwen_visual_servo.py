@@ -588,6 +588,8 @@ class EmergencyReverseConfig:
     trigger_distance: float = 0.42
     clearance: float = 0.18
     reverse_vx: float = -0.055
+    # After N completed reverse→clear cycles, request one escape left turn.
+    escape_after_consecutive: int = 2
 
     @property
     def release_distance(self) -> float:
@@ -600,6 +602,8 @@ class EmergencyReverseConfig:
             raise ValueError("clearance must be positive")
         if self.reverse_vx >= 0.0:
             raise ValueError("reverse_vx must be negative")
+        if self.escape_after_consecutive < 0:
+            raise ValueError("escape_after_consecutive must be >= 0")
 
 
 class EmergencyReverseController:
@@ -609,9 +613,23 @@ class EmergencyReverseController:
         config.validate()
         self.cfg = config
         self.active = False
+        self._completed_streak = 0
+        self._escape_pending = False
 
     def reset(self) -> None:
         self.active = False
+        self._completed_streak = 0
+        self._escape_pending = False
+
+    @property
+    def completed_streak(self) -> int:
+        return self._completed_streak
+
+    def consume_escape_request(self) -> bool:
+        if not self._escape_pending:
+            return False
+        self._escape_pending = False
+        return True
 
     def update(self, front_distance: Optional[float]) -> bool:
         if not self.cfg.enabled:
@@ -619,12 +637,113 @@ class EmergencyReverseController:
             return False
         if front_distance is None:
             return self.active
+        was_active = self.active
         if self.active:
             if front_distance >= self.cfg.release_distance:
                 self.active = False
         elif front_distance <= self.cfg.trigger_distance:
             self.active = True
+        if was_active and not self.active:
+            self._completed_streak += 1
+            need = int(self.cfg.escape_after_consecutive)
+            if need > 0 and self._completed_streak >= need:
+                self._escape_pending = True
+                self._completed_streak = 0
         return self.active
+
+
+@dataclass(frozen=True)
+class EscapeLeftTurnConfig:
+    """Open-space recovery: yaw left by a fixed angle using /odom."""
+
+    enabled: bool = True
+    yaw_deg: float = 90.0
+    wz: float = 0.12
+    yaw_tolerance_deg: float = 5.0
+    odom_stale_sec: float = 0.5
+
+    def validate(self) -> None:
+        if self.yaw_deg <= 0.0:
+            raise ValueError("escape yaw_deg must be positive")
+        if self.wz == 0.0:
+            raise ValueError("escape wz must be non-zero")
+        if self.yaw_tolerance_deg <= 0.0:
+            raise ValueError("escape yaw_tolerance_deg must be positive")
+        if self.odom_stale_sec <= 0.0:
+            raise ValueError("escape odom_stale_sec must be positive")
+
+
+@dataclass(frozen=True)
+class EscapeLeftTurnDecision:
+    vx: float
+    wz: float
+    hard_stop: bool
+    reason: str
+    done: bool
+    pause_qwen: bool
+
+
+class EscapeLeftTurnController:
+    """One-shot left yaw turn (CCW) measured from odom, not wz*time."""
+
+    def __init__(self, config: EscapeLeftTurnConfig):
+        config.validate()
+        self.cfg = config
+        self.active = False
+        self._integrated = 0.0
+        self._target = 0.0
+        self._last_yaw: Optional[float] = None
+
+    def reset(self) -> None:
+        self.active = False
+        self._integrated = 0.0
+        self._target = 0.0
+        self._last_yaw = None
+
+    def start(self, yaw_rad: Optional[float]) -> bool:
+        if not self.cfg.enabled:
+            return False
+        self.active = True
+        self._integrated = 0.0
+        self._target = math.radians(float(self.cfg.yaw_deg))
+        self._last_yaw = float(yaw_rad) if yaw_rad is not None else None
+        return True
+
+    def update(
+        self,
+        yaw_rad: Optional[float],
+        odom_fresh: bool,
+    ) -> EscapeLeftTurnDecision:
+        if not self.active:
+            return EscapeLeftTurnDecision(
+                0.0, 0.0, True, "escape_left_idle", False, False
+            )
+        if not odom_fresh or yaw_rad is None:
+            return EscapeLeftTurnDecision(
+                0.0, 0.0, True, "escape_left_wait_odom", False, True
+            )
+        if self._last_yaw is None:
+            self._last_yaw = float(yaw_rad)
+        else:
+            delta = _yaw_delta(self._last_yaw, float(yaw_rad))
+            # Left / CCW accumulates positive yaw only (same as spawn scan).
+            if delta > 0.0:
+                self._integrated += delta
+            self._last_yaw = float(yaw_rad)
+        tol = math.radians(self.cfg.yaw_tolerance_deg)
+        if self._integrated + tol >= self._target:
+            self.reset()
+            return EscapeLeftTurnDecision(
+                0.0, 0.0, True, "escape_left_done", True, False
+            )
+        return EscapeLeftTurnDecision(
+            0.0,
+            abs(float(self.cfg.wz)),
+            False,
+            "escape_left_turning",
+            False,
+            True,
+        )
 
 
 @dataclass(frozen=True)

@@ -1,52 +1,123 @@
 Mode: SEARCH_SEMANTIC_GUIDANCE
 
-In SEARCH mode, use the following geometric definitions to apply the POINT/TURN rules above.
+Inspect the complete current image for the exact requested target first.
 
-The exact requested target is not currently confirmed visible. Inspect the entire image again before making a navigation decision.
+For this competition, the requested target is a transparent plastic Nongfu Spring water bottle, normally with a red label and possibly a red cap.
+
+Red colour alone is not sufficient.
+Confirm the visible bottle body and bottle shape.
 
 If the exact target is clearly visible:
-- s="V", a="POINT"
-- p = exact geometric center of the visible target body, not its cap, base, label edge, shadow, or nearby background
 
-Otherwise use s="I" and apply the following decision order strictly.
+- s="V"
+- a="POINT"
+- p = the geometric centre of the visible bottle body
+- do not point only to its cap, label, base, shadow, or nearby background
 
-1. NEAR FULL-BLOCK OVERRIDE — CHECK BEFORE POINT
+Otherwise:
 
-Before searching for a waypoint, check whether the current forward route is already blocked at close range.
+- s="I"
+- apply the following decision tree exactly
+- do not skip or reorder the steps
 
-TURN_LEFT or TURN_RIGHT is mandatory when ALL of the following are visually clear:
+STEP 1 — TEST THREE LOCAL FLOOR REGIONS
 
-- a solid wall, partition, furniture surface, or obstacle blocks most of the central forward corridor, approximately x=250 to x=750
-- its floor-contact boundary has reached approximately the lower third of the image, roughly y>=700
-- no continuous reachable floor bypass is already visible on the left-front or right-front side
+Inspect three overlapping regions in the lower-middle part of the image:
 
-When these conditions are satisfied:
-- TURN must be used
-- POINT is forbidden
-- the short residual floor immediately before the blocking surface is not a valid waypoint
+- LEFT-FRONT region: approximately x=100 to 450
+- FRONT region: approximately x=300 to 700
+- RIGHT-FRONT region: approximately x=550 to 900
 
-Use the side with the clearer reachable opening or greater connected floor space to choose LEFT or RIGHT.
+Use approximately y=450 to 850 as the local waypoint area.
 
-2. POINT GATE
+These coordinates define visual search regions only. They do not represent real distance.
 
-If the near full-block conditions above are not satisfied, search for a visible reachable floor passage.
+A region is VALID when:
 
-Use POINT when:
-- free floor is continuously connected from the lower-center of the image into the middle region, approximately reaching y<=650, or
-- a visible continuous bypass around a local obstacle already exists
+- it contains a clear patch of real visible floor;
+- that floor is connected to the floor near the bottom centre of the image;
+- reaching that floor does not cross a wall, partition, furniture, broom, dustpan, chair, object, or other obstacle;
+- the point can be placed clearly inside the floor patch, not on an obstacle or boundary.
 
-A distant wall, future corner, or partition endpoint does not prevent POINT while this connected floor passage still exists.
+The floor patch does not need to continue beyond the next wall, corner, or obstacle.
 
-Place p on a clear mid-distance floor point inside the connected passage.
+It only needs to provide one useful local movement before the next observation.
 
-Before returning POINT, verify:
-- p is visibly on floor texture
-- p is not on a wall, furniture surface, partition, obstacle, or their boundary
-- if a wall-floor contact edge is visible, p must lie on the floor side of that edge
-- reaching p must not merely place the robot immediately against a blocking surface
+STEP 2 — MANDATORY POINT RULE
 
-3. TURN FALLBACK
+If at least one of LEFT-FRONT, FRONT, or RIGHT-FRONT is VALID:
 
-If no connected floor passage reaches the middle region because the route is blocked, use TURN_LEFT or TURN_RIGHT.
+- a must be "POINT"
+- TURN_LEFT and TURN_RIGHT are forbidden
+- place p inside the best valid floor region
 
-After a small turn, return to POINT as soon as a reachable floor passage becomes visible.
+Choose among valid regions in this order:
+
+1. the region with the clearest and largest visible floor patch;
+2. the region with fewer visible obstacles;
+3. the region closer to the current forward direction.
+
+Use an off-centre POINT when the valid region is on the left or right.
+
+The following cases must use POINT:
+
+- broad floor is visible before a distant wall, partition, cabinet, or corner;
+- the route will turn later, but any valid local floor region exists now;
+- a local obstacle blocks the centre, but LEFT-FRONT or RIGHT-FRONT is valid;
+- a side passage has already entered the image;
+- the long-term route is uncertain, but a valid local floor point exists.
+
+STEP 3 — STRICT TURN RULE
+
+TURN is allowed only when BOTH conditions are true:
+
+A. LEFT-FRONT, FRONT, and RIGHT-FRONT are all INVALID.
+
+B. A solid wall, low partition, cabinet, furniture group, or obstacle visibly blocks the central lower-forward area, so the camera must rotate before any useful local floor point can be selected.
+
+If either A or B is false:
+
+- TURN is forbidden
+- output POINT
+
+A distant wall, distant corner, distant partition endpoint, or one side looking more open does not satisfy condition B.
+
+Uncertainty does not satisfy condition B.
+
+Knowing that the route will eventually turn does not satisfy condition B.
+
+STEP 4 — TURN DIRECTION
+
+Use this step only after both TURN conditions A and B are satisfied.
+
+Choose TURN_LEFT only when the visible wall ending, corner, or opening supports the left side.
+
+Choose TURN_RIGHT only when the visible wall ending, corner, or opening supports the right side.
+
+Use the more open side only to choose LEFT or RIGHT after TURN has already been proven necessary.
+
+For TURN_LEFT or TURN_RIGHT:
+
+- p=null
+
+STEP 5 — COMPETITION-SCENE REJECTIONS
+
+- Gray low partitions are solid non-traversable boundaries.
+- Floor visible behind or above a partition is not reachable.
+- Spaces under blue chairs or through chair legs are not valid floor regions.
+- Narrow gaps between partitions or furniture are not valid passages.
+- A broom or dustpan is a local obstacle.
+- If a visible floor region exists beside a broom or dustpan, use POINT on that side.
+- Never place p on a wall, partition, cabinet, chair, broom, dustpan, obstacle, or furniture surface.
+
+FINAL CHECK
+
+Before returning TURN, check LEFT-FRONT, FRONT, and RIGHT-FRONT one more time.
+
+If any one of them contains a valid local floor point:
+
+- output POINT
+
+Only if all three regions are invalid and the central lower-forward area is visibly blocked:
+
+- output TURN_LEFT or TURN_RIGHT

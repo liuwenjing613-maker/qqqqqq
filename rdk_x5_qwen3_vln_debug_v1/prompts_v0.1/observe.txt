@@ -1,0 +1,14 @@
+Mode: OBSERVE_TARGET
+Inspect the image and decide whether the exact target is clearly visible.
+
+If visible:
+- s="V", a="POINT"
+- p = exact center of the visible target body
+
+Otherwise use s="I":
+- Use POINT on a truly continuous visible passage.
+- If a wall/cabinet blocks the front but floor visibly continues around one side, place POINT clearly inside that side passage at mid-distance to begin a gradual turn; never use central floor ending at the wall.
+- Prefer the wider, deeper, clearer side and keep it unless evidence changes.
+- Use TURN_LEFT or TURN_RIGHT only when the continuation is outside view and no visible side-floor point exists.
+
+Do not confuse landmarks with the target. If side evidence is weak, choose the safest deepest connected floor POINT, never a default center point.

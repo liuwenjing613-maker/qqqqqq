@@ -19,8 +19,9 @@ MOTION_ENABLED="${MOTION_ENABLED:-0}"
 START_SLAM="${SIMPLE_HANDOFF_START_SLAM:-1}"
 REUSE_SLAM="${SIMPLE_HANDOFF_REUSE_SLAM:-1}"
 KEEP_RAW_LOGS="${SIMPLE_HANDOFF_KEEP_RAW_LOGS:-0}"
-TF_WAIT_SEC="${SIMPLE_HANDOFF_TF_WAIT_SEC:-60}"
-TOPIC_WAIT_SEC="${SIMPLE_HANDOFF_TOPIC_WAIT_SEC:-60}"
+TF_WAIT_SEC="${SIMPLE_HANDOFF_TF_WAIT_SEC:-90}"
+# Cold SLAM bringup (lidar→filter→odom→slam_toolbox→/map) often needs >60s on X5.
+TOPIC_WAIT_SEC="${SIMPLE_HANDOFF_TOPIC_WAIT_SEC:-90}"
 NAV2_WAIT_SEC="${SIMPLE_HANDOFF_NAV2_WAIT_SEC:-90}"
 START_FOXGLOVE="${START_FOXGLOVE:-1}"
 START_VISITED_CORRIDOR_DEBUG="${START_VISITED_CORRIDOR_DEBUG:-1}"
@@ -105,10 +106,12 @@ source_ros() {
   if [[ -f "$REPO_ROOT/scripts/lib/ros_dds_env.sh" ]]; then
     # shellcheck disable=SC1090
     source "$REPO_ROOT/scripts/lib/ros_dds_env.sh"
-    if declare -F prepare_ros_dds_env >/dev/null 2>&1; then
-      prepare_ros_dds_env
-    elif declare -F attach_ros_dds_env >/dev/null 2>&1; then
+    # Prefer attach: prepare_ros_dds_env cleans /dev/shm and can disrupt an
+    # already-running hub/SLAM graph that this launcher intends to reuse.
+    if declare -F attach_ros_dds_env >/dev/null 2>&1; then
       attach_ros_dds_env
+    elif declare -F prepare_ros_dds_env >/dev/null 2>&1; then
+      prepare_ros_dds_env
     fi
   fi
   set -u
@@ -204,35 +207,95 @@ log "配置：$SIMPLE_CFG"
 log "主日志：$FIRST_LOG | $THIRD_LOG"
 
 publisher_count() {
-  timeout 4 ros2 topic info "$1" 2>/dev/null | awk -F': ' '/Publisher count:/ {print $2+0}' | tail -n1
+  # Keep probes short. Empty CLI output is UNKNOWN (-1), not "0 publishers" —
+  # FastDDS under load often returns blank even while topics are healthy.
+  local out
+  out="$(timeout 2 ros2 topic info "$1" 2>/dev/null || true)"
+  if [[ -z "$out" ]]; then
+    echo -1
+    return 0
+  fi
+  local n
+  n="$(awk -F': ' '/Publisher count:/ {print $2+0}' <<<"$out" | tail -n1)"
+  if [[ -z "$n" ]]; then
+    echo -1
+    return 0
+  fi
+  echo "$n"
 }
+
+base_slam_processes_alive() {
+  # Process evidence for hub shared stack (avoids ros2 CLI false negatives).
+  pgrep -f 'async_slam_toolbox_node|/slam_toolbox/async_slam_toolbox' >/dev/null 2>&1 \
+    && pgrep -f 'ydlidar_ros2_driver' >/dev/null 2>&1 \
+    && pgrep -f 'm1_pwm_cmd_vel_bridge' >/dev/null 2>&1 \
+    && pgrep -f 'simple_scan_filter' >/dev/null 2>&1
+}
+
+slam_topics_ready() {
+  local map_count odom_count scan_count
+  map_count="$(publisher_count /map || true)"
+  odom_count="$(publisher_count /odom || true)"
+  scan_count="$(publisher_count /scan_filtered || true)"
+  if [[ "${map_count:-0}" -gt 0 && "${odom_count:-0}" -gt 0 && "${scan_count:-0}" -gt 0 ]]; then
+    return 0
+  fi
+  return 1
+}
+
 wait_topic() {
-  local topic="$1" timeout_sec="$2" start elapsed count
+  # Optional $3: grep pattern in THIRD_LOG that proves the publisher is up
+  # (same class of FastDDS CLI false-negative as wait_action / camera type).
+  local topic="$1" timeout_sec="$2" log_ok_pattern="${3:-}"
+  local start elapsed count
   start="$(date +%s)"
   while true; do
     count="$(publisher_count "$topic" || true)"
     elapsed=$(( $(date +%s) - start ))
-    if [[ "${count:-0}" -gt 0 ]]; then
+    if [[ "${count:--1}" -gt 0 ]]; then
       log "READY topic $topic publishers=$count (${elapsed}s)"
       return 0
+    fi
+    if [[ -n "$log_ok_pattern" && -f "$THIRD_LOG" ]] \
+      && grep -Fq "$log_ok_pattern" "$THIRD_LOG" 2>/dev/null; then
+      log "READY topic $topic by process log (${elapsed}s)"
+      return 0
+    fi
+    # Shared hub base: process evidence is enough when CLI flakes to -1/0.
+    if [[ "$START_SLAM" == "0" ]] && base_slam_processes_alive; then
+      case "$topic" in
+        /map|/odom|/scan_filtered)
+          log "READY topic $topic by base SLAM processes (${elapsed}s)"
+          return 0
+          ;;
+      esac
     fi
     (( elapsed >= timeout_sec )) && { fatal "timeout waiting $topic"; return 1; }
     sleep 1
   done
 }
 wait_tf() {
-  local start elapsed out
-  start="$(date +%s)"
-  while true; do
-    out="$(timeout 5 ros2 run tf2_ros tf2_echo map base_link 2>&1 || true)"
-    if grep -Eq 'Translation:|At time' <<<"$out"; then
-      log "READY TF map -> base_link"
-      return 0
-    fi
-    elapsed=$(( $(date +%s) - start ))
-    (( elapsed >= TF_WAIT_SEC )) && { fatal "timeout waiting TF map->base_link"; return 1; }
-    sleep 1
-  done
+  # Direct `tf2_echo map base_link` is a known false-negative on this stack
+  # (cold start + extrapolation). Hub/exp2 already rely on wait_tf_chain.py.
+  local timeout_sec="${TF_WAIT_SEC}"
+  local waiter="$REPO_ROOT/scripts/nav/wait_tf_chain.py"
+  log "WAITING TF chain map<-odom<-base_link (timeout ${timeout_sec}s)"
+  if [[ ! -f "$waiter" ]]; then
+    fatal "missing TF waiter: $waiter"
+    return 1
+  fi
+  if python3 "$waiter" \
+    --map-frame map \
+    --odom-frame odom \
+    --base-frame base_link \
+    --timeout "$timeout_sec" \
+    --need-ok 2 \
+    --poll 0.5; then
+    log "READY TF map -> base_link"
+    return 0
+  fi
+  fatal "timeout waiting TF map->base_link"
+  return 1
 }
 wait_action() {
   # On RDK, ros2 action info often fails DDS discovery even after Nav2 is active.
@@ -314,15 +377,27 @@ cleanup() {
   kill_group "$NAV2_PID"
   [[ "$STARTED_SLAM" == "1" ]] && kill_group "$SLAM_PID"
   kill_group "$FANIN_PID"
-  # First-person stack owns the camera (same as start_live_servo_voice.sh).
-  if declare -F stop_camera_tree >/dev/null 2>&1; then
-    stop_camera_tree "" || true
-  else
-    pkill -f '[p]ython3? -u .*/opencv_compressed_cam.py' 2>/dev/null || true
-    pkill -x hobot_usb_cam 2>/dev/null || true
+  # First-person stack owns the camera only when it cold-started it.
+  # Hub prewarm keeps camera+qwen alive across online sessions.
+  if [[ "${REUSE_QWEN_PREWARM:-0}" != "1" ]]; then
+    if declare -F stop_camera_tree >/dev/null 2>&1; then
+      stop_camera_tree "" || true
+    else
+      pkill -f '[p]ython3? -u .*/opencv_compressed_cam.py' 2>/dev/null || true
+      pkill -x hobot_usb_cam 2>/dev/null || true
+    fi
   fi
   if [[ "$KEEP_RAW_LOGS" != "1" ]]; then
-    for f in "${RAW_LOGS[@]}"; do rm -f "$f"; done
+    for f in "${RAW_LOGS[@]}"; do
+      # Keep prewarm readiness heuristics intact across online sessions.
+      if [[ "${REUSE_QWEN_PREWARM:-0}" == "1" ]] && [[ "$(basename "$f")" == "qwen_live_servo_qwen.log" ]]; then
+        continue
+      fi
+      if [[ "${REUSE_QWEN_PREWARM:-0}" == "1" ]] && [[ "$(basename "$f")" == "camera.log" || "$(basename "$f")" == "image_raw_bridge.log" ]]; then
+        continue
+      fi
+      rm -f "$f"
+    done
   fi
   rm -rf "$RUNTIME_DIR"
 }
@@ -340,29 +415,56 @@ fi
 # with post-voice USB settle and aborted the whole stack before SLAM).
 export ROBOT_PROJECT_DIR="${ROBOT_PROJECT_DIR:-$REPO_ROOT}"
 export CAMERA_BACKEND="${CAMERA_BACKEND:-opencv}"
-export CAMERA_WIDTH="${CAMERA_WIDTH:-1280}"
-export CAMERA_HEIGHT="${CAMERA_HEIGHT:-720}"
-export CAMERA_FPS="${CAMERA_FPS:-15}"
+export CAMERA_WIDTH="${CAMERA_WIDTH:-960}"
+export CAMERA_HEIGHT="${CAMERA_HEIGHT:-540}"
+export CAMERA_FPS="${CAMERA_FPS:-10}"
 export CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
 # shellcheck source=/dev/null
 source "$V1_ROOT/scripts/lib/camera_stack.sh"
 mkdir -p "$V1_ROOT/logs"
-# Clear stale holders so the first-person stack can open cleanly later.
-stop_camera_tree "" || true
-log "相机交由第一视角启动 backend=$CAMERA_BACKEND ${CAMERA_WIDTH}x${CAMERA_HEIGHT}@${CAMERA_FPS} dev=$CAMERA_DEV"
+# Hub prewarm owns the camera; do not kill it when reusing.
+if [[ "${REUSE_QWEN_PREWARM:-0}" == "1" ]]; then
+  log "复用 hub 预热相机/Qwen（跳过 stop_camera_tree）"
+else
+  # Clear stale holders so the first-person stack can open cleanly later.
+  stop_camera_tree "" || true
+  log "相机交由第一视角启动 backend=$CAMERA_BACKEND ${CAMERA_WIDTH}x${CAMERA_HEIGHT}@${CAMERA_FPS} dev=$CAMERA_DEV"
+fi
 
 map_count="$(publisher_count /map || true)"
 odom_count="$(publisher_count /odom || true)"
 scan_count="$(publisher_count /scan_filtered || true)"
-if [[ "${map_count:-0}" -gt 0 && "${odom_count:-0}" -gt 0 && "${scan_count:-0}" -gt 0 ]]; then
+# Hub already gated TF before launching us with --no-slam. Never hard-fail on a
+# single flaky ros2 topic info; trust processes / hub flag / short retry.
+if [[ "${VOICE_DEMO_HUB_BASE_READY:-0}" == "1" ]] && base_slam_processes_alive; then
+  [[ "$REUSE_SLAM" == "1" ]] || { fatal "SLAM exists but reuse disabled"; exit 3; }
+  log "复用 hub 已确认的共享 SLAM（跳过 CLI topic probe）"
+elif slam_topics_ready; then
   [[ "$REUSE_SLAM" == "1" ]] || { fatal "SLAM exists but reuse disabled"; exit 3; }
   log "复用现有 SLAM/传感器栈"
+elif base_slam_processes_alive; then
+  [[ "$REUSE_SLAM" == "1" ]] || { fatal "SLAM exists but reuse disabled"; exit 3; }
+  log "复用现有 SLAM/传感器栈（进程在线，CLI publishers map=$map_count odom=$odom_count scan=$scan_count）"
 elif [[ "$START_SLAM" == "1" ]]; then
   start_logged SLAM_PID SLAM bash "$REPO_ROOT/scripts/slam/run_slam_calibrated.sh"
   STARTED_SLAM=1
 else
-  fatal "SLAM topics unavailable and --no-slam was used"
-  exit 3
+  # --no-slam: retry briefly; CLI often blanks right after voice/ASR CPU spike.
+  log "WARN CLI 未看到 /map,/odom,/scan_filtered (map=$map_count odom=$odom_count scan=$scan_count)；重试共享栈..."
+  reused=0
+  for _ in $(seq 1 20); do
+    if slam_topics_ready || base_slam_processes_alive; then
+      [[ "$REUSE_SLAM" == "1" ]] || { fatal "SLAM exists but reuse disabled"; exit 3; }
+      log "复用现有 SLAM/传感器栈（重试后）"
+      reused=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$reused" != "1" ]]; then
+    fatal "SLAM topics unavailable and --no-slam was used (no slam/lidar/odom/scan_filter processes)"
+    exit 3
+  fi
 fi
 wait_topic /map "$TOPIC_WAIT_SEC"
 wait_topic /odom "$TOPIC_WAIT_SEC"
@@ -432,7 +534,9 @@ for pid_name in BACKEND_PID BRIDGE_PID MUX_PID SUPERVISOR_PID; do
   sleep 1
   kill -0 "$pid" 2>/dev/null || { fatal "$pid_name exited during startup"; exit 6; }
 done
-wait_topic /third_view/simple_handoff/status 15
+# HANDOFF publishes status immediately on ready; ros2 topic info often misses it
+# under Nav2 graph load (same flake as camera type / navigate_to_pose).
+wait_topic /third_view/simple_handoff/status 30 "simple handoff ready"
 
 setsid python3 -u "$V1_ROOT/scripts/fusion/simple_handoff_event_console_v2.py" \
   --topic /third_view/simple_handoff/event &
@@ -441,7 +545,14 @@ EVENT_PID=$!
 # The stable first-person script writes fixed compatibility logs. Aggregate them
 # into one main file, then remove the transient files on exit by default.
 mkdir -p "$V1_ROOT/logs"
-for f in "${RAW_LOGS[@]}"; do : >"$f"; done
+# Truncate per-run logs for fan-in. Never wipe hub prewarm readiness evidence.
+for f in "${RAW_LOGS[@]}"; do
+  base="$(basename "$f")"
+  if [[ "${REUSE_QWEN_PREWARM:-0}" == "1" ]] && [[ "$base" == "qwen_live_servo_qwen.log" || "$base" == "camera.log" || "$base" == "image_raw_bridge.log" ]]; then
+    continue
+  fi
+  : >"$f"
+done
 FANIN_ARGS=(--output "$FIRST_LOG")
 FANIN_ARGS+=(--source "CAMERA=$V1_ROOT/logs/camera.log")
 FANIN_ARGS+=(--source "RAW_BRIDGE=$V1_ROOT/logs/image_raw_bridge.log")
@@ -462,11 +573,13 @@ setsid env \
   VOICE_INSTRUCTION_OVERRIDE="$TASK" \
   START_FOXGLOVE="$START_FOXGLOVE" \
   FOXGLOVE_TOPIC_WHITELIST="$FOXGLOVE_TOPIC_WHITELIST" \
+  REUSE_QWEN_PREWARM="${REUSE_QWEN_PREWARM:-0}" \
+  QWEN_PREWARM_RUNTIME_DIR="${QWEN_PREWARM_RUNTIME_DIR:-/tmp/rdk_x5_voice_demo_qwen_prewarm_${USER:-robot}}" \
   ROBOT_PROJECT_DIR="${ROBOT_PROJECT_DIR:-$REPO_ROOT}" \
   CAMERA_BACKEND="${CAMERA_BACKEND:-opencv}" \
-  CAMERA_WIDTH="${CAMERA_WIDTH:-1280}" \
-  CAMERA_HEIGHT="${CAMERA_HEIGHT:-720}" \
-  CAMERA_FPS="${CAMERA_FPS:-15}" \
+  CAMERA_WIDTH="${CAMERA_WIDTH:-960}" \
+  CAMERA_HEIGHT="${CAMERA_HEIGHT:-540}" \
+  CAMERA_FPS="${CAMERA_FPS:-10}" \
   CAMERA_DEV="${CAMERA_DEV:-/dev/video0}" \
   bash "$V1_ROOT/scripts/qwen_servo/start_live_servo_voice.sh" \
   > >(stdbuf -oL sed -u 's/^/[FIRST_PERSON] /' | tee -a "$FIRST_LOG" | \

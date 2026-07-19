@@ -108,7 +108,15 @@ class OpenCvCompressedCam(Node):
         msg.header.frame_id = self._frame_id
         msg.format = "jpeg"
         msg.data = buf.tobytes()
-        self._pub.publish(msg)
+        try:
+            self._pub.publish(msg)
+        except Exception as exc:  # noqa: BLE001 — keep cam alive across DDS teardown races
+            self._fail += 1
+            now = time.monotonic()
+            if now - self._last_log >= 2.0:
+                self._last_log = now
+                self.get_logger().warn(f"publish skipped ({exc})")
+            return
         self._ok += 1
         now = time.monotonic()
         if now - self._last_log >= 2.0:

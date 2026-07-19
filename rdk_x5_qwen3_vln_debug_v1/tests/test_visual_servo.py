@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sys
 import unittest
 from pathlib import Path
@@ -11,6 +12,8 @@ from control.qwen_visual_servo import (  # noqa: E402
     CommandRateLimiter,
     EmergencyReverseConfig,
     EmergencyReverseController,
+    EscapeLeftTurnConfig,
+    EscapeLeftTurnController,
     GoalSuccessConfig,
     QwenVisualServo,
     RateLimitConfig,
@@ -298,6 +301,41 @@ class ServoTests(unittest.TestCase):
         self.assertTrue(reverse.update(0.50))
         self.assertTrue(reverse.update(0.59))
         self.assertFalse(reverse.update(0.60))
+
+    def test_two_consecutive_emergency_reverses_request_escape_left(self) -> None:
+        reverse = EmergencyReverseController(
+            EmergencyReverseConfig(
+                trigger_distance=0.42,
+                clearance=0.18,
+                reverse_vx=-0.055,
+                escape_after_consecutive=2,
+            )
+        )
+        # First reverse cycle.
+        self.assertTrue(reverse.update(0.40))
+        self.assertFalse(reverse.update(0.60))
+        self.assertEqual(reverse.completed_streak, 1)
+        self.assertFalse(reverse.consume_escape_request())
+        # Second reverse cycle -> escape pending.
+        self.assertTrue(reverse.update(0.40))
+        self.assertFalse(reverse.update(0.60))
+        self.assertEqual(reverse.completed_streak, 0)
+        self.assertTrue(reverse.consume_escape_request())
+        self.assertFalse(reverse.consume_escape_request())
+
+    def test_escape_left_turn_integrates_odom_yaw(self) -> None:
+        esc = EscapeLeftTurnController(
+            EscapeLeftTurnConfig(yaw_deg=90.0, wz=0.12, yaw_tolerance_deg=5.0)
+        )
+        self.assertTrue(esc.start(0.0))
+        d0 = esc.update(0.0, True)
+        self.assertEqual(d0.reason, "escape_left_turning")
+        self.assertGreater(d0.wz, 0.0)
+        # ~90deg CCW
+        d1 = esc.update(math.radians(90.0), True)
+        self.assertTrue(d1.done)
+        self.assertEqual(d1.reason, "escape_left_done")
+        self.assertFalse(esc.active)
 
     def test_rate_limiter_hard_stop_is_immediate(self) -> None:
         limiter = CommandRateLimiter(RateLimitConfig())

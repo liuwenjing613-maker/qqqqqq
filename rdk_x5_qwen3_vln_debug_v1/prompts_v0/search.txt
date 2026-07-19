@@ -1,15 +1,72 @@
 Mode: SEARCH_SEMANTIC_GUIDANCE
-The exact requested target is not currently confirmed visible. Inspect the whole image again.
+
+Inspect the entire current image again for the exact requested target before making an exploration decision.
+
+For this competition, the expected target is a transparent plastic water bottle with a red Nongfu Spring label or red cap. Red appearance is supporting evidence, but bottle body and shape must also be visible. The label may be partially hidden.
 
 If the exact target is clearly visible:
-- s="V", a="POINT"
-- p = exact geometric center of the visible target body (not cap/base/edge)
+- use s="V", a="POINT"
+- place p at the geometric center of the visible bottle body
 
-Otherwise use s="I":
-1. First identify whether a visible open floor/corridor/doorway continuation can be followed in the current image.
-2. If yes, output a="POINT" and place p on a mid-distance clear ground point in that continuation.
-3. If the forward route ends or bends outside view and a left/right corner or opening clearly indicates the next view, output TURN_LEFT or TURN_RIGHT with p=null.
-4. Do not replace a required turn with a default central point.
-5. If turn evidence is insufficient, output a="POINT" on the safest, most continuous, farthest visible free-floor continuation that can actually be followed now.
+Otherwise use s="I" and decide in this strict order.
 
-A POINT means "move toward this currently visible continuation". A TURN means "change camera view first, then observe again".
+1. VISIBLE LOCAL WAYPOINT TEST
+
+First ask:
+
+Can the next useful local motion be represented by one concrete visible and reachable floor point in the current image?
+
+A valid POINT must:
+- lie on real visible floor;
+- be connected to the robot-side floor without crossing an obstacle;
+- represent a direction that the robot can follow now;
+- lie inside a usable floor region, not on a wall or obstacle boundary.
+
+The POINT is only for the next local motion and the next observation.
+It does not need to represent the complete route.
+
+Therefore use POINT when:
+- broad reachable floor remains before a distant wall, partition, obstacle, or later corner;
+- a left or right passage is already visible;
+- a local obstacle blocks the centre but a visible reachable bypass exists on either side;
+- the route will turn later, but the robot can still move toward a visible floor waypoint now.
+
+Use the POINT coordinate itself to steer left or right.
+
+2. TURN TEST
+
+Consider TURN_LEFT or TURN_RIGHT only if Step 1 fails.
+
+Use TURN only when:
+- no concrete visible reachable floor point can represent the next useful motion;
+- the current visible floor has ended at a blocking wall, partition, furniture group, or obstacle;
+- the required continuation must first be revealed by rotating the camera view.
+
+Do not output TURN merely because:
+- a wall or corner is visible farther ahead;
+- the route will eventually turn;
+- one side appears wider or more open;
+- the best waypoint is uncertain.
+
+If a side passage or bypass floor is already visible, use POINT on that floor instead of TURN.
+
+3. COMPETITION-SCENE RULES
+
+- Gray low partitions are solid non-traversable boundaries. Floor visible behind or above them is not reachable.
+- Spaces under blue chairs or through chair legs are not passages.
+- Narrow gaps between partitions or furniture are not passages unless they clearly form a normal usable floor route.
+- A broom or dustpan is a local obstacle. If a visible floor bypass exists around it, use POINT on the bypass.
+- Do not place p on the front or side face of a partition, cabinet, table, chair, broom, dustpan, or other obstacle.
+
+Use these contrast cases:
+
+- Wide floor before a distant partition or later corner: POINT.
+- A central broom or dustpan with a visible side bypass: POINT on the bypass.
+- A side corridor already visible in the image: POINT inside that corridor.
+- A blocking partition directly ends the visible route, only an unusable floor remnant remains before it, and the continuation is outside the image: TURN.
+- After a small turn reveals reachable floor: immediately return to POINT.
+
+When TURN is required:
+- choose LEFT or RIGHT from the visible corner, opening, and reachable scene geometry;
+- do not guess from where the bottle is likely to be;
+- use p=null.
