@@ -41,7 +41,6 @@ from rclpy.time import Time
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
-from visualization_msgs.msg import MarkerArray
 
 from fusion.live_frontier_backend_core_v2 import (
     FrontierCandidate,
@@ -58,11 +57,6 @@ from fusion.live_frontier_backend_core_v2 import (
     quaternion_to_yaw,
     render_candidate_map,
     wrap_angle,
-)
-from fusion.map_qwen_plan_markers import (
-    build_candidate_markers,
-    build_clear_markers,
-    build_selected_goal_markers,
 )
 
 
@@ -102,12 +96,6 @@ class OnlineMapQwenNavBackendV2(Node):
         self.raw_cmd_topic = str(topics.get("nav2_cmd_raw", "/map_qwen_plan/cmd_vel_raw"))
         self.cmd_topic = str(topics.get("backend_cmd", "/map_qwen_plan/cmd_vel"))
         self.debug_topic = str(topics.get("backend_debug", "/map_qwen_plan/backend_debug"))
-        self.candidate_markers_topic = str(
-            topics.get("candidate_markers", "/map_qwen_plan/candidate_markers")
-        )
-        self.selected_goal_markers_topic = str(
-            topics.get("selected_goal_markers", "/map_qwen_plan/selected_goal_markers")
-        )
         self.nav_action_name = str(topics.get("navigate_action", "/navigate_to_pose"))
         self.map_frame = str(topics.get("map_frame", "map"))
         self.base_frame = str(topics.get("base_frame", "base_link"))
@@ -181,12 +169,6 @@ class OnlineMapQwenNavBackendV2(Node):
         self.summary_pub = self.create_publisher(String, self.summary_topic, reliable)
         self.cmd_pub = self.create_publisher(Twist, self.cmd_topic, reliable)
         self.debug_pub = self.create_publisher(String, self.debug_topic, reliable)
-        self.candidate_markers_pub = self.create_publisher(
-            MarkerArray, self.candidate_markers_topic, reliable
-        )
-        self.selected_goal_markers_pub = self.create_publisher(
-            MarkerArray, self.selected_goal_markers_topic, reliable
-        )
         self.create_subscription(OccupancyGrid, self.map_topic, self._on_map, map_qos)
         self.create_subscription(String, self.probe_topic, self._on_probe, reliable)
         self.create_subscription(String, self.request_topic, self._on_request, reliable)
@@ -226,14 +208,9 @@ class OnlineMapQwenNavBackendV2(Node):
         self.last_status = "STARTUP"
         self.last_status_publish_mono = float("-inf")
         self.lock = threading.RLock()
-        self.viz_candidates: List[FrontierCandidate] = []
-        self.viz_selected_id: Optional[str] = None
-        self.viz_selected_candidate: Optional[FrontierCandidate] = None
-        self.viz_active = False
 
         self.timer = self.create_timer(0.05, self._tick)
         self.status_timer = self.create_timer(0.5, self._publish_debug)
-        self.viz_timer = self.create_timer(0.5, self._republish_viz_markers)
         self.get_logger().info(
             "fullflow V2 backend ready: "
             f"map={self.map_topic}, request={self.request_topic}, nav={self.nav_action_name}, "
@@ -374,7 +351,6 @@ class OnlineMapQwenNavBackendV2(Node):
             self.pending_candidates = {c.candidate_id: c for c in resolved}
             if not resolved:
                 raise RuntimeError(f"no_valid_candidate:{diagnostics.get('failure', 'empty')}")
-            self._set_viz_candidates(resolved, selected_id=None)
         except Exception as exc:  # noqa: BLE001
             self._fail_active(f"candidate_extraction_failed:{exc}")
             return
@@ -382,7 +358,6 @@ class OnlineMapQwenNavBackendV2(Node):
         direct = operation == "NAVIGATE_CANDIDATE" or len(resolved) == 1
         if direct:
             chosen = choose_geometric_candidate(resolved)
-            self._set_viz_selected(chosen)
             self._begin_navigation(request_id, chosen, selected_by="direct_or_single")
             return
 
@@ -484,7 +459,6 @@ class OnlineMapQwenNavBackendV2(Node):
             raise RuntimeError("candidate image JPEG encoding failed")
         data_url = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
         allowed = [c.candidate_id for c in candidates]
-        nearest = min(candidates, key=lambda c: (c.distance_m, c.candidate_id))
         prompt = (
             "你是移动机器人全局探索候选选择器。程序已经保证候选位于已知自由区、"
             "与机器人处于同一可通行连通区域，并会由 Nav2 再次检查路径。\n"
@@ -493,9 +467,6 @@ class OnlineMapQwenNavBackendV2(Node):
             "黄色编号点是候选。当前阶段没有长期轨迹记忆，因此不得声称某区域已经探索。\n"
             "选择原则：优先更可能继续发现目标的方向；语义线索相近时，兼顾信息增益、"
             "安全余量和适中距离。只能从 allowed_candidate_ids 中选择，不得生成坐标或新编号。\n"
-            "兜底规则（仅当前面语义原则无法明确选出唯一候选时启用，且不得跳过 allowed_candidate_ids）："
-            f"选择 distance_m 最小的候选，即 {nearest.candidate_id}（distance_m="
-            f"{nearest.distance_m:.3f}）。若任务语义已能明确区分，仍按语义优先，不要机械选最近。\n"
             f"allowed_candidate_ids={json.dumps(allowed, ensure_ascii=False)}\n"
             f"候选表：\n{candidate_table(candidates)}\n"
             "只输出一行合法 JSON："
@@ -575,7 +546,6 @@ class OnlineMapQwenNavBackendV2(Node):
             self._fail_active("navigate_to_pose_action_unavailable")
             return
         self.active_candidate = candidate
-        self._set_viz_selected(candidate)
         self.phase = "PLANNING"
         self.phase_started = time.monotonic()
         self._status(
@@ -787,63 +757,7 @@ class OnlineMapQwenNavBackendV2(Node):
             self._status(request_id, "FAILED", reason=reason)
         self._reset_active(reason)
 
-    def _set_viz_candidates(
-        self,
-        candidates: Sequence[FrontierCandidate],
-        *,
-        selected_id: Optional[str],
-    ) -> None:
-        self.viz_candidates = list(candidates)
-        self.viz_selected_id = selected_id
-        self.viz_selected_candidate = None
-        self.viz_active = bool(candidates)
-        self._publish_viz_markers()
-
-    def _set_viz_selected(self, candidate: FrontierCandidate) -> None:
-        self.viz_selected_id = candidate.candidate_id
-        self.viz_selected_candidate = candidate
-        if not any(c.candidate_id == candidate.candidate_id for c in self.viz_candidates):
-            self.viz_candidates = list(self.viz_candidates) + [candidate]
-        self.viz_active = True
-        self._publish_viz_markers()
-
-    def _clear_viz_markers(self) -> None:
-        self.viz_candidates = []
-        self.viz_selected_id = None
-        self.viz_selected_candidate = None
-        self.viz_active = False
-        stamp = self.get_clock().now().to_msg()
-        cleared = build_clear_markers(self.map_frame, stamp)
-        self.candidate_markers_pub.publish(cleared)
-        self.selected_goal_markers_pub.publish(cleared)
-
-    def _publish_viz_markers(self) -> None:
-        if not self.viz_active or not self.viz_candidates:
-            return
-        stamp = self.get_clock().now().to_msg()
-        self.candidate_markers_pub.publish(
-            build_candidate_markers(
-                self.viz_candidates,
-                frame_id=self.map_frame,
-                stamp=stamp,
-                selected_id=self.viz_selected_id,
-            )
-        )
-        if self.viz_selected_candidate is not None:
-            self.selected_goal_markers_pub.publish(
-                build_selected_goal_markers(
-                    self.viz_selected_candidate,
-                    frame_id=self.map_frame,
-                    stamp=stamp,
-                )
-            )
-
-    def _republish_viz_markers(self) -> None:
-        if self.viz_active:
-            self._publish_viz_markers()
-
     def _reset_active(self, reason: str) -> None:
-        self._clear_viz_markers()
         self.phase = "IDLE"
         self.phase_started = time.monotonic()
         self.active_request_id = None

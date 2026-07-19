@@ -18,6 +18,8 @@ export SLAM_USE_CALIBRATION=1
 LOG_DIR="$PWD/logs/joy_mapping_calibrated"
 MAP_DIR="$PWD/maps"
 MAP_NAME="${MAP_NAME:-joy_calibrated_corridor_map}"
+# Voice demo hub: reuse boot-time calibrated SLAM; only add joy/teleop/save.
+REUSE_BASE_STACK="${REUSE_BASE_STACK:-0}"
 STATE_DIR="$PWD/state"
 POSE_STATE_FILE="$STATE_DIR/last_pose_map.json"
 JOY_DEV="${JOY_DEV:-/dev/input/js0}"
@@ -47,7 +49,12 @@ source_ros() {
     source "$HOME/ydlidar_ws/install/setup.bash"
   fi
 
-  prepare_ros_dds_env
+  # Never wipe /dev/shm when attaching to the hub's already-running base.
+  if [ "$REUSE_BASE_STACK" = "1" ]; then
+    attach_ros_dds_env
+  else
+    prepare_ros_dds_env
+  fi
   set -u
   ROS_ENV_READY=1
 }
@@ -57,7 +64,10 @@ log() {
 }
 
 stop_joystick_nodes() {
-  pkill -f "simple_scan_filter.py" 2>/dev/null || true
+  # Under hub REUSE, simple_scan_filter belongs to shared calibrated SLAM — never kill it.
+  if [ "${REUSE_BASE_STACK:-0}" != "1" ]; then
+    pkill -f "simple_scan_filter.py" 2>/dev/null || true
+  fi
   pkill -f "teleop_twist_joy" 2>/dev/null || true
   pkill -f "joy_node" 2>/dev/null || true
   pkill -f "game_controller_node" 2>/dev/null || true
@@ -222,6 +232,7 @@ stop_live_stack() {
   local pid
   local still_alive=0
 
+  # Always stop only processes this script started (joy/teleop/pose_memory[/live_stack]).
   for pid in "${PIDS[@]:-}"; do
     if kill -0 "$pid" 2>/dev/null; then
       kill -TERM "$pid" 2>/dev/null || true
@@ -241,6 +252,17 @@ stop_live_stack() {
     fi
     sleep 0.5
   done
+
+  # Hub-owned shared SLAM must never be force-killed from mapping cleanup.
+  if [ "$REUSE_BASE_STACK" = "1" ]; then
+    log "REUSE_BASE_STACK=1: mapping-owned PIDs stubborn; leave shared hub SLAM alone"
+    for pid in "${PIDS[@]:-}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null || true
+      fi
+    done
+    return 0
+  fi
 
   log "WARN: live_stack still running, force stopping SLAM stack..."
   pkill -TERM -f "run_slam_calibrated.sh" 2>/dev/null || true
@@ -304,7 +326,11 @@ cleanup() {
   CLEANUP_DONE=1
 
   echo
-  log "Ctrl+C detected: save map first, then stop all nodes..."
+  if [ "$REUSE_BASE_STACK" = "1" ]; then
+    log "Ctrl+C / stop: save map, stop joy only (keep shared hub SLAM)"
+  else
+    log "Ctrl+C detected: save map first, then stop all nodes..."
+  fi
 
   stop_joystick_nodes
 
@@ -485,66 +511,95 @@ main() {
   stop_competing_cmd_vel_publishers
   sleep 1
 
-  log "Ensure Foxglove port 8765 is free (avoid nav2/semantic bridge stealing /scan)..."
-  if ! ensure_foxglove_port_free 8765 12; then
-    log "WARN: port 8765 still busy; mapping scan may not appear in Foxglove"
-    log "WARN: stop other stacks first, then restart this script"
-  fi
-
-  log "[1/4] Start calibrated SLAM + Foxglove live stack"
-  start_bg live_stack setsid bash scripts/slam/run_slam_calibrated.sh
-
-  wait_topic_exists /scan 90 || {
-    log "FAIL: /scan not found"
-    stop_live_stack 2>/dev/null || true
-    exit 1
-  }
-
-  wait_topic_exists /scan_filtered 90 || {
-    log "FAIL: /scan_filtered not found"
-    stop_live_stack 2>/dev/null || true
-    exit 1
-  }
-
-  wait_topic_exists /odom 90 || {
-    log "FAIL: /odom not found"
-    stop_live_stack 2>/dev/null || true
-    exit 1
-  }
-
-  wait_topic_exists /chassis_bridge_state 30 || {
-    log "FAIL: /chassis_bridge_state not found"
-    stop_live_stack 2>/dev/null || true
-    exit 1
-  }
-
-  wait_topic_exists /map 90 || {
-    log "FAIL: /map not found"
-    stop_live_stack 2>/dev/null || true
-    exit 1
-  }
-
-  wait_topic_exists /tf 40 || {
-    log "FAIL: /tf not found"
-    stop_live_stack 2>/dev/null || true
-    exit 1
-  }
-
-  if foxglove_bridge_log_looks_healthy "${PWD}/logs/slam_live/foxglove_bridge.log"; then
-    log "OK: Foxglove bridge healthy (port 8765; /scan_filtered should display in 3D panel)"
+  if [ "$REUSE_BASE_STACK" = "1" ]; then
+    log "REUSE_BASE_STACK=1: reuse hub calibrated SLAM/Foxglove (do not restart live_stack)"
+    wait_topic_exists /scan 30 || {
+      log "FAIL: shared /scan not found"
+      exit 1
+    }
+    wait_topic_exists /scan_filtered 30 || {
+      log "FAIL: shared /scan_filtered not found"
+      exit 1
+    }
+    wait_topic_exists /odom 30 || {
+      log "FAIL: shared /odom not found"
+      exit 1
+    }
+    wait_topic_exists /map 30 || {
+      log "FAIL: shared /map not found"
+      exit 1
+    }
+    wait_topic_exists /tf 30 || {
+      log "FAIL: shared /tf not found"
+      exit 1
+    }
+    wait_topic_hz /odom 20 || {
+      log "FAIL: shared /odom not publishing"
+      exit 1
+    }
+    log "OK: shared base stack ready for joystick mapping"
   else
-    log "ERROR: Foxglove bridge NOT healthy — Foxglove may show /map but NO laser scan"
-    log "ERROR: check logs/slam_live/foxglove_bridge.log for 'Bind Error'"
-    log "HINT: stop nav2/semantic stacks that own port 8765, then restart this script"
-  fi
+    log "Ensure Foxglove port 8765 is free (avoid nav2/semantic bridge stealing /scan)..."
+    if ! ensure_foxglove_port_free 8765 12; then
+      log "WARN: port 8765 still busy; mapping scan may not appear in Foxglove"
+      log "WARN: stop other stacks first, then restart this script"
+    fi
 
-  # live_stack 会先 kill 旧 bridge 再重启；topic 名可能已存在但尚未发数据
-  log "Waiting for /odom to publish (chassis bridge starts after lidar in live_stack) ..."
-  wait_topic_hz /odom 60 || {
-    log "FAIL: /odom not publishing after live stack start"
-    stop_live_stack 2>/dev/null || true
-    exit 1
-  }
+    log "[1/4] Start calibrated SLAM + Foxglove live stack"
+    start_bg live_stack setsid bash scripts/slam/run_slam_calibrated.sh
+
+    wait_topic_exists /scan 90 || {
+      log "FAIL: /scan not found"
+      stop_live_stack 2>/dev/null || true
+      exit 1
+    }
+
+    wait_topic_exists /scan_filtered 90 || {
+      log "FAIL: /scan_filtered not found"
+      stop_live_stack 2>/dev/null || true
+      exit 1
+    }
+
+    wait_topic_exists /odom 90 || {
+      log "FAIL: /odom not found"
+      stop_live_stack 2>/dev/null || true
+      exit 1
+    }
+
+    wait_topic_exists /chassis_bridge_state 30 || {
+      log "FAIL: /chassis_bridge_state not found"
+      stop_live_stack 2>/dev/null || true
+      exit 1
+    }
+
+    wait_topic_exists /map 90 || {
+      log "FAIL: /map not found"
+      stop_live_stack 2>/dev/null || true
+      exit 1
+    }
+
+    wait_topic_exists /tf 40 || {
+      log "FAIL: /tf not found"
+      stop_live_stack 2>/dev/null || true
+      exit 1
+    }
+
+    if foxglove_bridge_log_looks_healthy "${PWD}/logs/slam_live/foxglove_bridge.log"; then
+      log "OK: Foxglove bridge healthy (port 8765; /scan_filtered should display in 3D panel)"
+    else
+      log "ERROR: Foxglove bridge NOT healthy — Foxglove may show /map but NO laser scan"
+      log "ERROR: check logs/slam_live/foxglove_bridge.log for 'Bind Error'"
+      log "HINT: stop nav2/semantic stacks that own port 8765, then restart this script"
+    fi
+
+    # live_stack 会先 kill 旧 bridge 再重启；topic 名可能已存在但尚未发数据
+    log "Waiting for /odom to publish (chassis bridge starts after lidar in live_stack) ..."
+    wait_topic_hz /odom 60 || {
+      log "FAIL: /odom not publishing after live stack start"
+      stop_live_stack 2>/dev/null || true
+      exit 1
+    }
+  fi
 
   start_bg pose_memory python3 scripts/slam/pose_memory_node.py \
     --state-file "$POSE_STATE_FILE" \
@@ -584,7 +639,11 @@ main() {
   show_status
 
   log "System is running. Do NOT close this terminal."
-  log "Press Ctrl+C when you want to save map and stop."
+  if [ "$REUSE_BASE_STACK" = "1" ]; then
+    log "Press Ctrl+C (or hub stop) to save map; shared hub SLAM stays up."
+  else
+    log "Press Ctrl+C when you want to save map and stop."
+  fi
 
   while true; do
     sleep 3600

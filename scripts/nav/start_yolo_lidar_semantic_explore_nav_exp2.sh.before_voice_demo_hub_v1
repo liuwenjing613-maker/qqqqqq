@@ -29,17 +29,11 @@ source_ros_env
 
 # shellcheck source=scripts/lib/ros_dds_env.sh
 source "${PWD}/scripts/lib/ros_dds_env.sh"
-# Hub shared base is already live under REUSE_BASE_STACK=1; never wipe /dev/shm. # VOICE_DEMO_HUB_V1_REUSE_DDS_ATTACH
-if [ "${REUSE_BASE_STACK:-0}" = "1" ]; then
-  attach_ros_dds_env
-else
-  prepare_ros_dds_env
-fi
+prepare_ros_dds_env
 
 CONFIG="${1:-configs/nav_yolo_lidar_semantic_explore_exp2.yaml}"
 USER_INSTRUCTION="${2:-}"
 NAV_ONLY="${NAV_ONLY:-0}"
-REUSE_BASE_STACK="${REUSE_BASE_STACK:-0}"  # # VOICE_DEMO_HUB_V1_REUSE_BASE_PATCH
 QWEN_TEXT_ENABLED="${QWEN_TEXT_ENABLED:-}"
 _CAMERA_OVERRIDE="${CAMERA_DEV:-}"
 _MAP_NAME="${MAP_NAME:-semantic_explore_live}"
@@ -385,15 +379,6 @@ if [ "$NAV_ONLY" = "1" ]; then
   exit 0
 fi
 
-if [ "$REUSE_BASE_STACK" = "1" ]; then
-  echo "[semantic_explore] REUSE_BASE_STACK=1: reuse shared calibrated SLAM/sensors"
-  wait_topic_exists /scan 30 || exit 1
-  wait_topic_exists /scan_filtered 30 || exit 1
-  wait_topic_exists /odom 30 || exit 1
-  wait_topic_exists /map 30 || exit 1
-  wait_topic_exists /tf 30 || exit 1
-  wait_tf_before_explore_nodes || exit 1
-else
 stop_stale_live_stack
 
 # shellcheck source=scripts/lib/slam_calibrated_env.sh
@@ -412,7 +397,6 @@ wait_topic_exists /tf 40 || exit 1
 
 echo "[semantic_explore] waiting for SLAM TF chain (map<-odom, odom<-base_link) before perception stack..."
 wait_tf_before_explore_nodes || exit 1
-fi
 
 start_joy_control_stack_async
 

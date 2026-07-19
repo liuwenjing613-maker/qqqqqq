@@ -36,7 +36,15 @@ fi
 mkdir -p "${PROJECT_DIR}/logs" "${PROJECT_DIR}/runtime"
 cd "$PROJECT_DIR"
 source "$PROJECT_DIR/scripts/lidar/source_ydlidar.sh"
-[ -f "$PROJECT_DIR/scripts/lib/ros_dds_env.sh" ] && source "$PROJECT_DIR/scripts/lib/ros_dds_env.sh"
+# Must match SLAM/hub UDP-only FastDDS profile. Default SHM participants are not
+# reliably discovered by fastdds_no_shm.xml peers (Waiting for /scan forever).
+if [ -f "$PROJECT_DIR/scripts/lib/ros_dds_env.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$PROJECT_DIR/scripts/lib/ros_dds_env.sh"
+  if declare -F attach_ros_dds_env >/dev/null 2>&1; then
+    attach_ros_dds_env
+  fi
+fi
 
 PACKAGE_PREFIX="$(ros2 pkg prefix ydlidar_ros2_driver)"
 DRIVER_EXE="${PACKAGE_PREFIX}/lib/ydlidar_ros2_driver/ydlidar_ros2_driver_node"

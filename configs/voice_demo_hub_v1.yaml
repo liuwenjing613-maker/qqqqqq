@@ -1,0 +1,138 @@
+voice_demo_hub_v1:
+  # 所有路径都相对于 /root/rdk_x5_vln_robot；通常不需要修改。
+  repo_root: /root/rdk_x5_vln_robot
+  v1_root: /root/rdk_x5_vln_robot/rdk_x5_qwen3_vln_debug_v1
+
+  voice:
+    record_seconds: 5
+    event_poll_sec: 0.10
+    # Demo low-load: sherpa-onnx KWS threads (was 2). 1 cuts ~half KWS CPU.
+    kws_threads: 1
+    # 固定功能命令直接匹配 ASR 中文原文，不再做英译，减少一次云端调用和延迟。
+    commands:
+      stop:
+        - "停止"
+        - "停止机器人"
+        - "回到待机"
+        - "进入待机"
+        - "取消任务"
+      reset:
+        - "重置地图"
+        - "重新建图"
+        - "系统重置"
+      online:
+        - "开始联网探索"
+        - "联网探索"
+        - "联网找目标"
+        - "联网找瓶子"
+        - "开始联网导航"
+        - "联网导航"
+      offline:
+        - "开始断网探索"
+        - "断网探索"
+        - "雷达探索"
+        - "离线探索"
+      mapping:
+        - "开始建图"
+        - "开始遥控建图"
+        - "建图导航"
+      finish_mapping:
+        - "完成建图"
+        - "建图完成"
+        - "开始路径规划"
+        - "开始点击导航"
+        - "进入点击导航"
+        - "完成导航建图"
+      click_nav:
+        - "点击导航"
+        - "路径规划"
+        - "地图导航"
+        - "导航"
+        - "开始导航"
+        - "进入导航"
+      status:
+        - "系统状态"
+        - "当前状态"
+
+  base:
+    # 联网探索、断网探索共用这一套实时 SLAM/雷达/里程计/底盘/Foxglove。
+    command: scripts/slam/run_slam_calibrated.sh
+    startup_timeout_sec: 100
+    tf_timeout_sec: 90
+    ready_topics:
+      - /map
+      - /odom
+      - /scan_filtered
+
+  online:
+    script: rdk_x5_qwen3_vln_debug_v1/scripts/fusion/start_v1_map_qwen_simple_voice_v2.sh
+    task: "find the bottle"
+    motion: true
+    stop_timeout_sec: 18
+
+  # Boot-time camera + qwen3_vln_debug_node warm-up. Online reuses it; offline
+  # stops it (exclusive camera). Idle keeps the node PAUSED to avoid API spend.
+  # Demo low-load camera: 960x540@10 (was 1280x720@15).
+  qwen_prewarm:
+    enabled: true
+    script: scripts/demo/prewarm_qwen_ego_v1.sh
+    instruction: "find the bottle"
+    ready_timeout_sec: 90
+    camera_backend: opencv
+    camera_width: 960
+    camera_height: 540
+    camera_fps: 10
+    camera_dev: /dev/video0
+
+  offline:
+    script: scripts/nav/start_yolo_lidar_semantic_explore_nav_exp2.sh
+    config: configs/nav_yolo_lidar_semantic_explore_exp2.yaml
+    task: "find the bottle"
+    joy_enabled: true
+    startup_grace_sec: 6
+    stop_timeout_sec: 10
+
+  mapping:
+    script: scripts/slam/run_joy_mapping_calibrated.sh
+    map_name: voice_demo_live_map
+    map_dir: maps
+    stop_and_save_timeout_sec: 45
+
+  click_nav:
+    script: scripts/slam/run_nav2_foxglove_click_goal.sh
+    stop_timeout_sec: 25
+
+  safety:
+    publish_zero_topics:
+      - /cmd_vel
+      - /cmd_vel_autonomy
+      - /cmd_vel_ego
+      - /cmd_vel_map
+    # 仅清理功能特有进程；基础 SLAM 进程不会被这些模式清理规则误杀。
+    online_fallback_patterns:
+      - simple_handoff_supervisor_v2.py
+      - online_map_plan_bridge_node.py
+      - online_map_qwen_nav_backend_v2.py
+      - cmd_vel_intervention_mux.py
+      - qwen_visual_servo_node.py
+      - start_live_servo_voice.sh
+      - start_v1_map_qwen_simple_voice_v2.sh
+      - nav2_controller
+      - nav2_planner
+      - bt_navigator
+      - behavior_server
+      - lifecycle_manager
+      - frontier_region_debug_node.py
+      # Intentionally NOT killing qwen_vln_debug_node / camera: hub prewarm owns them.
+    offline_fallback_patterns:
+      - run_shared_nav_semantic_explore_exp2.py
+      - explore_goal_selector_exp2.py
+      - semantic_mapper_node.py
+      - yolov5s_bpu_web_node.py
+      - yolo_world_to_bbox_json.py
+      - hobot_yolo_world
+      - compressed_to_raw_image.py
+      - opencv_compressed_cam.py
+      - cmd_vel_priority_mux.py
+      - teleop_twist_joy
+      - joy_node

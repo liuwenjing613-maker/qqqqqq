@@ -25,29 +25,6 @@ camera_topic_has_frame() {
   timeout 3 ros2 topic echo "$topic" --once --qos-profile sensor_data >/dev/null 2>&1
 }
 
-opencv_camera_process_alive() {
-  local pid="${1:-${CAMERA_PID:-}}"
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-    return 0
-  fi
-  pgrep -f '[p]ython3? -u .*/opencv_compressed_cam\.py' >/dev/null 2>&1
-}
-
-camera_log_shows_live_frames() {
-  # Under Nav2+Qwen load, ros2 topic type/echo often return empty even while
-  # opencv_compressed_cam is publishing. Trust a freshly updated frame log.
-  local log_file="${1:-}"
-  local max_age_sec="${2:-8}"
-  [[ -n "$log_file" && -f "$log_file" ]] || return 1
-  grep -Eq 'published [0-9]+ frames' "$log_file" 2>/dev/null || return 1
-  # Reject stale logs left by a previous camera instance.
-  local now mtime age
-  now="$(date +%s)"
-  mtime="$(stat -c %Y "$log_file" 2>/dev/null || echo 0)"
-  age=$((now - mtime))
-  [[ "$age" -le "$max_age_sec" ]]
-}
-
 camera_ready() {
   local topic="$1"
   # Publisher count alone is unreliable on RDK: hobot_usb_cam can crash with
@@ -59,7 +36,7 @@ camera_ready() {
 camera_launch_crashed() {
   local log_file="$1"
   [[ -f "$log_file" ]] || return 1
-  grep -Eq 'Unable to queue image buffer|process has died|terminate called|context is invalid' "$log_file"
+  grep -Eq 'Unable to queue image buffer|process has died|terminate called' "$log_file"
 }
 
 wait_topic_publisher() {
@@ -242,47 +219,10 @@ ensure_compressed_camera() {
       }
     fi
   fi
-  # Type probe can briefly return empty after DDS graph churn / shm wipe while
-  # the camera is still publishing frames. Retry, then accept live evidence:
-  #   1) ros2 echo frame  2) fresh camera.log frames  3) publisher count + alive proc
-  local actual_type=""
-  local attempt
-  for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    actual_type="$(camera_topic_type "$compressed_topic")"
-    if [ "$actual_type" = "sensor_msgs/msg/CompressedImage" ]; then
-      break
-    fi
-    if camera_topic_has_frame "$compressed_topic"; then
-      echo "[camera] WARN: $compressed_topic type probe='$actual_type' but live frames OK; continuing"
-      actual_type="sensor_msgs/msg/CompressedImage"
-      break
-    fi
-    if opencv_camera_process_alive "${CAMERA_PID:-}" && camera_log_shows_live_frames "$log_file" 10; then
-      echo "[camera] WARN: $compressed_topic type probe='$actual_type' but opencv log still publishing; continuing"
-      actual_type="sensor_msgs/msg/CompressedImage"
-      break
-    fi
-    if opencv_camera_process_alive "${CAMERA_PID:-}" && camera_topic_has_publisher "$compressed_topic"; then
-      echo "[camera] WARN: $compressed_topic type probe='$actual_type' but publisher+process alive; continuing"
-      actual_type="sensor_msgs/msg/CompressedImage"
-      break
-    fi
-    if [ -n "${CAMERA_PID:-}" ] && ! kill -0 "$CAMERA_PID" 2>/dev/null; then
-      echo "[camera] ERROR: camera pid=$CAMERA_PID died during type check (type='$actual_type')" >&2
-      return 1
-    fi
-    if ! opencv_camera_process_alive "${CAMERA_PID:-}" && ! camera_topic_has_publisher "$compressed_topic"; then
-      # No process and no publisher — keep retrying briefly in case of spawn lag.
-      :
-    fi
-    sleep 0.6
-  done
+  local actual_type
+  actual_type="$(camera_topic_type "$compressed_topic")"
   if [ "$actual_type" != "sensor_msgs/msg/CompressedImage" ]; then
     echo "[camera] ERROR: $compressed_topic type is '$actual_type', expected sensor_msgs/msg/CompressedImage" >&2
-    if opencv_camera_process_alive "${CAMERA_PID:-}"; then
-      echo "[camera] HINT: opencv process still alive; check DDS/load. last log:" >&2
-      tail -n 15 "$log_file" 2>/dev/null || true
-    fi
     return 1
   fi
 }

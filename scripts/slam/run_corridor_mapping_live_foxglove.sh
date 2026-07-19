@@ -46,7 +46,13 @@ set -u
 
 # shellcheck source=scripts/lib/ros_dds_env.sh
 source "${PROJECT_DIR}/scripts/lib/ros_dds_env.sh"
-prepare_ros_dds_env
+# Hub may restart this stack while camera/Qwen prewarm is still attached.
+# Never wipe /dev/shm in that case — prepare would kill live FastDDS peers.
+if [ "${ATTACH_ROS_DDS_ONLY:-0}" = "1" ] || [ "${VOICE_DEMO_ATTACH_DDS:-0}" = "1" ]; then
+  attach_ros_dds_env
+else
+  prepare_ros_dds_env
+fi
 
 log() {
   echo "[$(date +%H:%M:%S)] $*"
@@ -337,17 +343,65 @@ start_background() {
 wait_topic_exists() {
   local topic="$1"
   local timeout_sec="${2:-60}"
+  local probe="${PROJECT_DIR}/scripts/lib/ros_topic_probe.py"
+  local start now
+  start="$(date +%s)"
 
   log "Waiting for ${topic} ..."
-  for _ in $(seq 1 "$timeout_sec"); do
-    if ros2 topic list 2>/dev/null | grep -qx "$topic"; then
+  while true; do
+    # Prefer rclpy probe: avoids hung/stale ros2cli daemon false negatives.
+    if [[ -f "$probe" ]] && [[ "$topic" =~ ^/(scan|scan_filtered|odom|map|tf|tf_static)$ ]]; then
+      if python3 "$probe" has-samples "$topic" 1 2 >/dev/null 2>&1; then
+        log "OK: ${topic}"
+        return 0
+      fi
+    elif timeout 3 ros2 topic list 2>/dev/null | grep -qx "$topic"; then
       log "OK: ${topic}"
       return 0
+    fi
+    # Lidar can be scanning while CLI discovery is broken; accept fresh driver log for /scan.
+    if [[ "$topic" == "/scan" ]] \
+      && pgrep -f 'ydlidar_ros2_driver_node' >/dev/null 2>&1 \
+      && [[ -f "${PROJECT_DIR}/logs/lidar_driver.log" ]] \
+      && find "${PROJECT_DIR}/logs/lidar_driver.log" -mmin -2 >/dev/null 2>&1 \
+      && tail -n 40 "${PROJECT_DIR}/logs/lidar_driver.log" 2>/dev/null \
+           | grep -q "Now lidar is scanning"; then
+      log "OK: ${topic} (lidar driver scanning; CLI discovery flaky)"
+      return 0
+    fi
+    now="$(date +%s)"
+    if (( now - start >= timeout_sec )); then
+      break
     fi
     sleep 1
   done
 
   log "FAIL: timeout waiting for ${topic}"
+  return 1
+}
+
+# Reuse wait_tf_chain.py for a single link by making the other lookups trivial.
+# Example: wait_tf_link odom laser 30  -> waits odom <- laser
+wait_tf_link() {
+  local parent="$1" child="$2" timeout_sec="${3:-45}"
+  local waiter="${PROJECT_DIR}/scripts/nav/wait_tf_chain.py"
+  log "Waiting TF ${parent} <- ${child} (timeout ${timeout_sec}s) ..."
+  if [[ ! -f "$waiter" ]]; then
+    log "WARN: missing $waiter; sleep ${timeout_sec}s fallback"
+    sleep "$timeout_sec"
+    return 0
+  fi
+  if python3 "$waiter" \
+    --map-frame "$parent" \
+    --odom-frame "$child" \
+    --base-frame "$child" \
+    --timeout "$timeout_sec" \
+    --need-ok 2 \
+    --poll 0.5; then
+    log "OK: TF ${parent} <- ${child}"
+    return 0
+  fi
+  log "FAIL: TF ${parent} <- ${child} not ready"
   return 1
 }
 
@@ -452,7 +506,13 @@ main() {
   source "${PROJECT_DIR}/scripts/lib/run_chassis_bridge.sh"
   export CHASSIS_PORT="${CHASSIS_DEV}"
   run_chassis_bridge "${LOG_DIR}/chassis_bridge.log"
-  sleep 4
+  sleep 3
+  # slam_toolbox needs odom->base_link before any scan; starting too early fills
+  # its MessageFilter and it never publishes map->odom (hub then TF-timeouts).
+  wait_tf_link odom base_link 40 || {
+    log "FAIL: odom<-base_link missing (chassis odom TF)"
+    exit 1
+  }
 
   log "[3/6] Static TF base_link -> ${LASER_FRAME}"
   start_background static_tf \
@@ -465,14 +525,19 @@ main() {
     --yaw "${LASER_YAW}" \
     --frame-id base_link \
     --child-frame-id "${LASER_FRAME}"
-  sleep 2
+  sleep 1
+  wait_tf_link odom "${LASER_FRAME}" 30 || {
+    log "FAIL: odom<-${LASER_FRAME} missing (static TF / odom)"
+    exit 1
+  }
 
   log "[4/6] slam_toolbox online_async (scan_topic=/scan_filtered)"
   start_background slam_toolbox \
     ros2 launch slam_toolbox online_async_launch.py \
     use_sim_time:=false \
     slam_params_file:="${SLAM_CONFIG}"
-  sleep 8
+  # Give toolbox time to bind before hammering the graph with status CLI.
+  sleep 5
 
   if ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
     log "[5/6] foxglove_bridge port ${FOXGLOVE_PORT}"
@@ -483,9 +548,16 @@ main() {
     else
       start_background foxglove_bridge \
         bash "${PROJECT_DIR}/scripts/lidar/start_foxglove.sh"
-      sleep 4
-      if foxglove_bridge_log_looks_healthy "${LOG_DIR}/foxglove_bridge.log"; then
-        FOXGLOVE_STARTED=1
+      sleep 3
+      FOXGLOVE_STARTED=0
+      for _ in 1 2 3 4 5 6; do
+        if foxglove_bridge_log_looks_healthy "${LOG_DIR}/foxglove_bridge.log"; then
+          FOXGLOVE_STARTED=1
+          break
+        fi
+        sleep 1
+      done
+      if [ "$FOXGLOVE_STARTED" = "1" ]; then
         log "OK: foxglove_bridge listening on ${FOXGLOVE_PORT}"
       else
         FOXGLOVE_STARTED=0
@@ -499,7 +571,20 @@ main() {
     log "[5/6] foxglove_bridge not installed, skipping"
   fi
 
-  show_status
+  # Real readiness = map->odom TF (not merely /map publisher advertisement).
+  log "Waiting for TF map <- odom (slam_toolbox pose) ..."
+  if ! wait_tf_link map odom 60; then
+    log "FAIL: map<-odom never appeared — slam is dropping scans; see ${LOG_DIR}/slam_toolbox.log"
+    if grep -q 'discarding message because the queue is full' "${LOG_DIR}/slam_toolbox.log" 2>/dev/null; then
+      log "HINT: MessageFilter queue full — odom/laser TF was late or CPU starved at slam start"
+    fi
+    exit 1
+  fi
+
+  # Heavy ros2 CLI status dump AFTER TF is healthy (was starving slam at boot).
+  if [ "${SLAM_SKIP_STATUS_DUMP:-0}" != "1" ]; then
+    show_status
+  fi
 
   log "===== SLAM live stack started ====="
   log "Do NOT close this terminal."

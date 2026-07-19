@@ -90,9 +90,30 @@ cleanup_stale_nav2_processes() {
   done
 }
 
+cleanup_ros2_daemon() {
+  # Stale ros2cli daemon (often started without fastdds_no_shm.xml) makes
+  # `ros2 topic list/info` hang or miss publishers → SLAM stuck on Waiting for /scan.
+  local pid
+  for pid in $(pgrep -f -- 'ros2cli\.daemon|ros2-daemon' 2>/dev/null || true); do
+    if [[ " $$ ${PPID:-} " == *" $pid "* ]]; then
+      continue
+    fi
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  sleep 0.3
+  for pid in $(pgrep -f -- 'ros2cli\.daemon|ros2-daemon' 2>/dev/null || true); do
+    if [[ " $$ ${PPID:-} " == *" $pid "* ]]; then
+      continue
+    fi
+    kill -KILL "$pid" 2>/dev/null || true
+  done
+}
+
 cleanup_ros2_fastrtps_shm() {
   # Leftover Fast DDS shared-memory segments cause port lock failures and slow Nav2 bringup.
-  rm -f /dev/shm/fastrtps_* /dev/shm/sem.fastrtps_* 2>/dev/null || true
+  # Also drop the ros2cli daemon so the next CLI probe starts fresh under UDP-only DDS.
+  cleanup_ros2_daemon
+  rm -f /dev/shm/fastrtps* /dev/shm/sem.fastrtps* 2>/dev/null || true
 }
 
 # Kill processes matching pattern but never the caller shell or its parent.

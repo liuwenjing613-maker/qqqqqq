@@ -27,12 +27,12 @@ control:
   max_wz: 0.06
   # Cyan fine-steer gain (user-tuned). Keep at 0.01; do not raise to "beat"
   # cmd_wz_deadband — cyan no longer applies that deadband (see below).
-  kp_wz: 0.01
+  kp_wz: 0.008
   # Orange rotate-only band (|error|>=turn_only_threshold): fixed wz, not kp*error.
-  rotate_only_wz: 0.025
+  rotate_only_wz: 0.02
   angular_sign: -1.0
-  center_deadband: 0.30
-  turn_only_threshold: 0.7
+  center_deadband: 0.28
+  turn_only_threshold: 0.85
   # Drops near-zero rotate-only cmds only. Cyan uses center_deadband for zeroing.
   cmd_wz_deadband: 0.006
 

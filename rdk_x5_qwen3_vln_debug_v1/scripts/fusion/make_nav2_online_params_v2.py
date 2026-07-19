@@ -23,21 +23,10 @@ def main() -> int:
     dst = Path(args.output)
     cfg = yaml.safe_load(src.read_text(encoding="utf-8")) or {}
 
-    bt = nested(cfg, "bt_navigator", "ros__parameters")
-    # Milliseconds. The stock 5000ms service wait was too short on RDK under load
-    # (compute_path_to_pose ack + costmap clear both timed out ~5s).
-    bt["wait_for_service_timeout"] = 30000
-    bt["default_server_timeout"] = 30000
-    bt["bt_loop_duration"] = 30
-
     planner = nested(cfg, "planner_server", "ros__parameters", "GridBased")
     planner["use_astar"] = True
-    planner["allow_unknown"] = True
-    planner["tolerance"] = 0.20
-    planner["max_planning_time"] = 10.0
-
-    planner_srv = nested(cfg, "planner_server", "ros__parameters")
-    planner_srv["expected_planner_frequency"] = 5.0
+    planner["allow_unknown"] = False
+    planner["tolerance"] = 0.15
 
     controller = nested(cfg, "controller_server", "ros__parameters")
     controller["controller_frequency"] = 8.0
@@ -45,6 +34,7 @@ def main() -> int:
     progress["required_movement_radius"] = 0.02
     progress["movement_time_allowance"] = 45.0
     goal = nested(controller, "general_goal_checker")
+    # Nav2 stops at x/y; the backend performs deterministic final yaw alignment.
     goal["xy_goal_tolerance"] = 0.18
     goal["yaw_goal_tolerance"] = 6.28
     follow = nested(controller, "FollowPath")
@@ -52,16 +42,6 @@ def main() -> int:
     follow["rotate_to_heading_angular_vel"] = 0.055
     follow["max_angular_accel"] = 0.10
     follow["use_rotate_to_heading"] = False
-
-    local_costmap = nested(cfg, "local_costmap", "local_costmap", "ros__parameters")
-    local_costmap["update_frequency"] = 3.0
-    local_costmap["publish_frequency"] = 1.0
-    local_costmap["always_send_full_costmap"] = False
-
-    global_costmap = nested(cfg, "global_costmap", "global_costmap", "ros__parameters")
-    global_costmap["update_frequency"] = 0.5
-    global_costmap["publish_frequency"] = 0.5
-    global_costmap["always_send_full_costmap"] = False
 
     smoother = nested(cfg, "velocity_smoother", "ros__parameters")
     smoother["max_velocity"] = [0.040, 0.0, 0.060]

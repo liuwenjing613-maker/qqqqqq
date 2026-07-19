@@ -112,13 +112,6 @@ SERVO_PID=""
 MUX_PID=""
 FOXGLOVE_PID=""
 CLEANUP_DONE=0
-REUSED_QWEN=0
-REUSED_CAMERA=0
-REUSE_QWEN_PREWARM="${REUSE_QWEN_PREWARM:-0}"
-if [[ "$REUSE_QWEN_PREWARM" == "1" ]]; then
-  # Hub owns camera/bridge for the whole online session when prewarm is requested.
-  REUSED_CAMERA=1
-fi
 
 # Startup timing helpers: wall clock + per-process age while waiting.
 STACK_T0="$(date +%s.%N)"
@@ -211,21 +204,10 @@ cleanup() {
   echo "[cleanup] publish zero and stop processes started here"
   timeout 3 ros2 topic pub --once /qwen_vln/servo/command std_msgs/msg/String \
     "{data: 'disable'}" >/dev/null 2>&1 || true
-  # Leave hub-owned prewarm camera/qwen alive for the next online command.
-  if [[ "$REUSED_QWEN" == "1" ]]; then
-    timeout 3 ros2 topic pub --once /qwen_vln/command std_msgs/msg/String \
-      "{data: 'pause'}" >/dev/null 2>&1 || true
-  fi
-  for pid in "$SERVO_PID" "$FOXGLOVE_PID" "$MUX_PID"; do
+  for pid in "$SERVO_PID" "$QWEN_PID" "$BRIDGE_PID" "$FOXGLOVE_PID" "$MUX_PID"; do
     kill_pid_tree "$pid"
   done
-  if [[ "$REUSED_QWEN" != "1" ]]; then
-    kill_pid_tree "$QWEN_PID"
-  fi
-  if [[ "$REUSED_CAMERA" != "1" ]]; then
-    kill_pid_tree "$BRIDGE_PID"
-    stop_camera_tree "${CAMERA_PID:-}" || true
-  fi
+  stop_camera_tree "${CAMERA_PID:-}" || true
 }
 
 on_signal() {
@@ -240,37 +222,12 @@ trap on_signal INT TERM
 STACK_T0="$(now_s)"
 STEP_T0="$STACK_T0"
 log_ts "[nav] begin camera / bridge / mux / qwen / servo startup"
-
-# Prefer process/log evidence over ros2 CLI: under Nav2 bringup, topic info
-# often flakes to 0 publishers even while prewarm opencv is healthy.
-prewarm_camera_alive=0
-if [[ "$REUSE_QWEN_PREWARM" == "1" ]] && opencv_camera_process_alive; then
-  if camera_topic_has_publisher /image || camera_log_shows_live_frames "$ROOT/logs/camera.log" 15; then
-    if camera_topic_has_publisher /image_raw || pgrep -f '[p]ython3? -u .*/compressed_to_raw_image\.py' >/dev/null 2>&1; then
-      prewarm_camera_alive=1
-    fi
-  fi
-fi
-
-if [[ "$prewarm_camera_alive" == "1" ]]; then
-  log_ts "[camera] REUSE_QWEN_PREWARM=1: keep hub prewarm camera/bridge"
-  REUSED_CAMERA=1
-  mark_proc camera ""
-  mark_step "camera ready (reused)"
-  mark_proc bridge ""
-  mark_step "image_raw bridge ready (reused)"
-else
-  if [[ "$REUSE_QWEN_PREWARM" == "1" ]]; then
-    log_ts "[camera] WARN prewarm camera missing; cold-starting camera path"
-    REUSED_CAMERA=0
-  fi
-  ensure_compressed_camera "$ROOT" "$ROOT/logs/camera.log"
-  mark_proc camera "${CAMERA_PID:-}"
-  mark_step "camera ready"
-  start_raw_bridge "$ROOT" "$ROOT/logs/image_raw_bridge.log"
-  mark_proc bridge "${BRIDGE_PID:-}"
-  mark_step "image_raw bridge ready"
-fi
+ensure_compressed_camera "$ROOT" "$ROOT/logs/camera.log"
+mark_proc camera "${CAMERA_PID:-}"
+mark_step "camera ready"
+start_raw_bridge "$ROOT" "$ROOT/logs/image_raw_bridge.log"
+mark_proc bridge "${BRIDGE_PID:-}"
+mark_step "image_raw bridge ready"
 
 if [[ "${START_FOXGLOVE:-1}" == "1" ]]; then
   port="${FOXGLOVE_PORT:-8765}"
@@ -318,83 +275,34 @@ fi
 
 # The English instruction produced by the voice stage is passed exactly through
 # the same positional interface used by the original start_live_servo.sh.
-qwen_prewarm_marker() {
-  local runtime="${QWEN_PREWARM_RUNTIME_DIR:-/tmp/rdk_x5_voice_demo_qwen_prewarm_${USER:-robot}}"
-  echo "$runtime/ready.marker"
-}
+log_ts "[qwen] launching start_debug_node.sh (log: $ROOT/logs/qwen_live_servo_qwen.log)"
+QWEN_CONFIG="$FAST_CONFIG" \
+  bash "$ROOT/scripts/start_debug_node.sh" "$INSTRUCTION" \
+  >"$ROOT/logs/qwen_live_servo_qwen.log" 2>&1 &
+QWEN_PID=$!
+mark_proc qwen "$QWEN_PID"
 
-qwen_debug_node_running() {
-  pgrep -f 'qwen_vln_debug_node\.py' >/dev/null 2>&1
-}
+QWEN_LOG="$ROOT/logs/qwen_live_servo_qwen.log"
+QWEN_WAIT_MAX="${QWEN_WAIT_MAX:-60}"
 
-qwen_prewarm_ready() {
-  # Hub marker is authoritative: process may be PAUSED (no fresh result_json traffic).
-  local marker
-  marker="$(qwen_prewarm_marker)"
-  if [[ -f "$marker" ]] && grep -q 'ready' "$marker" 2>/dev/null && qwen_debug_node_running; then
-    return 0
-  fi
-  if qwen_debug_node_running; then
-    if timeout 5 ros2 topic info /qwen_vln/result_json 2>/dev/null | grep -Eq 'Publisher count: [1-9]'; then
-      return 0
-    fi
-  fi
-  [[ -f "$ROOT/logs/qwen_live_servo_qwen.log" ]] && grep -q 'started model=' "$ROOT/logs/qwen_live_servo_qwen.log" && qwen_debug_node_running
-}
-
-if [[ "$REUSE_QWEN_PREWARM" == "1" ]] && qwen_prewarm_ready; then
-  log_ts "[qwen] REUSE_QWEN_PREWARM=1: reuse qwen3_vln_debug_node"
-  REUSED_QWEN=1
-  timeout 3 ros2 topic pub --once /qwen_vln/instruction std_msgs/msg/String \
-    "{data: \"${INSTRUCTION//\"/\\\"}\"}" >/dev/null 2>&1 || true
-  timeout 3 ros2 topic pub --once /qwen_vln/command std_msgs/msg/String \
-    "{data: 'resume'}" >/dev/null 2>&1 || true
-  mark_proc qwen ""
-  mark_step "qwen /qwen_vln/result_json ready (reused)"
-elif [[ "$REUSE_QWEN_PREWARM" == "1" ]] && qwen_debug_node_running; then
-  # Marker/topic flaky, but node is already up — never start a second Qwen.
-  log_ts "[qwen] REUSE_QWEN_PREWARM=1: qwen process present; resume without cold-start"
-  REUSED_QWEN=1
-  timeout 3 ros2 topic pub --once /qwen_vln/instruction std_msgs/msg/String \
-    "{data: \"${INSTRUCTION//\"/\\\"}\"}" >/dev/null 2>&1 || true
-  timeout 3 ros2 topic pub --once /qwen_vln/command std_msgs/msg/String \
-    "{data: 'resume'}" >/dev/null 2>&1 || true
-  mark_proc qwen ""
-  mark_step "qwen /qwen_vln/result_json ready (reused process)"
-else
-  if [[ "$REUSE_QWEN_PREWARM" == "1" ]]; then
-    log_ts "[qwen] WARN prewarm requested but not ready; cold-starting"
-    REUSED_CAMERA=0
-  fi
-  log_ts "[qwen] launching start_debug_node.sh (log: $ROOT/logs/qwen_live_servo_qwen.log)"
-  QWEN_CONFIG="$FAST_CONFIG" \
-    bash "$ROOT/scripts/start_debug_node.sh" "$INSTRUCTION" \
-    >"$ROOT/logs/qwen_live_servo_qwen.log" 2>&1 &
-  QWEN_PID=$!
-  mark_proc qwen "$QWEN_PID"
-
-  QWEN_LOG="$ROOT/logs/qwen_live_servo_qwen.log"
-  QWEN_WAIT_MAX="${QWEN_WAIT_MAX:-60}"
-
-  _qwen_wait_tick() {
-    local attempt="$1"
-    local max_attempts="$2"
-    log_ts "[wait] try ${attempt}/${max_attempts} qwen not ready yet (qwen age $(elapsed_s "${PROC_T0[qwen]}")s)"
-    log_proc_snapshot
-  }
-
-  if ! wait_qwen_debug_ready "$QWEN_PID" "$QWEN_LOG" "$QWEN_WAIT_MAX" \
-      /qwen_vln/result_json _qwen_wait_tick; then
-    log_ts "[wait] FAILED after ${QWEN_WAIT_MAX}s / total $(elapsed_s "$STACK_T0")s"
-    log_proc_snapshot
-    echo "ERROR: Qwen node did not become ready within ${QWEN_WAIT_MAX}s" >&2
-    tail -n 100 "$QWEN_LOG" || true
-    exit 1
-  fi
-  log_ts "[wait] qwen ready (qwen age $(elapsed_s "${PROC_T0[qwen]}")s)"
+_qwen_wait_tick() {
+  local attempt="$1"
+  local max_attempts="$2"
+  log_ts "[wait] try ${attempt}/${max_attempts} qwen not ready yet (qwen age $(elapsed_s "${PROC_T0[qwen]}")s)"
   log_proc_snapshot
-  mark_step "qwen /qwen_vln/result_json ready"
+}
+
+if ! wait_qwen_debug_ready "$QWEN_PID" "$QWEN_LOG" "$QWEN_WAIT_MAX" \
+    /qwen_vln/result_json _qwen_wait_tick; then
+  log_ts "[wait] FAILED after ${QWEN_WAIT_MAX}s / total $(elapsed_s "$STACK_T0")s"
+  log_proc_snapshot
+  echo "ERROR: Qwen node did not become ready within ${QWEN_WAIT_MAX}s" >&2
+  tail -n 100 "$QWEN_LOG" || true
+  exit 1
 fi
+log_ts "[wait] qwen ready (qwen age $(elapsed_s "${PROC_T0[qwen]}")s)"
+log_proc_snapshot
+mark_step "qwen /qwen_vln/result_json ready"
 
 SERVO_ARGS=(--config "${SERVO_CONFIG:-$ROOT/configs/qwen3_vln_servo.yaml}")
 if [[ "$MOTION_ENABLED" == "1" ]]; then
@@ -438,9 +346,4 @@ Enable/disable while running:
 EOF
 
 echo "Press Ctrl+C to stop this voice-triggered visual servo stack."
-if [[ -n "${QWEN_PID:-}" ]]; then
-  wait "$QWEN_PID" || true
-else
-  # Reused hub prewarm: keep first-person alive with the servo process.
-  wait "$SERVO_PID" || true
-fi
+wait "$QWEN_PID" || true
